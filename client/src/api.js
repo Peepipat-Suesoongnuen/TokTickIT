@@ -5,6 +5,14 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 //        return { online: true, categories }.
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem() {
-    // TODO(Issue 2 & 4): implement the two fetch calls described above.
-    throw new Error("checkSystem not implemented yet");
+    const healthRes = await fetch(`${API_URL}/api/health`);
+    if (!healthRes.ok) {
+        throw new Error("Unable to connect to TokTickIT API");
+    }
+    const health = await healthRes.json();
+    if (health.status !== "ok") {
+        throw new Error("TokTickIT API is not healthy");
+    }
+    // TODO(Issue 4): fetch categories and populate the candidates list.
+    return { online: true, categories: [] };
 }

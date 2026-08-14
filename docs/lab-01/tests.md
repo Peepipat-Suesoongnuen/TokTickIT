@@ -4,10 +4,20 @@ All test files live under server/tests/lab-01/ and client/tests/lab-01/.
 
 | # | Tool | Test | Result |
 |---|------|------|--------|
-| 1 | Supertest | GET /api/health returns 200, status=ok | |
+| 1 | Supertest | GET /api/health returns 200, status=ok | Passed |
 | 2 | Supertest | GET /api/categories returns 4 seeded categories in id order | |
 | 3 | Vitest | Heading renders | |
 | 4 | Vitest | Success state shows Online + category list | |
 | 5 | Vitest | Error state shows Offline + message | |
 
-Paste your passing terminal output / screenshot below.
+## Evidence — API-01 (server): GET /api/health
+
+![API-01 ภาพการรัน test GET /api/health จาก terminal output](screenshots/api-01-health.png)
+
+## Evidence — UI-01 (client): Heading renders
+
+![UI-01 ภาพการรัน test heading render จาก terminal output](screenshots/ui-01-heading.png)
+
+## Evidence — Demo: System status จาก localhost
+
+![Demo หน้าเว็บ localhost แสดง System Status](screenshots/image.png)
