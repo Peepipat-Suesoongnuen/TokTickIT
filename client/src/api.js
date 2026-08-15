@@ -13,6 +13,10 @@ export async function checkSystem() {
     if (health.status !== "ok") {
         throw new Error("TokTickIT API is not healthy");
     }
-    // TODO(Issue 4): fetch categories and populate the candidates list.
-    return { online: true, categories: [] };
+    const categoriesRes = await fetch(`${API_URL}/api/categories`);
+    if (!categoriesRes.ok) {
+        throw new Error("Unable to connect to TokTickIT API");
+    }
+    const categories = await categoriesRes.json();
+    return { online: true, categories };
 }
