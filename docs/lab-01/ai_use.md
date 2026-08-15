@@ -18,5 +18,5 @@
 ## Reflection
 Two or three sentences: what made your prompts better, and one place you had to
 correct or reject what the agent produced.
-ผมได้เรียนรู้ว่าผลลัพธ์จาก prompt ไม่ได้ถูกต้องเสมอไป ต้องให้มันวางแผนก่อนเริ่มลงมือจริงเสมอ และค่อยทำทีละขั้นตอนจึงดีที่สุด
+ผมได้เรียนรู้ว่าผลลัพธ์จาก prompt ไม่ได้ถูกต้องเสมอไป ต้องให้มันวางแผนก่อนเริ่มลงมือจริงเสมอ และค่อยทำทีละขั้นตอนจึงดีที่สุด ตัวอย่างที่ต้องแย้งคือตอนทำ Issue 4 ที่ agent เสนอว่าแก้แค่ไฟล์ .tsx/.ts ก็พอ แต่ผมต้องให้ regenerate ไฟล์ .js ด้วย เพราะ test และแอป import ไฟล์ .js ไม่ใช่ .tsx ไม่งั้น test จะไปเทสต์โค้ดเก่าและล้มเหลว
 
