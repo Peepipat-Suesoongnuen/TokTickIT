@@ -15,10 +15,5 @@ Reviewer comment I received: จากการตรวจสอบ Issue 4 โ
 How I responded: ได้เลยครับ เพิ่มรูป ui-offline ใน tests.md แล้ว ให้เพื่อน Merge ได้เลยครับ
 
 ## Pull Requests I reviewed for my partner (PRs #5–#8 on @thananun-7203/toktickit)
-- [#5](https://github.com/thananun-7203/toktickit/pull/5) feature/1-project-foundation
-- [#6](https://github.com/thananun-7203/toktickit/pull/6) feature/2-health-check
-- [#7](https://github.com/thananun-7203/toktickit/pull/7) feature/3-category-seed
-- [#8](https://github.com/thananun-7203/toktickit/pull/8) feature/4-category-list
-
 My comment: ถ้าไม่มีการแก้ไขใดๆ เพิ่มเติมสามารถแจ้งผม แล้วผมจะ Merge ให้
 Partner's response: รับทราบครับ เดี๋ยวแก้ไขเพิ่มเติมให้ครับ
