@@ -58,7 +58,7 @@ Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec
 | API-26 | API | FR-10 | Owner retrieves **metadata** of owned active attachment | 200 correct shape (originalFilename, mimeType, sizeBytes, removedAt null) | server/tests/lab-02/attachments.api.test.ts | Planned |
 | API-27 | API | FR-10 | Owner **downloads** owned active attachment | 200 binary stream; `Content-Type` = stored mime; `Content-Disposition: attachment; filename="<originalFilename>"` | server/tests/lab-02/attachments.api.test.ts | Planned |
 
-Manual evidence (not an automated row): backend-stop demo for AC-25/AC-26 safe states, captured in the submission PDF.
+Planned manual evidence (deferred, not present in this PR): backend-stop demo for AC-25/AC-26 safe states will be captured in the submission PDF after implementation.
 
 ### UI Component — `client/src/features/lab-02/tests/`
 
@@ -144,7 +144,7 @@ Style tests provide requirement-level evidence for the Zen Green contract (ui-sp
 | AC-27 | UI-20, E2E-05, visual checklist §4 |
 | AC-28 | UI-19 |
 
-Coverage rule satisfied: every AC maps to ≥ 1 planned automated test whose scenario actually exercises it (no broad ranges). AC-25 additionally proven by manual backend-stop demo for PDF evidence.
+Coverage rule satisfied: every AC maps to ≥ 1 planned automated test whose scenario actually exercises it (no broad ranges). AC-25 will additionally be evidenced by a planned manual backend-stop demo (deferred) for the PDF.
 
 FR/BR coverage is recorded in the `Requirement / AC` column of the Planned Tests table where automated verification is applicable. Design-only constraints are verified through contract/schema review and are not forced into unrelated Acceptance Criteria. BR-24 is a design constraint verified by schema/design review during Issue 6 (no runtime test).
 
@@ -165,7 +165,14 @@ cd client && npm test
 npx playwright test
 ```
 
-Database prerequisite: PostgreSQL running locally; seed executed (`cd server && npx prisma db seed`); `.env` configured from `.env.example`.
+Database prerequisites (planned execution):
+- PostgreSQL running locally.
+- API/integration tests will use a dedicated PostgreSQL test database, separate from the development database. The concrete environment-variable name will follow the repository convention established during implementation.
+- Before the API/integration test suite runs, Prisma migrations must be applied to the dedicated test database.
+- Seed/fixtures: the required reference data will be seeded into the appropriate database(s) via the idempotent Prisma seed (`cd server && npx prisma db seed` or the test-database equivalent).
+- `.env` configured from `.env.example`.
+- Test-created data must be reset between tests or test suites so that tests are isolated and do not depend on execution order. The implementation may use transaction rollback, targeted cleanup/truncation, or another dedicated database reset strategy, provided the test database remains isolated and reproducible.
+- Status: prerequisites and reset guidance are planned for the implementation issues; verified database state will be evidenced by green test runs on the final `main` branch.
 
 ## 6. Final Results
 
@@ -173,7 +180,7 @@ Every row's `Final` column stays **Planned** during feature-branch development (
 
 ## 7. Known Limitations or Deferred Tests
 
-- Asia/Bangkok display formatting verified manually + screenshot evidence (unit-testing timezone rendering adds flakiness).
+- Asia/Bangkok display formatting will be verified manually and evidenced by planned screenshots (deferred; not present in this PR; unit-testing timezone rendering adds flakiness).
 - Accessibility (AC-28) covered by semi-automated assertions (UI-19); full audit manual.
 - Backend idempotency keys out of scope in Lab 2 (AC-05 enforced at UI layer per api-spec §7).
-- API-23 uses `vi.mock` fault injection of the Prisma/service dependency while keeping real routing and error middleware active; the manual backend-stop demo provides additional real-infrastructure evidence for AC-25/AC-26.
+- API-23 will use `vi.mock` fault injection of the Prisma/service dependency while keeping real routing and error middleware active; the planned manual backend-stop demo will provide additional real-infrastructure evidence for AC-25/AC-26 (deferred).
