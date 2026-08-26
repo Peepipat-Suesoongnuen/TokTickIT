@@ -148,7 +148,7 @@ States: loading (skeleton); 404/not-owned (safe "Ticket not found" + back link, 
 - API failures: render server `error.message` when present; otherwise generic safe copy ("Unable to connect to TokTickIT API. Please try again."). Never expose raw fetch errors or internals.
 - Success: confirmation includes backend-generated Ticket Number (never client-generated).
 
-## 9. Visual Inspection Checklist (executed in Issue 12)
+## 9. Visual Inspection Checklist (to be executed in Issue 12)
 
 - [ ] Colors match tokens (header/actions #006B3C; accents/hover #0B7A46; selections #EAF6EF; bg #F5F7F6)
 - [ ] Editable vs read-only fields visually distinct at a glance
