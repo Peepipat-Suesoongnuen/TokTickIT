@@ -116,7 +116,10 @@ Concepts: **DevelopmentRequester**, **Ticket**, **Attachment**, **Category**, **
 ### DevelopmentRequester
 `id` (PK), `name`, `email` (unique), `isActive` (Boolean), `createdAt`
 
-### Category / RelatedSystem
+### Category (evolved from Lab 1)
+Retains the existing Lab 1 `Category` entity. Lab 2 adds `isActive` (Boolean, default true) through a Prisma migration that backfills all existing Category rows as active (`isActive = true`). Subsequent required Category data and active states remain the responsibility of the Lab 2 idempotent seed (`Account and Access`, `Hardware`, `Software`, `Network`).
+
+### RelatedSystem (new in Lab 2)
 `id` (PK), `name` (unique), `isActive` (Boolean), `createdAt`
 
 Relationships:

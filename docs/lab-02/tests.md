@@ -1,6 +1,6 @@
 # Lab 2 Test Plan and Results — TokTickIT Requester Ticketing
 
-Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below is written as a failing test first, then implementation makes it pass.
+Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document describes the planned TDD evidence for the next implementation issues; no Lab 2 test files or implementation artifacts exist yet in this PR.
 
 **Status key:** `Planned` while on the feature branch (failing-first TDD). A row becomes `Pass` **only after a green run on the final `main` branch** — never from a feature-branch run alone.
 
@@ -150,7 +150,7 @@ FR/BR coverage is recorded in the `Requirement / AC` column of the Planned Tests
 
 ## 4. Responsive and Visual Checklist
 
-Executed against [ui-spec.md](./ui-spec.md) §9 at 1440 / 900 / 375 px widths; results recorded with screenshots under `artifacts/lab-02/screenshots/` (paths defined there). Checklist items: color tokens, editable/read-only distinction, asterisk + message placement, button hierarchy, badge consistency, no clipping/overlap/horizontal scroll, filter/pagination/attachment usability at all sizes, empty vs no-results distinction.
+To be executed against [ui-spec.md](./ui-spec.md) §9 at 1440 / 900 / 375 px widths; results will be recorded with screenshots under `artifacts/lab-02/screenshots/` (paths defined there). Checklist items: color tokens, editable/read-only distinction, asterisk + message placement, button hierarchy, badge consistency, no clipping/overlap/horizontal scroll, filter/pagination/attachment usability at all sizes, empty vs no-results distinction. This section describes planned visual evidence; screenshots will be produced during the implementation issues and are not present in this documentation-only PR.
 
 ## 5. Test Commands
 
