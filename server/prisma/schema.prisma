@@ -10,11 +10,105 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum RequestedPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketStatus {
+  NEW
+}
+
 // ---------------------------------------------------------------------------
-// Issue 3 — Create and seed IT request categories
+// Lab 1 — Category (retained, evolved in Lab 2 with isActive)
 // ---------------------------------------------------------------------------
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  tickets Ticket[]
+
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — Development Requester (testing mechanism, not authentication)
+// ---------------------------------------------------------------------------
+model DevelopmentRequester {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tickets Ticket[]
+
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — Related System
+// ---------------------------------------------------------------------------
+model RelatedSystem {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tickets Ticket[]
+
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — Ticket
+// ---------------------------------------------------------------------------
+model Ticket {
+  id                Int               @id @default(autoincrement())
+  ticketNumber      String            @unique
+  requesterId       Int
+  categoryId        Int
+  relatedSystemId   Int
+  summary           String
+  description       String            @db.Text
+  requestedPriority RequestedPriority
+  currentStatus     TicketStatus      @default(NEW)
+  ticketDate        DateTime          @default(now())
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  requester     DevelopmentRequester @relation(fields: [requesterId], references: [id])
+  category      Category             @relation(fields: [categoryId], references: [id])
+  relatedSystem RelatedSystem        @relation(fields: [relatedSystemId], references: [id])
+
+  attachments Attachment[]
+
+  @@index([requesterId])
+  @@index([categoryId])
+  @@index([relatedSystemId])
+  @@index([updatedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — Attachment (soft removal via removedAt)
+// ---------------------------------------------------------------------------
+model Attachment {
+  id               Int       @id @default(autoincrement())
+  ticketId         Int
+  originalFilename String
+  storedFilename   String    @unique
+  mimeType         String
+  sizeBytes        Int
+  removedAt        DateTime?
+  removedReason    String?   @db.Text
+  createdAt        DateTime  @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([removedAt])
 }
