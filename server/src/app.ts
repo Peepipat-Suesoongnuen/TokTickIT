@@ -36,7 +36,7 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     });
     res.status(200).json(categories);
   } catch (err) {
-    res.status(500).json({ error: "Unable to load categories" });
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
   }
 });
 

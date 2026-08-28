@@ -66,7 +66,7 @@ export default function RequesterSelection() {
         </div>
       )}
 
-      {(state === "ready" || requesters.length > 0) && state !== "loading" && state !== "error" && state !== "empty" && (
+      {state === "ready" && (
         <>
           <div className="mb-3">
             <label htmlFor="requester-select" className="form-label fw-semibold">
