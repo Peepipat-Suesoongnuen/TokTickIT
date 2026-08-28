@@ -1,10 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
-import App from "./App.js";
+import App from "./App";
+import { RequesterProvider } from "./contexts/RequesterContext";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <RequesterProvider>
+        <App />
+      </RequesterProvider>
+    </BrowserRouter>
   </React.StrictMode>
 );

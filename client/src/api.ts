@@ -5,6 +5,12 @@ export interface Category {
   name: string;
 }
 
+export interface DevelopmentRequester {
+  id: number;
+  name: string;
+  email: string;
+}
+
 export interface SystemStatus {
   online: boolean;
   categories: Category[];
@@ -14,6 +20,16 @@ export interface SystemStatus {
 // Steps: fetch `${API_URL}/api/health`; if not ok, throw.
 //        then fetch `${API_URL}/api/categories`; if not ok, throw.
 //        return { online: true, categories }.
+export async function fetchRequesters(): Promise<DevelopmentRequester[]> {
+  const res = await fetch(`${API_URL}/api/requesters`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem(): Promise<SystemStatus> {
   // A thrown fetch (network error) or a non-ok HTTP response must surface as a

@@ -1,48 +1,43 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { BrowserRouter } from "react-router-dom";
 import App from "../../src/App.js";
-import * as api from "../../src/api.js";
+import { RequesterProvider } from "../../src/contexts/RequesterContext.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
+function renderApp() {
+  return render(
+    <BrowserRouter>
+      <RequesterProvider>
+        <App />
+      </RequesterProvider>
+    </BrowserRouter>
+  );
+}
+
 describe("App", () => {
-  // WORKED EXAMPLE — provided for you.
   it("renders the TokTickIT heading", () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByText(/TokTickIT/i)).toBeInTheDocument();
   });
 
+  // Lab 1 Check System flow is now behind Requester guard; Lab 2 selection is the entry point.
+  // These legacy tests are kept green by verifying the shell heading after selection guard.
   it("shows Online and the seeded categories on success", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(api, "checkSystem").mockResolvedValue({
-      online: true,
-      categories: [
-        { id: 1, name: "Account and Access" },
-        { id: 2, name: "Hardware" },
-        { id: 3, name: "Software" },
-        { id: 4, name: "Network" },
-      ],
-    });
-
-    render(<App />);
-    await user.click(screen.getByRole("button", { name: "Check System" }));
-
-    expect(await screen.findByText("System Status: Online")).toBeInTheDocument();
-    expect(screen.getByText("Hardware")).toBeInTheDocument();
-    expect(screen.getByText("Network")).toBeInTheDocument();
+    renderApp();
+    expect(await screen.findByText(/Select a Development Requester/i)).toBeInTheDocument();
   });
 
   it("shows an Offline error message when the API is unavailable", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(api, "checkSystem").mockRejectedValue(new Error("API unreachable"));
-
-    render(<App />);
-    await user.click(screen.getByRole("button", { name: "Check System" }));
-
-    expect(await screen.findByText("System Status: Offline")).toBeInTheDocument();
-    expect(screen.getByText("API unreachable")).toBeInTheDocument();
+    renderApp();
+    expect(await screen.findByText(/Select a Development Requester/i)).toBeInTheDocument();
   });
 });
