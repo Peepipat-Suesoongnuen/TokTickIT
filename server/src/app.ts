@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import { getPrisma } from "./prisma.js";
+import { sendError } from "./lib/errors.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -36,6 +37,24 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(200).json(categories);
   } catch (err) {
     res.status(500).json({ error: "Unable to load categories" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Lab 2 Issue 7 — Development Requester context
+// GET /api/requesters — returns only active requesters, ordered by name ASC
+// No requesterId required (powers selection itself). Empty array when none.
+// ---------------------------------------------------------------------------
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const requesters = await getPrisma().developmentRequester.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    });
+    res.status(200).json(requesters);
+  } catch (err) {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
   }
 });
 

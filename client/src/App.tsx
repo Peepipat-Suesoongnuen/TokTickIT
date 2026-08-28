@@ -1,61 +1,26 @@
-import { useState } from "react";
-import { checkSystem, Category } from "./api.js";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useRequester } from "./contexts/RequesterContext";
+import RequesterSelection from "./pages/RequesterSelection";
+import AppShell from "./components/AppShell";
 
-// UI states you must handle for Issue 4: idle, loading, success, error.
-type UiState = "idle" | "loading" | "success" | "error";
+function Placeholder({ text }: { text: string }) {
+  return <p className="text-secondary">{text}</p>;
+}
 
 export default function App() {
-  const [state, setState] = useState<UiState>("idle");
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [error, setError] = useState<string>("");
+  const { requester } = useRequester();
 
-  async function handleCheck() {
-    setState("loading");
-    setError("");
-    try {
-      const result = await checkSystem();
-      setCategories(result.categories);
-      setState("success");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to connect to TokTickIT API");
-      setState("error");
-    }
+  if (!requester) {
+    return <RequesterSelection />;
   }
 
   return (
-    <div className="container py-5" style={{ maxWidth: 640 }}>
-      <h1 className="h3 mb-4">
-        TokTickIT <span className="text-success">IT Service Desk</span>
-      </h1>
-
-      <button className="btn btn-success" onClick={handleCheck} disabled={state === "loading"}>
-        {state === "loading" ? "Loading…" : "Check System"}
-      </button>
-
-      {state === "loading" && <p className="mt-3 text-secondary">Checking system…</p>}
-
-      {state === "success" && (
-        <div className="mt-3">
-          <p className="fw-bold text-success">System Status: Online</p>
-          {categories.length > 0 && (
-            <>
-              <p className="mb-1">Supported Request Categories</p>
-              <ul>
-                {categories.map((c) => (
-                  <li key={c.id}>{c.name}</li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-
-      {state === "error" && (
-        <div className="mt-3">
-          <p className="fw-bold text-danger">System Status: Offline</p>
-          <p className="text-danger">{error || "Unable to connect to TokTickIT API"}</p>
-        </div>
-      )}
-    </div>
+    <AppShell>
+      <Routes>
+        <Route path="/my-tickets" element={<Placeholder text="My Tickets — Coming in Issue 9" />} />
+        <Route path="/create" element={<Placeholder text="Create Ticket — Coming in Issue 8" />} />
+        <Route path="*" element={<Navigate to="/my-tickets" replace />} />
+      </Routes>
+    </AppShell>
   );
 }
