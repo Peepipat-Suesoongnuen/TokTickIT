@@ -113,6 +113,156 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// Lab 2 Issue 9 — My Tickets (owned list)
+// GET /api/tickets?requesterId=&search=&categoryId=&requestedPriority=&sort=&order=&page=&pageSize=
+// ---------------------------------------------------------------------------
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  try {
+    const allowed = new Set(["requesterId", "search", "categoryId", "requestedPriority", "sort", "order", "page", "pageSize"]);
+    for (const k of Object.keys(req.query)) {
+      if (!allowed.has(k)) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [k]: "Unknown parameter." });
+      }
+    }
+
+    const { requesterId, search, categoryId, requestedPriority, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
+
+    const fieldErrors: Record<string, string> = {};
+
+    // requesterId required
+    const rid = Number(requesterId);
+    if (requesterId === undefined || !Number.isInteger(rid) || rid <= 0) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
+    }
+    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
+    if (!reqExists) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    }
+
+    // search
+    let searchTrim: string | undefined;
+    if (search !== undefined) {
+      searchTrim = trimValue(search);
+      if (searchTrim.length === 0) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { search: "search must not be empty or whitespace only." });
+      }
+    }
+
+    // categoryId
+    let cid: number | undefined;
+    if (categoryId !== undefined) {
+      cid = Number(categoryId);
+      if (!Number.isInteger(cid) || cid <= 0) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { categoryId: "categoryId must be a positive integer." });
+      }
+      const cat = await getPrisma().category.findFirst({ where: { id: cid } });
+      if (!cat) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { categoryId: "categoryId not found." });
+    }
+
+    // requestedPriority
+    if (requestedPriority !== undefined && !isPriorityValid(requestedPriority)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requestedPriority: "Invalid priority." });
+    }
+
+    // sort
+    const allowedSort = new Set(["updatedAt", "ticketDate", "requestedPriority"]);
+    const sortField = sort ?? "updatedAt";
+    if (!allowedSort.has(sortField)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { sort: "Invalid sort field." });
+    }
+
+    // order
+    const allowedOrder = new Set(["asc", "desc"]);
+    const orderDir = (order ?? "desc").toLowerCase();
+    if (!allowedOrder.has(orderDir)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { order: "Invalid order." });
+    }
+
+    // page
+    const pageNum = page !== undefined ? Number(page) : 1;
+    if (page !== undefined && (!Number.isInteger(pageNum) || pageNum < 1)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { page: "page must be >= 1." });
+    }
+
+    // pageSize
+    const allowedSizes = new Set([10, 20, 50]);
+    const sizeNum = pageSize !== undefined ? Number(pageSize) : 10;
+    if (pageSize !== undefined && (!Number.isInteger(sizeNum) || !allowedSizes.has(sizeNum))) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { pageSize: "pageSize must be 10, 20, or 50." });
+    }
+
+    // Build where
+    const where: Record<string, unknown> = { requesterId: rid };
+    if (cid !== undefined) (where as Record<string, unknown>).categoryId = cid;
+    if (requestedPriority !== undefined) (where as Record<string, unknown>).requestedPriority = requestedPriority;
+    if (searchTrim !== undefined) {
+      (where as Record<string, unknown>).OR = [
+        { summary: { contains: searchTrim, mode: "insensitive" } },
+        { description: { contains: searchTrim, mode: "insensitive" } },
+      ];
+    }
+
+    const prisma = getPrisma();
+    // Fetch all filtered for sorting (small dataset, ensures priority rank correct)
+    const all = await prisma.ticket.findMany({
+      where: where as never,
+      include: {
+        category: { select: { id: true, name: true } },
+        relatedSystem: { select: { id: true, name: true } },
+      },
+    });
+
+    // Sorting
+    const rank: Record<string, number> = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
+    const dir = orderDir === "asc" ? 1 : -1;
+    const sorted = [...(all as unknown as Array<Record<string, unknown>>)].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "requestedPriority") {
+        cmp = (rank[a.requestedPriority as string] ?? 0) - (rank[b.requestedPriority as string] ?? 0);
+      } else if (sortField === "ticketDate") {
+        cmp = new Date(a.ticketDate as string).getTime() - new Date(b.ticketDate as string).getTime();
+      } else {
+        // updatedAt
+        cmp = new Date(a.updatedAt as string).getTime() - new Date(b.updatedAt as string).getTime();
+      }
+      if (cmp !== 0) return cmp * dir;
+      // secondary id DESC always
+      return (b.id as number) - (a.id as number);
+    });
+
+    const totalCount = sorted.length;
+    const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / sizeNum);
+    const start = (pageNum - 1) * sizeNum;
+    const paged = sorted.slice(start, start + sizeNum);
+
+    // Map to response shape
+    const data = paged.map((t) => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      summary: t.summary,
+      category: t.category,
+      requestedPriority: t.requestedPriority,
+      currentStatus: t.currentStatus,
+      updatedAt: t.updatedAt,
+    }));
+
+    res.status(200).json({
+      data,
+      meta: {
+        page: pageNum,
+        pageSize: sizeNum,
+        totalCount,
+        totalPages,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1,
+      },
+    });
+  } catch (err) {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Lab 2 Issue 8 — Create Ticket
 // POST /api/tickets — validates, generates ticketNumber, persists with status NEW
 // ---------------------------------------------------------------------------
