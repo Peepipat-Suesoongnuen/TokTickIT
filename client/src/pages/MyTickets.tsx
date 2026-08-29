@@ -120,7 +120,7 @@ export default function MyTickets() {
             />
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <select className="form-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Category">
               <option value="">All Categories</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -159,7 +159,7 @@ export default function MyTickets() {
             </select>
           </div>
         </div>
-        {(isFiltered || sort !== "updatedAt" || order !== "desc") && (
+        {isFiltered && (
           <button className="btn btn-outline-secondary btn-sm mt-2" onClick={clearFilters}>
             Clear Filters
           </button>

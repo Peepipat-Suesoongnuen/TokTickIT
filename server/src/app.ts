@@ -240,10 +240,13 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       id: t.id,
       ticketNumber: t.ticketNumber,
       summary: t.summary,
+      description: t.description,
       category: t.category,
+      relatedSystem: t.relatedSystem,
       requestedPriority: t.requestedPriority,
       currentStatus: t.currentStatus,
       updatedAt: t.updatedAt,
+      requester: { id: t.requesterId },
     }));
 
     res.status(200).json({
