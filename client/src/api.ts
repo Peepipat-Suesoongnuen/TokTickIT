@@ -30,6 +30,51 @@ export async function fetchRequesters(): Promise<DevelopmentRequester[]> {
   return res.json();
 }
 
+export interface RelatedSystem {
+  id: number;
+  name: string;
+}
+
+export async function fetchCategories(requesterId: number): Promise<Category[]> {
+  const res = await fetch(`${API_URL}/api/categories?requesterId=${requesterId}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function fetchRelatedSystems(requesterId: number): Promise<RelatedSystem[]> {
+  const res = await fetch(`${API_URL}/api/related-systems?requesterId=${requesterId}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export interface CreateTicketPayload {
+  requesterId: number;
+  categoryId: number;
+  relatedSystemId: number;
+  summary: string;
+  description: string;
+  requestedPriority: string;
+}
+
+export async function createTicket(payload: CreateTicketPayload) {
+  const res = await fetch(`${API_URL}/api/tickets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body };
+  return body;
+}
+
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem(): Promise<SystemStatus> {
   // A thrown fetch (network error) or a non-ok HTTP response must surface as a
