@@ -3,10 +3,10 @@ import request from "supertest";
 import { app } from "../../src/app.js";
 
 // Issue 4 — verify GET /api/categories reads the seeded categories from
-// PostgreSQL (via Prisma) and returns them in id order.
+// PostgreSQL (via Prisma) and returns them ordered by name ASC (Lab 2).
 // Requires the DB to be migrated and seeded first (Issue 3).
 describe("GET /api/categories", () => {
-  it("returns 200 with the four seeded categories in id order", async () => {
+  it("returns 200 with the four seeded categories in name order", async () => {
     const res = await request(app).get("/api/categories");
 
     expect(res.status).toBe(200);
@@ -17,16 +17,13 @@ describe("GET /api/categories", () => {
     expect(names).toEqual([
       "Account and Access",
       "Hardware",
-      "Software",
       "Network",
+      "Software",
     ]);
 
     res.body.forEach((c: { id: number; name: string }) => {
       expect(typeof c.id).toBe("number");
       expect(typeof c.name).toBe("string");
     });
-
-    const ids = res.body.map((c: { id: number }) => c.id);
-    expect(ids).toEqual([...ids].sort((a, b) => a - b));
   });
 });
