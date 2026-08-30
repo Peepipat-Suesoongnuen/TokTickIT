@@ -178,7 +178,7 @@ Database prerequisites (implemented):
 
 Every row's `Final` column stays **Planned** during feature-branch development (failing-first TDD). Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
 
-**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ current working tree):** `cd server && npm test` — 33 passed; `cd client && npm test` — 20 passed; server/client builds clean; `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` will run `TEST_DATABASE_URL`-backed tests on push. Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
+**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ 73bc6bb05bcc393d2dd465aaedbc8669ae85b212):** `cd server && npm test` — 33 passed (31 My Tickets + 2 Lab 1); `cd client && npm test` — 20 passed (17 My Tickets + 3 App); `npm run build` / `tsc --noEmit` clean both sides; `git diff --check` clean; `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` **passed** — server 33 / client 20 — https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320049779 and https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320047712 (server 45s / client 17-21s, 4/4 success). Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
 
 ## 7. Known Limitations or Deferred Tests
 
