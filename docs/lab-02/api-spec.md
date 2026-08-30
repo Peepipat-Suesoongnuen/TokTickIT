@@ -157,7 +157,7 @@ Paginated list of the selected requester's own Tickets (FR-07, BR-19).
 |---|---|
 | `requesterId` | required; positive integer |
 | `search` | optional string; **case-insensitive partial match on `summary` OR `description`** (BR-19). The value is trimmed before matching; a value that is empty after trimming is invalid → 400 |
-| `categoryId` | optional filter; must be an existing category id |
+| `categoryId` | optional filter; must reference an existing **active** category; inactive or unknown ids → 400 |
 | `requestedPriority` | optional filter; one of `LOW \| MEDIUM \| HIGH \| CRITICAL` |
 | `sort` | optional; one of `updatedAt` (default), `ticketDate`, `requestedPriority` |
 | `order` | optional; `asc` \| `desc` (default `desc`) |

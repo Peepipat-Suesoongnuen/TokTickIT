@@ -113,6 +113,164 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// Lab 2 Issue 9 — My Tickets (owned list)
+// GET /api/tickets?requesterId=&search=&categoryId=&requestedPriority=&sort=&order=&page=&pageSize=
+// ---------------------------------------------------------------------------
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  try {
+    const allowed = new Set(["requesterId", "search", "categoryId", "requestedPriority", "sort", "order", "page", "pageSize"]);
+    for (const k of Object.keys(req.query)) {
+      if (!allowed.has(k)) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [k]: "Unknown parameter." });
+      }
+    }
+
+    // Guard: duplicate/malformed query values arrive as string[] -> 400 (BR-20 strict contract)
+    const rawParams = ["requesterId", "search", "categoryId", "requestedPriority", "sort", "order", "page", "pageSize"] as const;
+    for (const p of rawParams) {
+      const v = (req.query as Record<string, unknown>)[p];
+      if (v !== undefined && typeof v !== "string") {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [p]: `${p} must be a single value.` });
+      }
+    }
+
+    const { requesterId, search, categoryId, requestedPriority, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
+
+    const fieldErrors: Record<string, string> = {};
+
+    // requesterId required
+    const rid = Number(requesterId);
+    if (requesterId === undefined || !Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
+    }
+    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
+    if (!reqExists) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    }
+
+    // search
+    let searchTrim: string | undefined;
+    if (search !== undefined) {
+      searchTrim = trimValue(search);
+      if (searchTrim.length === 0) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { search: "search must not be empty or whitespace only." });
+      }
+    }
+
+    // categoryId
+    let cid: number | undefined;
+    if (categoryId !== undefined) {
+      cid = Number(categoryId);
+      if (!Number.isInteger(cid) || cid <= 0 || !Number.isSafeInteger(cid)) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { categoryId: "categoryId must be a positive integer." });
+      }
+      const cat = await getPrisma().category.findFirst({ where: { id: cid, isActive: true } });
+      if (!cat) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
+          categoryId: "categoryId must reference an active category.",
+        });
+      }
+    }
+
+    // requestedPriority
+    if (requestedPriority !== undefined && !isPriorityValid(requestedPriority)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requestedPriority: "Invalid priority." });
+    }
+
+    // sort
+    const allowedSort = new Set(["updatedAt", "ticketDate", "requestedPriority"]);
+    const sortField = sort ?? "updatedAt";
+    if (!allowedSort.has(sortField)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { sort: "Invalid sort field." });
+    }
+
+    // order
+    const allowedOrder = new Set(["asc", "desc"]);
+    const orderDir = (order ?? "desc").toLowerCase();
+    if (!allowedOrder.has(orderDir)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { order: "Invalid order." });
+    }
+
+    // page
+    const pageNum = page !== undefined ? Number(page) : 1;
+    if (page !== undefined && (!Number.isInteger(pageNum) || pageNum < 1 || !Number.isSafeInteger(pageNum))) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { page: "page must be >= 1." });
+    }
+
+    // pageSize
+    const allowedSizes = new Set([10, 20, 50]);
+    const sizeNum = pageSize !== undefined ? Number(pageSize) : 10;
+    if (pageSize !== undefined && (!Number.isInteger(sizeNum) || !allowedSizes.has(sizeNum))) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { pageSize: "pageSize must be 10, 20, or 50." });
+    }
+
+    // Build where
+    const where: Record<string, unknown> = { requesterId: rid };
+    if (cid !== undefined) (where as Record<string, unknown>).categoryId = cid;
+    if (requestedPriority !== undefined) (where as Record<string, unknown>).requestedPriority = requestedPriority;
+    if (searchTrim !== undefined) {
+      (where as Record<string, unknown>).OR = [
+        { summary: { contains: searchTrim, mode: "insensitive" } },
+        { description: { contains: searchTrim, mode: "insensitive" } },
+      ];
+    }
+
+    const prisma = getPrisma();
+    // PostgreSQL preserves the declaration order of RequestedPriority
+    // (LOW, MEDIUM, HIGH, CRITICAL), so Prisma can sort it in the database.
+    const orderBy = [{ [sortField]: orderDir }, { id: "desc" }];
+    const [totalCount, paged] = await Promise.all([
+      prisma.ticket.count({ where: where as never }),
+      prisma.ticket.findMany({
+        where: where as never,
+        orderBy: orderBy as never,
+        skip: (pageNum - 1) * sizeNum,
+        take: sizeNum,
+        select: {
+          id: true,
+          ticketNumber: true,
+          summary: true,
+          category: { select: { id: true, name: true } },
+          relatedSystem: { select: { id: true, name: true } },
+          requestedPriority: true,
+          currentStatus: true,
+          updatedAt: true,
+          requesterId: true,
+        },
+      }),
+    ]);
+    const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / sizeNum);
+
+    // Map to response shape
+    const data = paged.map((t) => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      summary: t.summary,
+      category: t.category,
+      relatedSystem: t.relatedSystem,
+      requestedPriority: t.requestedPriority,
+      currentStatus: t.currentStatus,
+      updatedAt: t.updatedAt,
+      requester: { id: t.requesterId },
+    }));
+
+    res.status(200).json({
+      data,
+      meta: {
+        page: pageNum,
+        pageSize: sizeNum,
+        totalCount,
+        totalPages,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1,
+      },
+    });
+  } catch (err) {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Lab 2 Issue 8 — Create Ticket
 // POST /api/tickets — validates, generates ticketNumber, persists with status NEW
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Lab 2 Test Plan and Results — TokTickIT Requester Ticketing
 
-Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document describes the planned TDD evidence for the next implementation issues; no Lab 2 test files or implementation artifacts exist yet in this PR.
+Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document describes the planned TDD evidence for the next implementation issues; Lab 2 test files for My Tickets (Issue 9) have been added in this PR as feature-branch evidence (see §6), but rows remain `Planned` until the final `main` green run.
 
 **Status key:** `Planned` while on the feature branch (failing-first TDD). A row becomes `Pass` **only after a green run on the final `main` branch** — never from a feature-branch run alone.
 
@@ -39,7 +39,7 @@ Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec
 | API-07 | API | BR-08 | Ticket bound to submitted requesterId | Persisted requesterId matches; immutable | server/tests/lab-02/create-ticket.api.test.ts | Planned |
 | API-08 | API | AC-11 | Requester B lists tickets | None of Requester A's tickets appear | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-09 | API | AC-12 | Search: case-insensitive partial on summary OR description; whitespace-only value | Correct match set; whitespace-only → 400 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
-| API-10 | API | AC-13 | Filter by categoryId and requestedPriority (no status filter in Lab 2) | Only matching tickets returned | server/tests/lab-02/my-tickets.api.test.ts | Planned |
+| API-10 | API | AC-13 | Filter by active categoryId and requestedPriority; reject inactive categoryId (no status filter in Lab 2) | Only matching tickets returned; inactive category → 400 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-11 | API | AC-14, BR-21 | Default sort updatedAt DESC + id DESC; priority rank ASC = LOW→CRITICAL, DESC reverse | Ordering matches contract | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-12 | API | AC-15 | Pagination metadata; page sizes {10,20,50}; page > totalPages → 200 empty data with valid meta | Correct meta fields per api-spec §5.2 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-13 | API | AC-16 | Strict query contract: unknown param name → 400; invalid known value → 400 | Exact statuses per api-spec §5.2 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
@@ -86,7 +86,7 @@ Planned manual evidence (deferred, not present in this PR): backend-stop demo fo
 | UI-20 | UI | AC-27 | Mobile-width layout classes (jsdom proxy check) | No horizontal overflow classes/styles applied | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
 | UI-21 | UI | FR-02, FR-12 | Requester Selection loading spinner during fetch | Loading state renders before data arrives | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
 | UI-22 | UI | AC-25, FR-12 | Create Ticket reference-data loading and failure | Skeleton/spinner while loading; on failure Category/Related System stay disabled, Submit disabled, entered Summary/Description preserved (ui-spec §5.2) | client/src/features/lab-02/tests/CreateTicket.test.tsx | Planned |
-| UI-23 | UI | FR-12 | My Tickets loading state | Spinner/skeleton renders before list data arrives | client/src/features/lab-02/tests/MyTickets.test.tsx | Planned |
+| UI-23 | UI | FR-12, AC-08, AC-25 | My Tickets loading, requester-switch race protection, and category metadata failure/Retry | Latest requester wins; stale success/failure ignored; category failure does not hide loaded tickets | client/src/features/lab-02/tests/MyTickets.test.tsx | Planned |
 | UI-24 | UI | AC-25 | Ticket Detail loading and API failure | Skeleton during load; safe banner + Retry on failure | client/src/features/lab-02/tests/RequesterTicketDetail.test.tsx | Planned |
 
 ### UI Style — `client/src/features/lab-02/tests/`
@@ -165,22 +165,24 @@ cd client && npm test
 npx playwright test
 ```
 
-Database prerequisites (planned execution):
+Database prerequisites (implemented):
 - PostgreSQL running locally.
-- API/integration tests will use a dedicated PostgreSQL test database, separate from the development database. The concrete environment-variable name will follow the repository convention established during implementation.
-- Before the API/integration test suite runs, Prisma migrations must be applied to the dedicated test database.
-- Seed/fixtures: the required reference data will be seeded into the appropriate database(s) via the idempotent Prisma seed (`cd server && npx prisma db seed` or the test-database equivalent).
-- `.env` configured from `.env.example`.
-- Test-created data must be reset between tests or test suites so that tests are isolated and do not depend on execution order. The implementation may use transaction rollback, targeted cleanup/truncation, or another dedicated database reset strategy, provided the test database remains isolated and reproducible.
-- Status: prerequisites and reset guidance are planned for the implementation issues; verified database state will be evidenced by green test runs on the final `main` branch.
+- API/integration tests use a dedicated database through `TEST_DATABASE_URL` (see `server/.env.example`). Do not point this variable at the development database.
+- Prisma CLI reads `DATABASE_URL` from `schema.prisma`; it does not switch to `TEST_DATABASE_URL` automatically. Prepare the dedicated database with `DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy` followed by `DATABASE_URL="$TEST_DATABASE_URL" npx prisma db seed`.
+- The Prisma seed is idempotent and must run after migrations and before the API/integration test suite.
+- `.env` configured from `.env.example` (copy to `.env`).
+- Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. The `DATABASE_URL` used for migration/seed and the `TEST_DATABASE_URL` used by Vitest must identify the same dedicated test database.
+- Hosted CI (`.github/workflows/ci.yml`) provisions PostgreSQL, migrates and seeds `toktickit_test`, then runs the `TEST_DATABASE_URL`-backed tests on every push/PR.
 
 ## 6. Final Results
 
 Every row's `Final` column stays **Planned** during feature-branch development (failing-first TDD). Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
 
+**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ 73bc6bb05bcc393d2dd465aaedbc8669ae85b212):** `cd server && npm test` — 33 passed (31 My Tickets + 2 Lab 1); `cd client && npm test` — 20 passed (17 My Tickets + 3 App); `npm run build` / `tsc --noEmit` clean both sides; `git diff --check` clean; `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` **passed** — server 33 / client 20 — https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320049779 and https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320047712 (server 45s / client 17-21s, 4/4 success). Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
+
 ## 7. Known Limitations or Deferred Tests
 
-- Asia/Bangkok display formatting will be verified manually and evidenced by planned screenshots (deferred; not present in this PR; unit-testing timezone rendering adds flakiness).
+- Asia/Bangkok display formatting uses deterministic `Intl.DateTimeFormat.formatToParts` output and is covered by the My Tickets component test; screenshots remain planned visual evidence.
 - Accessibility (AC-28) covered by semi-automated assertions (UI-19); full audit manual.
 - Backend idempotency keys out of scope in Lab 2 (AC-05 enforced at UI layer per api-spec §7).
 - API-23 will use `vi.mock` fault injection of the Prisma/service dependency while keeping real routing and error middleware active; the planned manual backend-stop demo will provide additional real-infrastructure evidence for AC-25/AC-26 (deferred).

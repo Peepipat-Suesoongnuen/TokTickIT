@@ -37,6 +37,29 @@ export async function createTicket(payload) {
         throw { status: res.status, body };
     return body;
 }
+export async function listTickets(params) {
+    const qs = new URLSearchParams();
+    qs.set("requesterId", String(params.requesterId));
+    if (params.search !== undefined)
+        qs.set("search", params.search);
+    if (params.categoryId !== undefined)
+        qs.set("categoryId", String(params.categoryId));
+    if (params.requestedPriority !== undefined)
+        qs.set("requestedPriority", params.requestedPriority);
+    if (params.sort !== undefined)
+        qs.set("sort", params.sort);
+    if (params.order !== undefined)
+        qs.set("order", params.order);
+    if (params.page !== undefined)
+        qs.set("page", String(params.page));
+    if (params.pageSize !== undefined)
+        qs.set("pageSize", String(params.pageSize));
+    const res = await fetch(`${API_URL}/api/tickets?${qs.toString()}`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok)
+        throw { status: res.status, body };
+    return body;
+}
 export async function checkSystem() {
     try {
         const healthRes = await fetch(`${API_URL}/api/health`);

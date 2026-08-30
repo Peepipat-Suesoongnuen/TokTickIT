@@ -89,9 +89,11 @@ States:
 ### 5.3 My Tickets Screen
 Toolbar: search input (placeholder `Search summary or description…` — implements api-spec §5.2 semantics), Category filter select, Requested Priority filter select (**no status filter in Lab 2**), sort control (field select: Last Updated / Ticket Date / Priority × direction toggle), Clear Filters (secondary), **Create Ticket** (primary), page-size select (10/20/50), pagination bar (Previous / page numbers / Next).
 
-Desktop table columns: Ticket Number · Summary · Category · Requested Priority (badge) · Current Status (badge `NEW`) · Last Updated (formatted `YYYY-MM-DD HH:MM:SS` Asia/Bangkok, Assumption 3) · action (Open). Row click → Ticket Detail.
+Desktop table columns: Ticket Number · Summary · Category · Requested Priority (badge) · Current Status (badge `NEW`) · Last Updated (formatted `YYYY-MM-DD HH:MM:SS` Asia/Bangkok, Assumption 3) · action (Open — deferred to Issue 10: disabled in My Tickets until Ticket Detail route exists). Row click → Ticket Detail (when Detail is available).
 
 Mobile (<768px): card list — one card per ticket with same fields stacked; badges inline; no horizontal scrolling (AC-27).
+
+Category metadata loads independently from the ticket list. While loading, the Category filter is disabled. If loading fails, the ticket list remains visible and a safe `Unable to load categories` state with a Retry action is shown; stale responses from a previously selected requester must not update either list.
 
 Badge rules:
 | Value | Badge |

@@ -3,6 +3,7 @@ import { useRequester } from "./contexts/RequesterContext";
 import RequesterSelection from "./pages/RequesterSelection";
 import AppShell from "./components/AppShell";
 import CreateTicket from "./pages/CreateTicket";
+import MyTickets from "./pages/MyTickets";
 
 function Placeholder({ text }: { text: string }) {
   return <p className="text-secondary">{text}</p>;
@@ -18,7 +19,7 @@ export default function App() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/my-tickets" element={<Placeholder text="My Tickets — Coming in Issue 9" />} />
+        <Route path="/my-tickets" element={<MyTickets />} />
         <Route path="/create" element={<CreateTicket />} />
         <Route path="*" element={<Navigate to="/my-tickets" replace />} />
       </Routes>
