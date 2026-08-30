@@ -21,7 +21,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://toktickit:toktickit@localhost:5432/toktickit?schema=public
+      DATABASE_URL: postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public
       TEST_DATABASE_URL: postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +34,8 @@ jobs:
         run: npm ci
       - working-directory: server
         run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public
+      - working-directory: server
+        run: npx prisma db seed
       - working-directory: server
         run: npx tsc --noEmit
       - working-directory: server

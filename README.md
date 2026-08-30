@@ -97,13 +97,42 @@ Open the URL shown by Vite (default `http://localhost:5173`) in your browser.
 
 ## Running Tests
 
-```bash
-# Frontend tests (Vitest)
-cd client
-npm test
+Backend integration tests require a separate `toktickit_test` database. Never point
+`TEST_DATABASE_URL` at the development database because integration tests create and
+remove fixture records.
 
-# Backend tests (Vitest + Supertest)
+Create the test database once in PostgreSQL:
+
+```sql
+CREATE DATABASE toktickit_test;
+```
+
+Prepare and test it from Bash:
+
+```bash
 cd server
+export TEST_DATABASE_URL="postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public"
+DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy
+DATABASE_URL="$TEST_DATABASE_URL" npx prisma db seed
+NODE_ENV=test npm test
+```
+
+Or from PowerShell:
+
+```powershell
+cd server
+$env:TEST_DATABASE_URL="postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public"
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+npx prisma migrate deploy
+npx prisma db seed
+$env:NODE_ENV="test"
+npm test
+```
+
+Frontend tests do not require PostgreSQL:
+
+```bash
+cd client
 npm test
 ```
 

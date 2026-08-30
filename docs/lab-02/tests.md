@@ -167,12 +167,12 @@ npx playwright test
 
 Database prerequisites (implemented):
 - PostgreSQL running locally.
-- API/integration tests use a dedicated test database when `TEST_DATABASE_URL` is set (see `server/.env.example`); when unset they fall back to `DATABASE_URL` with **targeted cleanup** (`ticketNumber in [...]`) so no dev data is wiped — satisfying isolation without breaking fresh clones.
-- Before the API/integration test suite runs on the test DB, apply migrations: `TEST_DATABASE_URL="..." npx prisma migrate deploy` (or `DATABASE_URL` fallback).
-- Seed/fixtures: idempotent Prisma seed (`cd server && npx prisma db seed` or `TEST_DATABASE_URL=... npx prisma db seed`).
+- API/integration tests use a dedicated database through `TEST_DATABASE_URL` (see `server/.env.example`). Do not point this variable at the development database.
+- Prisma CLI reads `DATABASE_URL` from `schema.prisma`; it does not switch to `TEST_DATABASE_URL` automatically. Prepare the dedicated database with `DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy` followed by `DATABASE_URL="$TEST_DATABASE_URL" npx prisma db seed`.
+- The Prisma seed is idempotent and must run after migrations and before the API/integration test suite.
 - `.env` configured from `.env.example` (copy to `.env`).
-- Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. When `TEST_DATABASE_URL` is used the entire test DB is isolated by URL.
-- Hosted CI (`.github/workflows/ci.yml`) provisions Postgres service and runs `TEST_DATABASE_URL`-backed tests on every push/PR.
+- Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. The `DATABASE_URL` used for migration/seed and the `TEST_DATABASE_URL` used by Vitest must identify the same dedicated test database.
+- Hosted CI (`.github/workflows/ci.yml`) provisions PostgreSQL, migrates and seeds `toktickit_test`, then runs the `TEST_DATABASE_URL`-backed tests on every push/PR.
 
 ## 6. Final Results
 
