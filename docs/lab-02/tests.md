@@ -165,20 +165,20 @@ cd client && npm test
 npx playwright test
 ```
 
-Database prerequisites (planned execution):
+Database prerequisites (implemented):
 - PostgreSQL running locally.
-- API/integration tests will use a dedicated PostgreSQL test database, separate from the development database. The concrete environment-variable name will follow the repository convention established during implementation.
-- Before the API/integration test suite runs, Prisma migrations must be applied to the dedicated test database.
-- Seed/fixtures: the required reference data will be seeded into the appropriate database(s) via the idempotent Prisma seed (`cd server && npx prisma db seed` or the test-database equivalent).
-- `.env` configured from `.env.example`.
-- Test-created data must be reset between tests or test suites so that tests are isolated and do not depend on execution order. The implementation may use transaction rollback, targeted cleanup/truncation, or another dedicated database reset strategy, provided the test database remains isolated and reproducible.
-- Status: prerequisites and reset guidance are planned for the implementation issues; verified database state will be evidenced by green test runs on the final `main` branch.
+- API/integration tests use a dedicated test database when `TEST_DATABASE_URL` is set (see `server/.env.example`); when unset they fall back to `DATABASE_URL` with **targeted cleanup** (`ticketNumber in [...]`) so no dev data is wiped — satisfying isolation without breaking fresh clones.
+- Before the API/integration test suite runs on the test DB, apply migrations: `TEST_DATABASE_URL="..." npx prisma migrate deploy` (or `DATABASE_URL` fallback).
+- Seed/fixtures: idempotent Prisma seed (`cd server && npx prisma db seed` or `TEST_DATABASE_URL=... npx prisma db seed`).
+- `.env` configured from `.env.example` (copy to `.env`).
+- Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. When `TEST_DATABASE_URL` is used the entire test DB is isolated by URL.
+- Hosted CI (`.github/workflows/ci.yml`) provisions Postgres service and runs `TEST_DATABASE_URL`-backed tests on every push/PR.
 
 ## 6. Final Results
 
 Every row's `Final` column stays **Planned** during feature-branch development (failing-first TDD). Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
 
-**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ 21b334e):** `cd server && npm test` — 21 passed; `cd client && npm test` — 12 passed; `tsc --noEmit` clean on both sides. Evidence below remains `Planned` per the rule above until the final `main` run (see PR #24).
+**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ f6f5587 → next):** `cd server && npm test` — 25 passed; `cd client && npm test` — 15 passed; `tsc --noEmit` clean; `git diff --check` clean (fixed 167/216 + final newline); `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` will run `TEST_DATABASE_URL`-backed tests on push. Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
 
 ## 7. Known Limitations or Deferred Tests
 

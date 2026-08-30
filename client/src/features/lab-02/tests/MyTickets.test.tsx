@@ -164,7 +164,7 @@ describe("MyTickets", () => {
       // Need to trigger a filter first to show the Clear Filters button
       const categorySelect = screen.getByRole("combobox", { name: /category/i });
       await userEvent.selectOptions(categorySelect, "1");
-      
+
       // Get the first Clear Filters button (toolbar)
       const clearButtons = screen.getAllByRole("button", { name: "Clear Filters" });
       await userEvent.click(clearButtons[0]);
@@ -213,7 +213,7 @@ describe("MyTickets", () => {
 
       const searchInput = screen.getByPlaceholderText("Search summary or description…");
       await userEvent.type(searchInput, "lap");
-      
+
       // Should not call API immediately (debounce)
       expect(listSpy).toHaveBeenCalledTimes(1);
 
