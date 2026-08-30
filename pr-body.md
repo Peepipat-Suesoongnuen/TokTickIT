@@ -2,12 +2,12 @@
 
 Closes #15
 
-## Verification (feature-branch, `f6f5587` → next SHA)
-- `cd server && npm test` → 25 passed (23 my-tickets + 2 lab-01, isolated fixture `ticketNumber in [...]`, no `deleteMany({})`)
-- `cd client && npm test` → 15 passed (12 MyTickets + 3 App, UI-07/UI-08/UI-09/UI-23 + a11y/pagination evidence)
+## Verification (latest PR head)
+- Hosted CI (`push` + `pull_request`) → server 25 passed (23 My Tickets + 2 Lab 1), client 15 passed (12 My Tickets + 3 App)
+- Server CI → migrate `toktickit_test`, seed 4 Categories / 7 Related Systems / 5 Development Requesters, then run tests with the same dedicated test database
 - `npx tsc --noEmit` → clean ทั้ง 2 ฝั่ง
-- `git diff --check` → clean (fixed trailing whitespace 167,216 + final newline)
-- `TEST_DATABASE_URL` → `server/.env.example` + `server/src/prisma.ts` รองรับ dedicated test DB แยกจาก `DATABASE_URL` (fallback targeted cleanup) — ไม่ลบ dev data บน fresh clone
-- Hosted CI → `.github/workflows/ci.yml` (server: Postgres service + `TEST_DATABASE_URL` migrate + `tsc` + `npm test` / client: `tsc` + `npm test`) จะเขียวบน push ถัดไป (final `main` green จะเปลี่ยน `tests.md` `Planned` → `Pass` ตามกฎ `tests.md:5`)
+- `git diff --check` → clean
+- `TEST_DATABASE_URL` → integration tests แยกจาก development database; Prisma CLI รับ test URL ผ่าน `DATABASE_URL` ตอน migrate/seed ตาม `schema.prisma`
+- `server/.env.example`, `docs/lab-02/tests.md` และ root `README.md` → อัปเดตขั้นตอนสร้าง, migrate, seed และรัน dedicated test database แล้ว
 
 > `docs/lab-02/tests.md:181` ยังคง `Planned` จนกว่า final `main` green run — responsive screenshot / E2E ยัง defer เป็น `Planned` ตามเอกสาร ไม่ได้ claim ว่าผ่านแล้ว
