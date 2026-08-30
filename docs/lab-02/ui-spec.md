@@ -93,6 +93,8 @@ Desktop table columns: Ticket Number · Summary · Category · Requested Priorit
 
 Mobile (<768px): card list — one card per ticket with same fields stacked; badges inline; no horizontal scrolling (AC-27).
 
+Category metadata loads independently from the ticket list. While loading, the Category filter is disabled. If loading fails, the ticket list remains visible and a safe `Unable to load categories` state with a Retry action is shown; stale responses from a previously selected requester must not update either list.
+
 Badge rules:
 | Value | Badge |
 |---|---|

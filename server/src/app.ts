@@ -164,8 +164,12 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       if (!Number.isInteger(cid) || cid <= 0 || !Number.isSafeInteger(cid)) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { categoryId: "categoryId must be a positive integer." });
       }
-      const cat = await getPrisma().category.findFirst({ where: { id: cid } });
-      if (!cat) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { categoryId: "categoryId not found." });
+      const cat = await getPrisma().category.findFirst({ where: { id: cid, isActive: true } });
+      if (!cat) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
+          categoryId: "categoryId must reference an active category.",
+        });
+      }
     }
 
     // requestedPriority
@@ -212,44 +216,36 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     }
 
     const prisma = getPrisma();
-    // Fetch all filtered for sorting (small dataset, ensures priority rank correct)
-    const all = await prisma.ticket.findMany({
-      where: where as never,
-      include: {
-        category: { select: { id: true, name: true } },
-        relatedSystem: { select: { id: true, name: true } },
-      },
-    });
-
-    // Sorting
-    const rank: Record<string, number> = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
-    const dir = orderDir === "asc" ? 1 : -1;
-    const sorted = [...(all as unknown as Array<Record<string, unknown>>)].sort((a, b) => {
-      let cmp = 0;
-      if (sortField === "requestedPriority") {
-        cmp = (rank[a.requestedPriority as string] ?? 0) - (rank[b.requestedPriority as string] ?? 0);
-      } else if (sortField === "ticketDate") {
-        cmp = new Date(a.ticketDate as string).getTime() - new Date(b.ticketDate as string).getTime();
-      } else {
-        // updatedAt
-        cmp = new Date(a.updatedAt as string).getTime() - new Date(b.updatedAt as string).getTime();
-      }
-      if (cmp !== 0) return cmp * dir;
-      // secondary id DESC always
-      return (b.id as number) - (a.id as number);
-    });
-
-    const totalCount = sorted.length;
+    // PostgreSQL preserves the declaration order of RequestedPriority
+    // (LOW, MEDIUM, HIGH, CRITICAL), so Prisma can sort it in the database.
+    const orderBy = [{ [sortField]: orderDir }, { id: "desc" }];
+    const [totalCount, paged] = await Promise.all([
+      prisma.ticket.count({ where: where as never }),
+      prisma.ticket.findMany({
+        where: where as never,
+        orderBy: orderBy as never,
+        skip: (pageNum - 1) * sizeNum,
+        take: sizeNum,
+        select: {
+          id: true,
+          ticketNumber: true,
+          summary: true,
+          category: { select: { id: true, name: true } },
+          relatedSystem: { select: { id: true, name: true } },
+          requestedPriority: true,
+          currentStatus: true,
+          updatedAt: true,
+          requesterId: true,
+        },
+      }),
+    ]);
     const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / sizeNum);
-    const start = (pageNum - 1) * sizeNum;
-    const paged = sorted.slice(start, start + sizeNum);
 
     // Map to response shape
     const data = paged.map((t) => ({
       id: t.id,
       ticketNumber: t.ticketNumber,
       summary: t.summary,
-      description: t.description,
       category: t.category,
       relatedSystem: t.relatedSystem,
       requestedPriority: t.requestedPriority,

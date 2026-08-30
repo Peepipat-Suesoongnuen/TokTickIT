@@ -1,14 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listTickets, fetchCategories, Category } from "../api";
 import { useRequester } from "../contexts/RequesterContext";
 
-function formatBangkok(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleString("en-CA", { timeZone: "Asia/Bangkok", hour12: false }).replace(",", "");
-  } catch {
-    return dateStr;
-  }
+export function formatBangkok(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return dateStr;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value;
+
+  return `${value("year")}-${value("month")}-${value("day")} ${value("hour")}:${value("minute")}:${value("second")}`;
 }
 
 function PriorityBadge({ value }: { value: string }) {
@@ -25,6 +36,8 @@ function PriorityBadge({ value }: { value: string }) {
 export default function MyTickets() {
   const { requester } = useRequester();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [categoryError, setCategoryError] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -38,6 +51,8 @@ export default function MyTickets() {
   const [meta, setMeta] = useState<{ page: number; pageSize: number; totalCount: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const ticketRequestSequence = useRef(0);
+  const categoryRequestSequence = useRef(0);
 
   const isFiltered = debouncedSearch !== "" || categoryId !== "" || priority !== "";
 
@@ -52,16 +67,50 @@ export default function MyTickets() {
     setPage(1);
   }, [debouncedSearch, categoryId, priority, sort, order, pageSize]);
 
-  useEffect(() => {
-    if (!requester) {
-      fetchCategories(1).catch(() => {}); // warm
-      return;
+  const loadCategories = async (requesterId: number) => {
+    const requestSequence = ++categoryRequestSequence.current;
+    setCategoryLoading(true);
+    setCategoryError("");
+    try {
+      const nextCategories = await fetchCategories(requesterId);
+      if (requestSequence === categoryRequestSequence.current) {
+        setCategories(nextCategories);
+      }
+    } catch {
+      if (requestSequence === categoryRequestSequence.current) {
+        setCategoryError("Unable to load categories");
+      }
+    } finally {
+      if (requestSequence === categoryRequestSequence.current) {
+        setCategoryLoading(false);
+      }
     }
-    fetchCategories(requester.id).then(setCategories).catch(() => {});
+  };
+
+  useEffect(() => {
+    categoryRequestSequence.current += 1;
+    ticketRequestSequence.current += 1;
+    setCategories([]);
+    setCategoryId("");
+    setSearch("");
+    setDebouncedSearch("");
+    setPriority("");
+    setSort("updatedAt");
+    setOrder("desc");
+    setPage(1);
+    setPageSize(10);
+    setData([]);
+    setMeta(null);
+    setError("");
+    if (requester) void loadCategories(requester.id);
+    return () => {
+      categoryRequestSequence.current += 1;
+    };
   }, [requester?.id]);
 
   const load = async () => {
     if (!requester) return;
+    const requestSequence = ++ticketRequestSequence.current;
     setLoading(true);
     setError("");
     try {
@@ -75,18 +124,27 @@ export default function MyTickets() {
         page,
         pageSize,
       });
-      setData(res.data as Array<Record<string, unknown>>);
-      setMeta(res.meta);
+      if (requestSequence === ticketRequestSequence.current) {
+        setData(res.data as Array<Record<string, unknown>>);
+        setMeta(res.meta);
+      }
     } catch (err: unknown) {
       const e = err as { body?: { error?: { message?: string } } };
-      setError(e.body?.error?.message ?? "Unable to connect to TokTickIT API");
+      if (requestSequence === ticketRequestSequence.current) {
+        setError(e.body?.error?.message ?? "Unable to connect to TokTickIT API");
+      }
     } finally {
-      setLoading(false);
+      if (requestSequence === ticketRequestSequence.current) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {
+      ticketRequestSequence.current += 1;
+    };
   }, [requester?.id, debouncedSearch, categoryId, priority, sort, order, page, pageSize]);
 
   if (!requester) return null;
@@ -121,8 +179,8 @@ export default function MyTickets() {
             />
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Category">
-              <option value="">All Categories</option>
+            <select className="form-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Category" disabled={categoryLoading || categoryError !== ""}>
+              <option value="">{categoryLoading ? "Loading categories…" : "All Categories"}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -166,6 +224,15 @@ export default function MyTickets() {
           </button>
         )}
       </div>
+
+      {categoryError && (
+        <div className="alert alert-warning d-flex justify-content-between align-items-center">
+          <span>{categoryError}</span>
+          <button className="btn btn-outline-secondary btn-sm" aria-label="Retry categories" onClick={() => void loadCategories(requester.id)}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading && <p className="text-secondary">Loading tickets…</p>}
 

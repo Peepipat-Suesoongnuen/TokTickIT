@@ -39,7 +39,7 @@ Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec
 | API-07 | API | BR-08 | Ticket bound to submitted requesterId | Persisted requesterId matches; immutable | server/tests/lab-02/create-ticket.api.test.ts | Planned |
 | API-08 | API | AC-11 | Requester B lists tickets | None of Requester A's tickets appear | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-09 | API | AC-12 | Search: case-insensitive partial on summary OR description; whitespace-only value | Correct match set; whitespace-only → 400 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
-| API-10 | API | AC-13 | Filter by categoryId and requestedPriority (no status filter in Lab 2) | Only matching tickets returned | server/tests/lab-02/my-tickets.api.test.ts | Planned |
+| API-10 | API | AC-13 | Filter by active categoryId and requestedPriority; reject inactive categoryId (no status filter in Lab 2) | Only matching tickets returned; inactive category → 400 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-11 | API | AC-14, BR-21 | Default sort updatedAt DESC + id DESC; priority rank ASC = LOW→CRITICAL, DESC reverse | Ordering matches contract | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-12 | API | AC-15 | Pagination metadata; page sizes {10,20,50}; page > totalPages → 200 empty data with valid meta | Correct meta fields per api-spec §5.2 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-13 | API | AC-16 | Strict query contract: unknown param name → 400; invalid known value → 400 | Exact statuses per api-spec §5.2 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
@@ -86,7 +86,7 @@ Planned manual evidence (deferred, not present in this PR): backend-stop demo fo
 | UI-20 | UI | AC-27 | Mobile-width layout classes (jsdom proxy check) | No horizontal overflow classes/styles applied | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
 | UI-21 | UI | FR-02, FR-12 | Requester Selection loading spinner during fetch | Loading state renders before data arrives | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
 | UI-22 | UI | AC-25, FR-12 | Create Ticket reference-data loading and failure | Skeleton/spinner while loading; on failure Category/Related System stay disabled, Submit disabled, entered Summary/Description preserved (ui-spec §5.2) | client/src/features/lab-02/tests/CreateTicket.test.tsx | Planned |
-| UI-23 | UI | FR-12 | My Tickets loading state | Spinner/skeleton renders before list data arrives | client/src/features/lab-02/tests/MyTickets.test.tsx | Planned |
+| UI-23 | UI | FR-12, AC-08, AC-25 | My Tickets loading, requester-switch race protection, and category metadata failure/Retry | Latest requester wins; stale success/failure ignored; category failure does not hide loaded tickets | client/src/features/lab-02/tests/MyTickets.test.tsx | Planned |
 | UI-24 | UI | AC-25 | Ticket Detail loading and API failure | Skeleton during load; safe banner + Retry on failure | client/src/features/lab-02/tests/RequesterTicketDetail.test.tsx | Planned |
 
 ### UI Style — `client/src/features/lab-02/tests/`
@@ -178,11 +178,11 @@ Database prerequisites (implemented):
 
 Every row's `Final` column stays **Planned** during feature-branch development (failing-first TDD). Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
 
-**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ f6f5587 → next):** `cd server && npm test` — 25 passed; `cd client && npm test` — 15 passed; `tsc --noEmit` clean; `git diff --check` clean (fixed 167/216 + final newline); `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` will run `TEST_DATABASE_URL`-backed tests on push. Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
+**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ current working tree):** `cd server && npm test` — 33 passed; `cd client && npm test` — 20 passed; server/client builds clean; `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` will run `TEST_DATABASE_URL`-backed tests on push. Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
 
 ## 7. Known Limitations or Deferred Tests
 
-- Asia/Bangkok display formatting will be verified manually and evidenced by planned screenshots (deferred; not present in this PR; unit-testing timezone rendering adds flakiness).
+- Asia/Bangkok display formatting uses deterministic `Intl.DateTimeFormat.formatToParts` output and is covered by the My Tickets component test; screenshots remain planned visual evidence.
 - Accessibility (AC-28) covered by semi-automated assertions (UI-19); full audit manual.
 - Backend idempotency keys out of scope in Lab 2 (AC-05 enforced at UI layer per api-spec §7).
 - API-23 will use `vi.mock` fault injection of the Prisma/service dependency while keeping real routing and error middleware active; the planned manual backend-stop demo will provide additional real-infrastructure evidence for AC-25/AC-26 (deferred).

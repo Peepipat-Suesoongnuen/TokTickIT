@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
@@ -13,7 +13,6 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   beforeAll(async () => {
     // Isolated fixture: clean only this suite's data (by unique ticketNumbers/emails)
     await prisma.ticket.deleteMany({ where: { ticketNumber: { in: ["2608-0001", "2608-0002", "2608-0003"] } } });
-    await prisma.attachment.deleteMany({ where: { ticketId: { in: [] } } });
 
     // Create test categories and systems
     const cat = await prisma.category.upsert({
@@ -136,7 +135,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
         .expect(200);
 
       expect(res.body.data).toHaveLength(1);
-      expect(res.body.data[0].description.toLowerCase()).toContain("vpn");
+      expect(res.body.data[0].summary).toBe("Cannot connect to VPN");
+      expect(res.body.data[0]).not.toHaveProperty("description");
     });
 
     it("should return 400 for whitespace-only search (AC-12)", async () => {
@@ -165,6 +165,23 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
         .expect(400);
 
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
+    });
+
+    it("should return 400 for an inactive categoryId", async () => {
+      const inactive = await prisma.category.upsert({
+        where: { name: "Inactive My Tickets Category" },
+        update: { isActive: false },
+        create: { name: "Inactive My Tickets Category", isActive: false },
+      });
+      try {
+        const res = await request(app)
+          .get(`/api/tickets?requesterId=${requesterA.id}&categoryId=${inactive.id}`)
+          .expect(400);
+        expect(res.body.error.code).toBe("VALIDATION_FAILED");
+        expect(res.body.fieldErrors.categoryId).toBeDefined();
+      } finally {
+        await prisma.category.delete({ where: { id: inactive.id } });
+      }
     });
 
     it("should filter by requestedPriority (AC-13, API-10)", async () => {
@@ -197,6 +214,66 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       const priorities = res.body.data.map((t: any) => t.requestedPriority);
       expect(priorities).toEqual(["HIGH", "CRITICAL"]); // LOW=1, MEDIUM=2, HIGH=3, CRITICAL=4
     });
+
+    it.each(["updatedAt", "ticketDate"] as const)("should use id DESC when %s values tie", async (sortField) => {
+      const tiedAt = new Date("2026-08-25T10:00:00Z");
+      const created = await Promise.all(
+        ["2699-9901", "2699-9902"].map((ticketNumber) =>
+          prisma.ticket.create({
+            data: {
+              ticketNumber,
+              requesterId: requesterA.id,
+              categoryId: category.id,
+              relatedSystemId: relatedSystem.id,
+              summary: `Tie ${ticketNumber}`,
+              description: "Deterministic secondary ordering fixture",
+              requestedPriority: "LOW",
+              currentStatus: "NEW",
+              ticketDate: tiedAt,
+              updatedAt: tiedAt,
+            },
+          })
+        )
+      );
+      try {
+        const res = await request(app)
+          .get(`/api/tickets?requesterId=${requesterA.id}&sort=${sortField}&order=desc&pageSize=10`)
+          .expect(200);
+        const tieIds = res.body.data
+          .filter((ticket: { ticketNumber: string }) => ticket.ticketNumber.startsWith("2699-99"))
+          .map((ticket: { id: number }) => ticket.id);
+        expect(tieIds).toEqual(created.map((ticket) => ticket.id).sort((a, b) => b - a));
+      } finally {
+        await prisma.ticket.deleteMany({ where: { ticketNumber: { in: ["2699-9901", "2699-9902"] } } });
+      }
+    });
+
+    it("should use id DESC when requestedPriority values tie", async () => {
+      const tiedPriorityTicket = await prisma.ticket.create({
+        data: {
+          ticketNumber: "2699-9903",
+          requesterId: requesterA.id,
+          categoryId: category.id,
+          relatedSystemId: relatedSystem.id,
+          summary: "Priority tie fixture",
+          description: "Deterministic priority secondary ordering fixture",
+          requestedPriority: "HIGH",
+          currentStatus: "NEW",
+        },
+      });
+      try {
+        const res = await request(app)
+          .get(`/api/tickets?requesterId=${requesterA.id}&sort=requestedPriority&order=asc`)
+          .expect(200);
+        const highIds = res.body.data
+          .filter((ticket: { requestedPriority: string }) => ticket.requestedPriority === "HIGH")
+          .map((ticket: { id: number }) => ticket.id);
+        expect(highIds).toHaveLength(2);
+        expect(highIds).toEqual([...highIds].sort((a, b) => b - a));
+      } finally {
+        await prisma.ticket.delete({ where: { id: tiedPriorityTicket.id } });
+      }
+    });
   });
 
   describe("Pagination (AC-15)", () => {
@@ -216,6 +293,14 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
           hasPreviousPage: false,
         })
       );
+    });
+
+    it.each([10, 20, 50])("should accept pageSize %i", async (pageSize) => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&page=1&pageSize=${pageSize}`)
+        .expect(200);
+      expect(res.body.meta.pageSize).toBe(pageSize);
+      expect(res.body.data).toHaveLength(2);
     });
 
     it("should return empty data with valid meta when page > totalPages (AC-15)", async () => {
@@ -327,6 +412,26 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
         .expect(400);
 
       expect(res.body.fieldErrors.requesterId).toBeDefined();
+    });
+  });
+
+  describe("Safe server errors", () => {
+    it("should return a safe 500 envelope when the ticket query fails", async () => {
+      const countSpy = vi.spyOn(prisma.ticket, "count").mockRejectedValueOnce(new Error("SQL connection details"));
+      try {
+        const res = await request(app)
+          .get(`/api/tickets?requesterId=${requesterA.id}`)
+          .expect(500);
+        expect(res.body).toEqual({
+          error: {
+            code: "INTERNAL_ERROR",
+            message: "An unexpected error occurred. Please try again.",
+          },
+        });
+        expect(JSON.stringify(res.body)).not.toContain("SQL connection details");
+      } finally {
+        countSpy.mockRestore();
+      }
     });
   });
 });

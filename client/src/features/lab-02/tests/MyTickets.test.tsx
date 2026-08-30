@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
-import MyTickets from "../../../pages/MyTickets";
+import MyTickets, { formatBangkok } from "../../../pages/MyTickets";
 import * as api from "../../../api.js";
 import { RequesterProvider } from "../../../contexts/RequesterContext.js";
 
@@ -16,6 +16,16 @@ function renderWithProviders() {
       </RequesterProvider>
     </BrowserRouter>
   );
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 beforeEach(() => {
@@ -175,17 +185,13 @@ describe("MyTickets", () => {
 
   describe("Loading and States (UI-23)", () => {
     it("shows loading state while fetching", async () => {
-      let resolve: (value: any) => void;
-      const promise = new Promise<{ data: unknown[]; meta: { page: number; pageSize: number; totalCount: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } }>((res) => {
-        resolve = res;
-        setTimeout(() => resolve({ data: [], meta: { page: 1, pageSize: 10, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false } }), 100);
-      });
-      vi.spyOn(api, "listTickets").mockImplementation(() => promise);
+      vi.spyOn(api, "listTickets").mockImplementation(() => new Promise(() => {}));
       vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
 
       renderWithProviders();
 
       expect(screen.getByText("Loading tickets…")).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole("combobox", { name: /category/i })).not.toBeDisabled());
     });
 
     it("shows error state on API failure", async () => {
@@ -307,5 +313,110 @@ describe("MyTickets", () => {
       await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0), { timeout: 3000 });
       expect(listSpy).toHaveBeenCalledTimes(2);
     });
+  });
+
+  describe("Requester race protection", () => {
+    it("keeps requester B tickets when requester A resolves later", async () => {
+      const requesterAResult = deferred<any>();
+      const requesterBResult = deferred<any>();
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      vi.spyOn(api, "listTickets").mockImplementation(({ requesterId }) =>
+        requesterId === 1 ? requesterAResult.promise : requesterBResult.promise
+      );
+
+      renderWithProviders();
+      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 1 })));
+
+      const requesterB = { id: 2, name: "Requester B", email: "b@test.com" };
+      localStorage.setItem("toktickit.requester", JSON.stringify(requesterB));
+      act(() => {
+        window.dispatchEvent(new StorageEvent("storage", {
+          key: "toktickit.requester",
+          newValue: JSON.stringify(requesterB),
+        }));
+      });
+      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 2 })));
+
+      await act(async () => {
+        requesterBResult.resolve({
+          data: [{ id: 2, ticketNumber: "B-0001", summary: "Requester B ticket", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+          meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+        });
+      });
+      await waitFor(() => expect(screen.getAllByText("B-0001").length).toBeGreaterThan(0));
+
+      await act(async () => {
+        requesterAResult.resolve({
+          data: [{ id: 1, ticketNumber: "A-0001", summary: "Requester A ticket", category: { name: "Hardware" }, requestedPriority: "HIGH", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+          meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+        });
+      });
+
+      expect(screen.queryByText("A-0001")).not.toBeInTheDocument();
+      expect(screen.getAllByText("B-0001").length).toBeGreaterThan(0);
+    });
+
+    it("ignores a stale requester failure without ending the latest loading state", async () => {
+      const requesterAResult = deferred<any>();
+      const requesterBResult = deferred<any>();
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      vi.spyOn(api, "listTickets").mockImplementation(({ requesterId }) =>
+        requesterId === 1 ? requesterAResult.promise : requesterBResult.promise
+      );
+
+      renderWithProviders();
+      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 1 })));
+
+      const requesterB = { id: 2, name: "Requester B", email: "b@test.com" };
+      act(() => {
+        window.dispatchEvent(new StorageEvent("storage", {
+          key: "toktickit.requester",
+          newValue: JSON.stringify(requesterB),
+        }));
+      });
+      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 2 })));
+
+      await act(async () => requesterAResult.reject(new Error("stale requester failure")));
+      expect(screen.getByText("Loading tickets…")).toBeInTheDocument();
+      expect(screen.queryByText("Unable to connect to TokTickIT API")).not.toBeInTheDocument();
+
+      await act(async () => {
+        requesterBResult.resolve({
+          data: [],
+          meta: { page: 1, pageSize: 10, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+        });
+      });
+      await waitFor(() => expect(screen.queryByText("Loading tickets…")).not.toBeInTheDocument());
+    });
+  });
+
+  describe("Category metadata states", () => {
+    it("shows a category error and retries without hiding loaded tickets", async () => {
+      const categorySpy = vi.spyOn(api, "fetchCategories")
+        .mockRejectedValueOnce(new Error("Category service unavailable"))
+        .mockResolvedValueOnce([{ id: 1, name: "Hardware" }]);
+      vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: [{ id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+        meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+      await waitFor(() => expect(screen.getByText("Unable to load categories")).toBeInTheDocument());
+      expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0);
+
+      await userEvent.click(screen.getByRole("button", { name: "Retry categories" }));
+      await waitFor(() => expect(screen.getByRole("option", { name: "Hardware" })).toBeInTheDocument());
+      expect(categorySpy).toHaveBeenCalledTimes(2);
+    });
+  });
+});
+
+describe("formatBangkok", () => {
+  it("formats UTC input as YYYY-MM-DD HH:mm:ss in Asia/Bangkok", () => {
+    expect(formatBangkok("2026-08-20T17:30:45.000Z")).toBe("2026-08-21 00:30:45");
+  });
+
+  it("returns invalid input unchanged", () => {
+    expect(formatBangkok("not-a-date")).toBe("not-a-date");
   });
 });

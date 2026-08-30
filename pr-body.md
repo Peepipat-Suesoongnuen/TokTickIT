@@ -3,9 +3,9 @@
 Closes #15
 
 ## Verification (latest PR head)
-- Hosted CI (`push` + `pull_request`) → server 25 passed (23 My Tickets + 2 Lab 1), client 15 passed (12 My Tickets + 3 App)
+- Latest local verification → server 33 passed (31 My Tickets + 2 Lab 1), client 20 passed (17 My Tickets + 3 App); hosted CI will re-run on push
 - Server CI → migrate `toktickit_test`, seed 4 Categories / 7 Related Systems / 5 Development Requesters, then run tests with the same dedicated test database
-- `npx tsc --noEmit` → clean ทั้ง 2 ฝั่ง
+- `npm run build` → clean ทั้ง 2 ฝั่ง
 - `git diff --check` → clean
 - `TEST_DATABASE_URL` → integration tests แยกจาก development database; Prisma CLI รับ test URL ผ่าน `DATABASE_URL` ตอน migrate/seed ตาม `schema.prisma`
 - `server/.env.example`, `docs/lab-02/tests.md` และ root `README.md` → อัปเดตขั้นตอนสร้าง, migrate, seed และรัน dedicated test database แล้ว
