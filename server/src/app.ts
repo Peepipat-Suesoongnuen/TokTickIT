@@ -125,13 +125,22 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       }
     }
 
+    // Guard: duplicate/malformed query values arrive as string[] -> 400 (BR-20 strict contract)
+    const rawParams = ["requesterId", "search", "categoryId", "requestedPriority", "sort", "order", "page", "pageSize"] as const;
+    for (const p of rawParams) {
+      const v = (req.query as Record<string, unknown>)[p];
+      if (v !== undefined && typeof v !== "string") {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [p]: `${p} must be a single value.` });
+      }
+    }
+
     const { requesterId, search, categoryId, requestedPriority, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
 
     const fieldErrors: Record<string, string> = {};
 
     // requesterId required
     const rid = Number(requesterId);
-    if (requesterId === undefined || !Number.isInteger(rid) || rid <= 0) {
+    if (requesterId === undefined || !Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
     }
     const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
@@ -152,7 +161,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     let cid: number | undefined;
     if (categoryId !== undefined) {
       cid = Number(categoryId);
-      if (!Number.isInteger(cid) || cid <= 0) {
+      if (!Number.isInteger(cid) || cid <= 0 || !Number.isSafeInteger(cid)) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { categoryId: "categoryId must be a positive integer." });
       }
       const cat = await getPrisma().category.findFirst({ where: { id: cid } });
@@ -180,7 +189,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
 
     // page
     const pageNum = page !== undefined ? Number(page) : 1;
-    if (page !== undefined && (!Number.isInteger(pageNum) || pageNum < 1)) {
+    if (page !== undefined && (!Number.isInteger(pageNum) || pageNum < 1 || !Number.isSafeInteger(pageNum))) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { page: "page must be >= 1." });
     }
 

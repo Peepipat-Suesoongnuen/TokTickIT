@@ -115,6 +115,7 @@ export default function MyTickets() {
             <input
               className="form-control"
               placeholder="Search summary or description…"
+              aria-label="Search tickets"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -130,7 +131,7 @@ export default function MyTickets() {
             </select>
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+            <select className="form-select" value={priority} onChange={(e) => setPriority(e.target.value)} aria-label="Priority">
               <option value="">All Priorities</option>
               <option value="LOW">LOW</option>
               <option value="MEDIUM">MEDIUM</option>
@@ -139,20 +140,20 @@ export default function MyTickets() {
             </select>
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select className="form-select" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort field">
               <option value="updatedAt">Last Updated</option>
               <option value="ticketDate">Ticket Date</option>
               <option value="requestedPriority">Priority</option>
             </select>
           </div>
           <div className="col-md-1">
-            <select className="form-select" value={order} onChange={(e) => setOrder(e.target.value)}>
+            <select className="form-select" value={order} onChange={(e) => setOrder(e.target.value)} aria-label="Sort order">
               <option value="desc">Desc</option>
               <option value="asc">Asc</option>
             </select>
           </div>
           <div className="col-md-1">
-            <select className="form-select" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+            <select className="form-select" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} aria-label="Page size">
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
@@ -227,9 +228,10 @@ export default function MyTickets() {
                     </td>
                     <td>{formatBangkok(t.updatedAt as string)}</td>
                     <td>
-                      <a className="btn btn-outline-success btn-sm" href={`/tickets/${t.id as number}`}>
+                      {/* TODO Issue 10: enable when Ticket Detail route exists */}
+                      <span className="btn btn-outline-secondary btn-sm disabled" aria-disabled="true" title="Detail coming in next issue">
                         Open
-                      </a>
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -250,24 +252,60 @@ export default function MyTickets() {
                   </span>
                 </div>
                 <div className="small text-secondary">{formatBangkok(t.updatedAt as string)}</div>
-                <a className="btn btn-outline-success btn-sm mt-2" href={`/tickets/${t.id as number}`}>
+                {/* TODO Issue 10: enable when Ticket Detail route exists */}
+                <span className="btn btn-outline-secondary btn-sm mt-2 disabled" aria-disabled="true" title="Detail coming in next issue">
                   Open
-                </a>
+                </span>
               </div>
             ))}
           </div>
 
           {/* Pagination */}
           {meta && meta.totalPages > 0 && (
-            <nav className="d-flex justify-content-between align-items-center mt-3">
+            <nav className="d-flex justify-content-between align-items-center mt-3" aria-label="Pagination">
               <span className="text-secondary small">
                 Page {meta.page} of {meta.totalPages} • {meta.totalCount} tickets
               </span>
-              <div className="btn-group">
-                <button className="btn btn-outline-secondary btn-sm" disabled={!meta.hasPreviousPage} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <div className="btn-group" role="group" aria-label="Pagination controls">
+                <button className="btn btn-outline-secondary btn-sm" disabled={!meta.hasPreviousPage} onClick={() => setPage((p) => Math.max(1, p - 1))} aria-label="Previous page">
                   Previous
                 </button>
-                <button className="btn btn-outline-secondary btn-sm" disabled={!meta.hasNextPage} onClick={() => setPage((p) => p + 1)}>
+                {(() => {
+                  const pages: (number | string)[] = [];
+                  const total = meta.totalPages;
+                  const cur = meta.page;
+                  const windowSize = 2;
+                  // Always show first page
+                  pages.push(1);
+                  const start = Math.max(2, cur - windowSize);
+                  const end = Math.min(total - 1, cur + windowSize);
+                  if (start > 2) pages.push("…");
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (end < total - 1) pages.push("…");
+                  if (total > 1) pages.push(total);
+                  // dedupe when total small
+                  const uniq = [...new Set(pages)];
+                  // filter out duplicate ellipsis already handled
+                  return uniq.map((p, idx) =>
+                    typeof p === "string" ? (
+                      <span key={`ellipsis-${idx}`} className="btn btn-outline-secondary btn-sm disabled">
+                        {p}
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        className={`btn btn-sm ${p === cur ? "btn-success" : "btn-outline-secondary"}`}
+                        aria-label={`Go to page ${p}`}
+                        aria-current={p === cur ? "page" : undefined}
+                        onClick={() => setPage(p)}
+                        disabled={p === cur}
+                      >
+                        {p}
+                      </button>
+                    )
+                  );
+                })()}
+                <button className="btn btn-outline-secondary btn-sm" disabled={!meta.hasNextPage} onClick={() => setPage((p) => p + 1)} aria-label="Next page">
                   Next
                 </button>
               </div>
