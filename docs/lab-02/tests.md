@@ -1,6 +1,6 @@
 # Lab 2 Test Plan and Results — TokTickIT Requester Ticketing
 
-Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document describes the planned TDD evidence for the next implementation issues; no Lab 2 test files or implementation artifacts exist yet in this PR.
+Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document describes the planned TDD evidence for the next implementation issues; Lab 2 test files for My Tickets (Issue 9) have been added in this PR as feature-branch evidence (see §6), but rows remain `Planned` until the final `main` green run.
 
 **Status key:** `Planned` while on the feature branch (failing-first TDD). A row becomes `Pass` **only after a green run on the final `main` branch** — never from a feature-branch run alone.
 
@@ -177,6 +177,8 @@ Database prerequisites (planned execution):
 ## 6. Final Results
 
 Every row's `Final` column stays **Planned** during feature-branch development (failing-first TDD). Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
+
+**Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ 21b334e):** `cd server && npm test` — 21 passed; `cd client && npm test` — 12 passed; `tsc --noEmit` clean on both sides. Evidence below remains `Planned` per the rule above until the final `main` run (see PR #24).
 
 ## 7. Known Limitations or Deferred Tests
 

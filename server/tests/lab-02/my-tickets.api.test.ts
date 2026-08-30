@@ -11,9 +11,9 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   let relatedSystem: { id: number };
 
   beforeAll(async () => {
-    // Clean up any existing test data
-    await prisma.ticket.deleteMany({});
-    await prisma.attachment.deleteMany({});
+    // Isolated fixture: clean only this suite's data (by unique ticketNumbers/emails)
+    await prisma.ticket.deleteMany({ where: { ticketNumber: { in: ["2608-0001", "2608-0002", "2608-0003"] } } });
+    await prisma.attachment.deleteMany({ where: { ticketId: { in: [] } } });
 
     // Create test categories and systems
     const cat = await prisma.category.upsert({
@@ -92,10 +92,9 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   });
 
   afterAll(async () => {
-    await prisma.ticket.deleteMany({});
-    await prisma.attachment.deleteMany({});
+    await prisma.ticket.deleteMany({ where: { ticketNumber: { in: ["2608-0001", "2608-0002", "2608-0003"] } } });
     await prisma.developmentRequester.deleteMany({
-      where: { email: { in: ["requesterA@test.com", "requesterB@test.com"] } },
+      where: { email: { in: ["requesterA@test.com", "requesterB@test.com", "inactive2@test.com"] } },
     });
   });
 
@@ -151,7 +150,16 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   });
 
   describe("Filtering (AC-13)", () => {
-    it("should filter by categoryId (AC-13, API-10)", async () => {
+    it("should filter by categoryId valid value (AC-13, API-10)", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&categoryId=${category.id}`)
+        .expect(200);
+
+      expect(res.body.data.length).toBeGreaterThan(0);
+      expect(res.body.data.every((t: any) => t.category?.id === category.id)).toBe(true);
+    });
+
+    it("should return 400 for non-existent categoryId (AC-13, API-10)", async () => {
       const res = await request(app)
         .get(`/api/tickets?requesterId=${requesterA.id}&categoryId=9999`)
         .expect(400);
@@ -225,7 +233,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   describe("Strict query contract (AC-16)", () => {
     it("should return 400 for unknown parameter (AC-16, API-13)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=1&unknownParam=foo`)
+        .get(`/api/tickets?requesterId=${requesterA.id}&unknownParam=foo`)
         .expect(400);
 
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
@@ -234,7 +242,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid page (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=1&page=0`)
+        .get(`/api/tickets?requesterId=${requesterA.id}&page=0`)
         .expect(400);
 
       expect(res.body.fieldErrors.page).toBeDefined();
@@ -242,7 +250,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid pageSize (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=1&pageSize=15`)
+        .get(`/api/tickets?requesterId=${requesterA.id}&pageSize=15`)
         .expect(400);
 
       expect(res.body.fieldErrors.pageSize).toBeDefined();
@@ -250,7 +258,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid sort field (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=1&sort=invalid`)
+        .get(`/api/tickets?requesterId=${requesterA.id}&sort=invalid`)
         .expect(400);
 
       expect(res.body.fieldErrors.sort).toBeDefined();
@@ -258,7 +266,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid order (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=1&order=invalid`)
+        .get(`/api/tickets?requesterId=${requesterA.id}&order=invalid`)
         .expect(400);
 
       expect(res.body.fieldErrors.order).toBeDefined();
@@ -266,10 +274,34 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid priority value", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=1&requestedPriority=INVALID`)
+        .get(`/api/tickets?requesterId=${requesterA.id}&requestedPriority=INVALID`)
         .expect(400);
 
       expect(res.body.fieldErrors.requestedPriority).toBeDefined();
+    });
+
+    it("should return 400 for duplicate query param (AC-16)", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&page=1&page=2`)
+        .expect(400);
+
+      expect(res.body.fieldErrors.page).toBeDefined();
+    });
+
+    it("should return 400 for duplicate requesterId (AC-16)", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&requesterId=${requesterB.id}`)
+        .expect(400);
+
+      expect(res.body.fieldErrors.requesterId).toBeDefined();
+    });
+
+    it("should return 400 for unsafe integer requesterId (AC-16)", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=9007199254740992`)
+        .expect(400);
+
+      expect(res.body.fieldErrors.requesterId).toBeDefined();
     });
   });
 

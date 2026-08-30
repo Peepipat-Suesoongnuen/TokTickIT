@@ -248,4 +248,64 @@ describe("MyTickets", () => {
       }, { timeout: 5000 });
     }, 10000);
   });
+
+  describe("Pagination and Accessibility (UI fix evidence)", () => {
+    it("renders numbered pagination and accessible toolbar labels", async () => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: [
+          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" },
+        ],
+        meta: { page: 1, pageSize: 10, totalCount: 25, totalPages: 3, hasNextPage: true, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+
+      await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
+      expect(screen.getByPlaceholderText("Search summary or description…")).toBeInTheDocument();
+      expect(screen.getByLabelText("Search tickets")).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: /category/i })).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: /priority/i })).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: /sort field/i })).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: /sort order/i })).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: /page size/i })).toBeInTheDocument();
+      expect(screen.getByRole("navigation", { name: /pagination/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /go to page 3/i })).toBeInTheDocument();
+    });
+
+    it("shows disabled Open when Ticket Detail is deferred (Issue 10)", async () => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: [
+          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" },
+        ],
+        meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+
+      await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
+      const opens = screen.getAllByText("Open");
+      expect(opens.length).toBeGreaterThan(0);
+      // deferred Open is a span with aria-disabled, not a link to /tickets/:id
+      expect(screen.queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
+    });
+
+    it("retries loading on Retry click (UI-09)", async () => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      const listSpy = vi.spyOn(api, "listTickets")
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockResolvedValue({
+          data: [{ id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+          meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+        });
+
+      renderWithProviders();
+
+      await waitFor(() => expect(screen.getByText("Unable to connect to TokTickIT API")).toBeInTheDocument(), { timeout: 3000 });
+      await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0), { timeout: 3000 });
+      expect(listSpy).toHaveBeenCalledTimes(2);
+    });
+  });
 });
