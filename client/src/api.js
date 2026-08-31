@@ -60,6 +60,57 @@ export async function listTickets(params) {
         throw { status: res.status, body };
     return body;
 }
+export async function getTicketDetail(ticketId, requesterId) {
+    const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requesterId}`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok)
+        throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
+    return body;
+}
+export async function uploadAttachment(ticketId, requesterId, file) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`, { method: "POST", body: form });
+    const body = await res.json().catch(() => null);
+    if (!res.ok)
+        throw { status: res.status, body, message: body?.error?.message ?? "Upload failed" };
+    return body;
+}
+export async function getAttachmentMetadata(attachmentId, requesterId) {
+    const res = await fetch(`${API_URL}/api/attachments/${attachmentId}?requesterId=${requesterId}`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok)
+        throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
+    return body;
+}
+export async function downloadAttachment(attachmentId, requesterId) {
+    const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`);
+    if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw { status: res.status, body, message: body?.error?.message ?? "Download failed" };
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") ?? "";
+    const match = /filename="([^"]+)"/.exec(disposition);
+    const filename = match?.[1] ?? "download";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+export async function removeAttachment(attachmentId, requesterId, reason) {
+    const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/remove?requesterId=${requesterId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok)
+        throw { status: res.status, body, message: body?.error?.message ?? "Unable to remove attachment" };
+    return body;
+}
 export async function checkSystem() {
     try {
         const healthRes = await fetch(`${API_URL}/api/health`);
