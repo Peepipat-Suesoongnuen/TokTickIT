@@ -41,6 +41,7 @@ describe("AttachmentSection", () => {
     render(<AttachmentSection {...makeProps()} />);
 
     expect(screen.getByText("photo.jpg")).toBeInTheDocument();
+    expect(screen.getByText(/Uploaded 2026-08-20 17:00:00/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
     expect(screen.getByLabelText("Choose file")).toBeInTheDocument();

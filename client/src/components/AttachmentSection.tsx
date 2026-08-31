@@ -86,6 +86,7 @@ export default function AttachmentSection({
                   <div>
                     <span style={isRemoved ? { textDecoration: "line-through" } : undefined}>{a.originalFilename}</span>
                     <span className="text-secondary small ms-2">{(a.sizeBytes / 1024).toFixed(1)} KB</span>
+                    <span className="text-secondary small ms-2">Uploaded {formatBangkok(a.createdAt)}</span>
                     {isRemoved ? (
                       <span className="ms-2 small">Removed {a.removedAt ? formatBangkok(a.removedAt) : ""} — Reason: {a.removedReason}</span>
                     ) : null}
