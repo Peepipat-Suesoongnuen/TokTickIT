@@ -13,7 +13,7 @@ import multer from "multer";
 import { v4 as uuid } from "uuid";
 import path from "path";
 import fs from "fs";
-import { isAllowedMime, MAX_ACTIVE } from "./lib/attachmentValidation.js";
+import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -387,10 +387,15 @@ app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
       const ext = path.extname(req.file.originalname).toLowerCase();
       const storedFilename = `${uuid()}${ext}`;
       const fileBuffer = (req.file as unknown as { buffer: Buffer }).buffer;
-      // Race-safe: count + create in transaction (serialize per ticket)
+      if (!isAllowedSignature(fileBuffer, req.file.mimetype)) {
+        return sendError(res, 415, "UNSUPPORTED_MEDIA_TYPE", "File type not allowed.");
+      }
+      // Race-safe: serialize per ticket via FOR UPDATE lock before count+create
       let attachment: { id: number; ticketId: number; originalFilename: string; mimeType: string; sizeBytes: number; removedAt: Date | null; removedReason: string | null; createdAt: Date };
       try {
         attachment = await getPrisma().$transaction(async (tx) => {
+          // Serialize concurrent uploads for same ticket
+          await (tx as unknown as { $executeRaw: (q: TemplateStringsArray, ...a: unknown[]) => Promise<unknown> }).$executeRaw`SELECT id FROM "Ticket" WHERE id = ${id} FOR UPDATE`;
           const activeCount = await (tx as unknown as ReturnType<typeof getPrisma>).attachment.count({ where: { ticketId: id, removedAt: null } });
           if (activeCount >= MAX_ACTIVE) throw new Error("LIMIT_REACHED");
           return (tx as unknown as ReturnType<typeof getPrisma>).attachment.create({
@@ -480,9 +485,11 @@ app.post("/api/attachments/:id/remove", async (req: Request, res: Response) => {
     if (!reason) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { reason: "Reason is required." });
     const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
     if (!att || att.ticket.requesterId !== rid) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
-    if (att.removedAt) return sendError(res, 409, "CONFLICT", "Already removed.");
-    const updated = await getPrisma().attachment.update({ where: { id }, data: { removedAt: new Date(), removedReason: reason } });
-    res.status(200).json({ id: updated.id, removedAt: updated.removedAt, removedReason: updated.removedReason });
+    // Conditional update to avoid race where two removes succeed
+    const result = await getPrisma().attachment.updateMany({ where: { id, removedAt: null }, data: { removedAt: new Date(), removedReason: reason } });
+    if (result.count === 0) return sendError(res, 409, "CONFLICT", "Already removed.");
+    const updated = await getPrisma().attachment.findUnique({ where: { id }, select: { id: true, removedAt: true, removedReason: true } });
+    res.status(200).json({ id: updated!.id, removedAt: updated!.removedAt, removedReason: updated!.removedReason });
   } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
 });
 

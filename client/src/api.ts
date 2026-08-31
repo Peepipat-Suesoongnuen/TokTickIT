@@ -133,8 +133,14 @@ export async function downloadAttachment(attachmentId: number, requesterId: numb
   }
   const blob = await res.blob();
   const disposition = res.headers.get("Content-Disposition") ?? "";
-  const match = /filename="([^"]+)"/.exec(disposition);
-  const filename = match?.[1] ?? "download";
+  let filename = "download";
+  const starMatch = /filename\*=\s*UTF-8''([^;]+)/i.exec(disposition);
+  if (starMatch?.[1]) {
+    try { filename = decodeURIComponent(starMatch[1].replace(/'/g, "%27")); } catch { /* fallback */ }
+  } else {
+    const m = /filename="([^"]+)"/.exec(disposition);
+    if (m?.[1]) filename = m[1];
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
