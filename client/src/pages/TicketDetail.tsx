@@ -142,7 +142,7 @@ export default function TicketDetail() {
       </div>
       {uploadError ? <div className="alert alert-danger">{uploadError}</div> : null}
       {attachmentError ? <div className="alert alert-warning">{attachmentError}</div> : null}
-      <AttachmentSection attachments={ticket.attachments} onDownload={handleDownload} onRemove={handleRemove} onUpload={handleUpload} canUpload={canUpload} />
+      <AttachmentSection attachments={ticket.attachments} onDownload={handleDownload} onRemove={handleRemove} onRetry={load} onUpload={handleUpload} canUpload={canUpload} />
     </div>
   );
 }

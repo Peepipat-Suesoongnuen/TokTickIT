@@ -99,7 +99,7 @@ describe("AttachmentSection", () => {
     const invalidFile = new File(["hello"], "notes.txt", { type: "text/plain" });
     fireEvent.change(input, { target: { files: [invalidFile] } });
 
-    expect(onUpload).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(1));
     expect(onUpload).toHaveBeenCalledWith(expect.objectContaining({ name: "notes.txt" }));
     // still can upload, limit helper not shown — invalid file not counted toward active limit
     expect(screen.queryByText("Maximum of 5 active attachments reached")).not.toBeInTheDocument();
@@ -114,19 +114,27 @@ describe("AttachmentSection", () => {
   });
 
   it("uploading state: file input triggers onUpload and remains available", async () => {
-    const onUpload = vi.fn();
+    let resolveUpload!: () => void;
+    const onUpload = vi.fn(() => new Promise<void>((resolve) => { resolveUpload = resolve; }));
     render(<AttachmentSection {...makeProps({ onUpload, canUpload: true })} />);
-
     const input = screen.getByLabelText("Choose file") as HTMLInputElement;
     const validFile = new File(["pdfcontent"], "doc.pdf", { type: "application/pdf" });
-
     await userEvent.upload(input, validFile);
-
     expect(onUpload).toHaveBeenCalledWith(expect.objectContaining({ name: "doc.pdf" }));
-    // input should be cleared for next upload (value reset)
-    expect(input.value).toBe("");
-    // still shows helper text about limits
-    expect(screen.getByText(/JPG, PNG, WEBP or PDF/)).toBeInTheDocument();
+    expect(screen.getByText("Uploading…")).toBeInTheDocument();
+    expect(screen.getByText("doc.pdf")).toHaveClass("text-muted");
+    expect(input).toBeDisabled();
+    resolveUpload();
+    await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
+    expect(input).toBeEnabled();
+  });
+
+  it("exposes retry callback without creating an unavailable row", async () => {
+    const onRetry = vi.fn();
+    render(<AttachmentSection {...makeProps({ onRetry })} />);
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("photo.jpg")).toBeInTheDocument();
   });
 
   it("shows uploading indicator when many attachments and valid file types", () => {

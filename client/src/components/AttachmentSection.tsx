@@ -43,22 +43,23 @@ export default function AttachmentSection({
   onDownload: (id: number) => void;
   onRemove: (id: number, reason: string) => Promise<void> | void;
   onRetry?: () => void;
-  onUpload: (file: File) => void;
+  onUpload: (file: File) => Promise<void> | void;
   canUpload: boolean;
 }) {
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const [removing, setRemoving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [uploadingFilename, setUploadingFilename] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) {
-      onUpload(file);
-      e.target.value = "";
-    }
+    e.target.value = "";
+    if (!file || uploadingFilename) return;
+    setUploadingFilename(file.name);
+    try { await onUpload(file); } finally { setUploadingFilename(null); }
   }
 
   return (
@@ -67,12 +68,13 @@ export default function AttachmentSection({
         <h2 className="h6">Attachments</h2>
         {canUpload ? (
           <div className="mb-3">
-            <input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={handleFileChange} aria-label="Choose file" />
+            <input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={handleFileChange} aria-label="Choose file" disabled={!!uploadingFilename} />
             <div className="form-text">JPG, PNG, WEBP or PDF, up to 5 MB each, max 5 files</div>
           </div>
         ) : (
           <p className="text-secondary small">Maximum of 5 active attachments reached</p>
         )}
+        {uploadingFilename ? <div className="text-muted mb-2" aria-live="polite"><span className="spinner-border spinner-border-sm me-1" aria-hidden="true" />Uploading… <span className="text-muted">{uploadingFilename}</span></div> : null}
         {attachments.length === 0 ? (
           <p className="text-secondary">No attachments yet</p>
         ) : (
