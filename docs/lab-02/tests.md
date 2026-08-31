@@ -171,8 +171,19 @@ Database prerequisites (implemented):
 - Prisma CLI reads `DATABASE_URL` from `schema.prisma`; it does not switch to `TEST_DATABASE_URL` automatically. Prepare the dedicated database with `DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy` followed by `DATABASE_URL="$TEST_DATABASE_URL" npx prisma db seed`.
 - The Prisma seed is idempotent and must run after migrations and before the API/integration test suite.
 - `.env` configured from `.env.example` (copy to `.env`).
-- Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. The `DATABASE_URL` used for migration/seed and the `TEST_DATABASE_URL` used by Vitest must identify the same dedicated test database.
-- Hosted CI (`.github/workflows/ci.yml`) provisions PostgreSQL, migrates and seeds `toktickit_test`, then runs the `TEST_DATABASE_URL`-backed tests on every push/PR.
+ - Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. The `DATABASE_URL` used for migration/seed and the `TEST_DATABASE_URL` used by Vitest must identify the same dedicated test database.
+ - Hosted CI (`.github/workflows/ci.yml`) provisions PostgreSQL, migrates and seeds `toktickit_test`, then runs the `TEST_DATABASE_URL`-backed tests on every push/PR.
+
+### 5.1 Pre-push checklist — one-round fix (prevent repeat blockers)
+Before pushing any Lab 2 feature branch, tick all:
+- [ ] `TEST_DATABASE_URL` isolated via `server/src/prisma.ts` lazy `getPrisma()`; no `new PrismaClient()` in tests
+- [ ] Exact `ticketNumber in [...]` cleanup (no `deleteMany({})`, no `startsWith("2608`) — see `helpers.ts`
+- [ ] `path.resolve("uploads")` (cwd-independent) not `server/uploads`
+- [ ] `FOR UPDATE` lock + `Promise.all` concurrent `4→2 → 201+409 → active=5` regression test for max 5
+- [ ] `isAllowedMime` paired + `isAllowedSignature` magic bytes (JPEG/PNG/WEBP/PDF) with `415` tests
+- [ ] `Content-Disposition` `filename*` UTF-8 + sanitize, client parses `filename*`
+- [ ] Modal `Removing…` busy, keep reason on fail, `aria-modal` + `Esc`/trap/return focus; `TicketDetail` `requestSeq` + `attachmentError` scope
+- [ ] `ci.yml` guardrails pass + `git diff --check` clean + `tsc --noEmit` clean
 
 ## 6. Final Results
 

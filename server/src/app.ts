@@ -17,7 +17,7 @@ import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentV
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
-const UPLOAD_DIR = path.resolve("server/uploads");
+const UPLOAD_DIR = path.resolve("uploads");
 try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch { /* ignore */ }
 
 const upload = multer({

@@ -14,10 +14,15 @@ export const ALLOWED_EXTS = new Set([
 ]);
 
 export function isAllowedMime(mime: string, ext: string): boolean {
-  return (
-    ALLOWED_MIMES.has(mime.toLowerCase()) &&
-    ALLOWED_EXTS.has(ext.toLowerCase())
-  );
+  const m = mime.toLowerCase();
+  const e = ext.toLowerCase();
+  const pairs: Record<string, Set<string>> = {
+    "image/jpeg": new Set([".jpg", ".jpeg"]),
+    "image/png": new Set([".png"]),
+    "image/webp": new Set([".webp"]),
+    "application/pdf": new Set([".pdf"]),
+  };
+  return pairs[m]?.has(e) ?? false;
 }
 
 export function isAllowedSize(size: number): boolean {

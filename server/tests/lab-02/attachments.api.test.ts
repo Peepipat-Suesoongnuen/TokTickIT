@@ -5,10 +5,10 @@ import { getPrisma } from "../../src/prisma.js";
 import fs from "fs";
 import path from "path";
 
-const UPLOAD_DIR = path.resolve("server/uploads");
+const UPLOAD_DIR = path.resolve("uploads");
 
 function pngBuffer(size = 1024): Buffer {
-  // Minimal PNG header + filler; multer checks mimetype+ext, not content sniffing
+  // Minimal PNG header + filler; isAllowedSignature now verifies magic bytes per mime
   const header = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   if (size <= header.length) return header.subarray(0, size);
   const buf = Buffer.alloc(size);
@@ -91,13 +91,10 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
   });
 
   afterAll(async () => {
-    // Targeted cleanup: only this suite's ticketNumbers (never deleteMany({}))
+    // Targeted cleanup: only this suite's ticketNumbers (never deleteMany without where)
+    const transient = ["2608-1299", "2608-1298", "2608-1297", "2608-1296", "2608-1295"];
     await prisma.ticket.deleteMany({
-      where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM, "2608-1299", "2608-1298"] } },
-    });
-    // Also clean any transient limit tickets that may have been left by failed try/finally
-    await prisma.ticket.deleteMany({
-      where: { ticketNumber: { startsWith: "2608-12" } },
+      where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM, ...transient] } },
     });
     await prisma.developmentRequester.deleteMany({
       where: { email: { in: ["requesterA-attach@test.com", "requesterB-attach@test.com"] } },
@@ -201,13 +198,80 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
         expect(res.body.error.code).toBe("CONFLICT");
       } finally {
         if (ticketId) {
-          // Targeted cleanup by ticketNumber (never deleteMany({}))
+          // Targeted cleanup by ticketNumber
           await prisma.ticket.deleteMany({ where: { ticketNumber } });
           // Also remove any orphan files for this ticket if they were written
           // (the 409 case unlinks the file in the route, so nothing to do)
         } else {
           await prisma.ticket.deleteMany({ where: { ticketNumber } });
         }
+      }
+    });
+
+    it("should enforce mime+ext pairing (pdf ext with png mime → 415)", async () => {
+      const res = await request(app)
+        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .attach("file", pngBuffer(1024), { filename: "mismatch.pdf", contentType: "image/png" })
+        .expect(415);
+      expect(res.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
+    });
+
+    it("should return 415 when signature mismatches mime (random bytes as png → 415)", async () => {
+      const bad = Buffer.alloc(1024, 0x00);
+      const res = await request(app)
+        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .attach("file", bad, { filename: "bad.png", contentType: "image/png" })
+        .expect(415);
+      expect(res.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
+    });
+
+    it("should handle concurrent uploads: 4 active → 2 parallel → 201+409 and final 5 (race guard)", async () => {
+      const ticketNumber = "2608-1297";
+      let ticketId: number | undefined;
+      try {
+        await prisma.ticket.deleteMany({ where: { ticketNumber } });
+        const t = await prisma.ticket.create({
+          data: {
+            ticketNumber,
+            requesterId: requesterA.id,
+            categoryId: category.id,
+            relatedSystemId: relatedSystem.id,
+            summary: "Concurrent ticket",
+            description: "Description for concurrent ticket that is long enough to be valid",
+            requestedPriority: "LOW",
+            currentStatus: "NEW",
+          },
+        });
+        ticketId = t.id;
+        for (let i = 0; i < 4; i++) {
+          await prisma.attachment.create({
+            data: {
+              ticketId: t.id,
+              originalFilename: `c${i}.png`,
+              storedFilename: `conc-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}.png`,
+              mimeType: "image/png",
+              sizeBytes: 1000,
+            },
+          });
+        }
+        const [r1, r2] = await Promise.all([
+          request(app).post(`/api/tickets/${t.id}/attachments?requesterId=${requesterA.id}`).attach("file", pngBuffer(1024), { filename: "p1.png", contentType: "image/png" }),
+          request(app).post(`/api/tickets/${t.id}/attachments?requesterId=${requesterA.id}`).attach("file", pngBuffer(1024), { filename: "p2.png", contentType: "image/png" }),
+        ]);
+        const codes = [r1.status, r2.status].sort();
+        expect(codes).toEqual([201, 409]);
+        const active = await prisma.attachment.count({ where: { ticketId: t.id, removedAt: null } });
+        expect(active).toBe(5);
+        // cleanup uploaded file from the 201
+        const ok = r1.status === 201 ? r1.body : r2.body;
+        const att = await prisma.attachment.findUnique({ where: { id: ok.id } });
+        if (att) {
+          try { fs.unlinkSync(path.join(UPLOAD_DIR, att.storedFilename)); } catch {}
+          await prisma.attachment.delete({ where: { id: att.id } });
+        }
+      } finally {
+        if (ticketId) await prisma.ticket.deleteMany({ where: { ticketNumber } });
+        else await prisma.ticket.deleteMany({ where: { ticketNumber } });
       }
     });
 
