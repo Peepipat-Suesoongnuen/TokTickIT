@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useRequester } from "../contexts/RequesterContext";
 import { getTicketDetail, downloadAttachment, removeAttachment, uploadAttachment } from "../api";
-import AttachmentSection, { Attachment } from "../components/AttachmentSection";
+import AttachmentSection, { Attachment, formatBangkok } from "../components/AttachmentSection";
 
 interface TicketDetailData {
   id: number;
@@ -95,11 +95,15 @@ export default function TicketDetail() {
       <div className="card mb-3">
         <div className="card-body">
           <div className="row g-3">
-            <div className="col-md-6">
+            <div className="col-md-4">
               <label className="form-label">Ticket Number</label>
               <input className="form-control" value={ticket.ticketNumber} readOnly style={{ backgroundColor: "#EEF3EF" }} />
             </div>
-            <div className="col-md-6">
+            <div className="col-md-4">
+              <label className="form-label">Ticket Date</label>
+              <input className="form-control" value={formatBangkok(ticket.ticketDate)} readOnly style={{ backgroundColor: "#EEF3EF" }} aria-label="Ticket Date" />
+            </div>
+            <div className="col-md-4">
               <label className="form-label">Requester</label>
               <input className="form-control" value={ticket.requester.name} readOnly style={{ backgroundColor: "#EEF3EF" }} />
             </div>
