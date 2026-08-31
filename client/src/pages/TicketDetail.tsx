@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useRequester } from "../contexts/RequesterContext";
 import { getTicketDetail, downloadAttachment, removeAttachment, uploadAttachment } from "../api";
@@ -28,26 +28,32 @@ export default function TicketDetail() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const requestSeq = useRef(0);
 
   async function load() {
     if (!requester || !id) return;
+    const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
     setNotFound(false);
     try {
       const data = await getTicketDetail(Number(id), requester.id);
+      if (seq !== requestSeq.current) return;
       setTicket(data);
     } catch (err: unknown) {
+      if (seq !== requestSeq.current) return;
       const e = err as { status?: number };
       if (e?.status === 404) setNotFound(true);
       else setError((err as Error).message ?? "Unable to connect to TokTickIT API");
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+    return () => { requestSeq.current += 1; };
   }, [id, requester?.id]);
 
   async function handleUpload(file: File) {
@@ -65,19 +71,23 @@ export default function TicketDetail() {
   async function handleDownload(attId: number) {
     if (!ticket || !requester) return;
     try {
+      setAttachmentError(null);
       await downloadAttachment(attId, requester.id);
-    } catch {
-      setError("Unable to download attachment");
+    } catch (err: unknown) {
+      setAttachmentError((err as { message?: string })?.message ?? "Unable to download attachment");
     }
   }
 
   async function handleRemove(attId: number, reason: string) {
     if (!ticket || !requester) return;
     try {
+      setAttachmentError(null);
       await removeAttachment(attId, requester.id, reason);
       await load();
     } catch (err: unknown) {
-      setError((err as Error).message ?? "Unable to remove attachment");
+      const msg = (err as { body?: { error?: { message?: string } }; message?: string })?.body?.error?.message ?? (err as Error).message ?? "Unable to remove attachment";
+      setAttachmentError(msg);
+      throw err;
     }
   }
 
@@ -124,13 +134,14 @@ export default function TicketDetail() {
               <textarea className="form-control" value={ticket.description} readOnly rows={4} style={{ backgroundColor: "#EEF3EF" }} />
             </div>
             <div className="col-md-6">
-              <span className="badge bg-success">{ticket.requestedPriority}</span>
-              <span className="badge bg-light text-success ms-2">{ticket.currentStatus}</span>
+              <span className={`badge ${ticket.requestedPriority === "LOW" ? "bg-light text-secondary border" : ticket.requestedPriority === "MEDIUM" ? "bg-success" : ticket.requestedPriority === "HIGH" ? "bg-warning text-dark" : "bg-danger"}`}>{ticket.requestedPriority}</span>
+              <span className="badge ms-2" style={{ backgroundColor: "#EAF6EF", color: "#006B3C" }}>{ticket.currentStatus}</span>
             </div>
           </div>
         </div>
       </div>
       {uploadError ? <div className="alert alert-danger">{uploadError}</div> : null}
+      {attachmentError ? <div className="alert alert-warning">{attachmentError}</div> : null}
       <AttachmentSection attachments={ticket.attachments} onDownload={handleDownload} onRemove={handleRemove} onUpload={handleUpload} canUpload={canUpload} />
     </div>
   );

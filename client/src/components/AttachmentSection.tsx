@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export interface Attachment {
   id: number;
@@ -41,13 +41,17 @@ export default function AttachmentSection({
 }: {
   attachments: Attachment[];
   onDownload: (id: number) => void;
-  onRemove: (id: number, reason: string) => void;
+  onRemove: (id: number, reason: string) => Promise<void> | void;
   onRetry?: () => void;
   onUpload: (file: File) => void;
   canUpload: boolean;
 }) {
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [reason, setReason] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const reasonRef = useRef<HTMLTextAreaElement | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -90,7 +94,11 @@ export default function AttachmentSection({
                         <button className="btn btn-sm btn-outline-success" onClick={() => onDownload(a.id)}>
                           Download
                         </button>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => setRemovingId(a.id)}>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          ref={(el) => { if (removingId === null) triggerRef.current = el; }}
+                          onClick={(e) => { triggerRef.current = e.currentTarget as HTMLButtonElement; setRemovingId(a.id); }}
+                        >
                           Remove
                         </button>
                       </>
@@ -107,7 +115,24 @@ export default function AttachmentSection({
           </button>
         ) : null}
         {removingId !== null ? (
-          <div className="modal d-block" tabIndex={-1} role="dialog" aria-label="Remove Attachment">
+          <div
+            className="modal d-block"
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Remove Attachment"
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && !removing) { setRemovingId(null); setReason(""); setModalError(null); triggerRef.current?.focus(); }
+              if (e.key === "Tab") {
+                const focusable = Array.from(document.querySelectorAll<HTMLElement>('.modal [tabindex], .modal button, .modal textarea'));
+                if (focusable.length === 0) return;
+                const first = focusable[0]; const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+              }
+            }}
+            ref={(el) => { if (el) reasonRef.current?.focus(); }}
+          >
             <div className="modal-dialog">
               <div className="modal-content">
                 <div className="modal-header">
@@ -118,14 +143,27 @@ export default function AttachmentSection({
                   <label htmlFor="removeReason" className="form-label">
                     Reason <span className="text-danger">*</span>
                   </label>
-                  <textarea id="removeReason" className="form-control" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Reason" />
+                  <textarea id="removeReason" ref={reasonRef} className="form-control" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Reason" disabled={removing} />
+                  {modalError ? <div className="alert alert-danger mt-2">{modalError}</div> : null}
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-secondary" onClick={() => { setRemovingId(null); setReason(""); }}>
+                  <button className="btn btn-secondary" disabled={removing} onClick={() => { setRemovingId(null); setReason(""); setModalError(null); triggerRef.current?.focus(); }}>
                     Cancel
                   </button>
-                  <button className="btn btn-danger" disabled={!reason.trim()} onClick={() => { onRemove(removingId, reason.trim()); setRemovingId(null); setReason(""); }}>
-                    Confirm Removal
+                  <button
+                    className="btn btn-danger"
+                    disabled={!reason.trim() || removing}
+                    onClick={async () => {
+                      setRemoving(true); setModalError(null);
+                      try {
+                        await onRemove(removingId, reason.trim());
+                        setRemovingId(null); setReason(""); triggerRef.current?.focus();
+                      } catch (err: unknown) {
+                        setModalError((err as { message?: string })?.message ?? "Unable to remove attachment");
+                      } finally { setRemoving(false); }
+                    }}
+                  >
+                    {removing ? "Removing…" : "Confirm Removal"}
                   </button>
                 </div>
               </div>

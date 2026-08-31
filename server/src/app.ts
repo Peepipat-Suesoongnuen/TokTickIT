@@ -20,15 +20,8 @@ import { isAllowedMime, MAX_ACTIVE } from "./lib/attachmentValidation.js";
 const UPLOAD_DIR = path.resolve("server/uploads");
 try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch { /* ignore */ }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${uuid()}${ext}`);
-  },
-});
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -332,7 +325,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
         requester: { select: { id: true, name: true, email: true } },
-        attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalFilename: true, mimeType: true, sizeBytes: true, removedAt: true, removedReason: true, createdAt: true } },
+        attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalFilename: true, mimeType: true, sizeBytes: true, removedAt: true, removedReason: true, createdAt: true } },
       },
     });
     if (!ticket) {
@@ -358,7 +351,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/tickets/:id/attachments — upload (FR-09)
+// POST /api/tickets/:id/attachments — upload (FR-09) — memoryStorage → validate → transaction count+create → write (no orphan, race-safe)
 app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
   upload.single("file")(req, res, async (err: unknown) => {
     try {
@@ -370,51 +363,63 @@ app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
       }
       const rawRid = req.query.requesterId as string | undefined;
       if (rawRid === undefined || typeof rawRid !== "string") {
-        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
       }
       const rid = Number(rawRid);
       if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
-        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
       }
       const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
       if (!reqExists) {
-        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
       }
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
-        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
       }
       const ticket = await getPrisma().ticket.findFirst({ where: { id, requesterId: rid } });
       if (!ticket) {
-        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
         return sendError(res, 404, "NOT_FOUND", "Resource not found.");
       }
       if (!req.file) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { file: "File is required." });
       }
-      const activeCount = await getPrisma().attachment.count({ where: { ticketId: id, removedAt: null } });
-      if (activeCount >= MAX_ACTIVE) {
-        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
-        return sendError(res, 409, "CONFLICT", "Maximum of 5 active attachments reached.");
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const storedFilename = `${uuid()}${ext}`;
+      const fileBuffer = (req.file as unknown as { buffer: Buffer }).buffer;
+      // Race-safe: count + create in transaction (serialize per ticket)
+      let attachment: { id: number; ticketId: number; originalFilename: string; mimeType: string; sizeBytes: number; removedAt: Date | null; removedReason: string | null; createdAt: Date };
+      try {
+        attachment = await getPrisma().$transaction(async (tx) => {
+          const activeCount = await (tx as unknown as ReturnType<typeof getPrisma>).attachment.count({ where: { ticketId: id, removedAt: null } });
+          if (activeCount >= MAX_ACTIVE) throw new Error("LIMIT_REACHED");
+          return (tx as unknown as ReturnType<typeof getPrisma>).attachment.create({
+            data: {
+              ticketId: id,
+              originalFilename: req.file!.originalname,
+              storedFilename,
+              mimeType: req.file!.mimetype,
+              sizeBytes: req.file!.size,
+            },
+            select: { id: true, ticketId: true, originalFilename: true, mimeType: true, sizeBytes: true, removedAt: true, removedReason: true, createdAt: true },
+          });
+        });
+      } catch (e) {
+        if (e instanceof Error && e.message === "LIMIT_REACHED") {
+          return sendError(res, 409, "CONFLICT", "Maximum of 5 active attachments reached.");
+        }
+        throw e;
       }
-      const storedFilename = path.basename(req.file.path);
-      const attachment = await getPrisma().attachment.create({
-        data: {
-          ticketId: id,
-          originalFilename: req.file.originalname,
-          storedFilename,
-          mimeType: req.file.mimetype,
-          sizeBytes: req.file.size,
-        },
-        select: { id: true, ticketId: true, originalFilename: true, mimeType: true, sizeBytes: true, removedAt: true, removedReason: true, createdAt: true },
-      });
-      res.status(201).json(attachment);
+      // Write file only after DB success — no orphan on reject
+      try {
+        fs.writeFileSync(path.join(UPLOAD_DIR, storedFilename), fileBuffer);
+      } catch {
+        // Rollback DB record if write fails
+        try { await getPrisma().attachment.delete({ where: { id: attachment!.id } }); } catch { /* ignore */ }
+        return sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+      }
+      res.status(201).json(attachment!);
     } catch {
-      if (req.file) try { fs.unlinkSync((req as unknown as { file?: { path: string } }).file?.path ?? ""); } catch { /* ignore */ }
       sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
     }
   });
@@ -453,7 +458,9 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
     const filePath = path.join(UPLOAD_DIR, att.storedFilename);
     if (!fs.existsSync(filePath)) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
     res.setHeader("Content-Type", att.mimeType);
-    res.setHeader("Content-Disposition", `attachment; filename="${att.originalFilename}"`);
+    const safeFallback = att.originalFilename.replace(/[^\x20-\x7E]/g, "_").replace(/"/g, "_").replace(/\n/g, "_").replace(/\r/g, "_");
+    const encoded = encodeURIComponent(att.originalFilename).replace(/'/g, "%27");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFallback}"; filename*=UTF-8''${encoded}`);
     res.sendFile(filePath);
   } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
 });
