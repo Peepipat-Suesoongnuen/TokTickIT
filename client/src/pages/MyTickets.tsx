@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { listTickets, fetchCategories, Category } from "../api";
 import { useRequester } from "../contexts/RequesterContext";
 
@@ -295,10 +296,9 @@ export default function MyTickets() {
                     </td>
                     <td>{formatBangkok(t.updatedAt as string)}</td>
                     <td>
-                      {/* TODO Issue 10: enable when Ticket Detail route exists */}
-                      <span className="btn btn-outline-secondary btn-sm disabled" aria-disabled="true" title="Detail coming in next issue">
+                      <Link className="btn btn-outline-success btn-sm" to={`/tickets/${t.id as number}`}>
                         Open
-                      </span>
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -319,10 +319,9 @@ export default function MyTickets() {
                   </span>
                 </div>
                 <div className="small text-secondary">{formatBangkok(t.updatedAt as string)}</div>
-                {/* TODO Issue 10: enable when Ticket Detail route exists */}
-                <span className="btn btn-outline-secondary btn-sm mt-2 disabled" aria-disabled="true" title="Detail coming in next issue">
+                <Link className="btn btn-outline-success btn-sm mt-2" to={`/tickets/${t.id as number}`}>
                   Open
-                </span>
+                </Link>
               </div>
             ))}
           </div>

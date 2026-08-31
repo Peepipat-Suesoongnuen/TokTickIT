@@ -9,8 +9,37 @@ import {
   isPriorityValid,
 } from "./lib/validation.js";
 import { formatYYMM, formatTicketNumber, getNextSequence } from "./lib/ticket-number.js";
+import multer from "multer";
+import { v4 as uuid } from "uuid";
+import path from "path";
+import fs from "fs";
+import { isAllowedMime, MAX_ACTIVE } from "./lib/attachmentValidation.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
+
+const UPLOAD_DIR = path.resolve("server/uploads");
+try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch { /* ignore */ }
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${uuid()}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!isAllowedMime(file.mimetype, ext)) {
+      const err = new Error("415") as Error & { code?: string };
+      (err as unknown as { status?: number }).status = 415;
+      return cb(err);
+    }
+    cb(null, true);
+  },
+});
 
 // The Express app is exported separately from app.listen() (see index.ts) so
 // Supertest can import `app` without opening a port. Do not merge these files.
@@ -268,6 +297,186 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
   } catch (err) {
     sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
   }
+});
+
+// ---------------------------------------------------------------------------
+// Lab 2 Issue 10 — Ticket Detail + Attachment lifecycle
+// ---------------------------------------------------------------------------
+
+// GET /api/tickets/:id — owned detail (FR-08, AC-10)
+app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const rawRid = req.query.requesterId as string | undefined;
+    if (rawRid === undefined) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
+    }
+    if (typeof rawRid !== "string") {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a single value." });
+    }
+    const rid = Number(rawRid);
+    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
+    }
+    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
+    if (!reqExists) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    }
+    const rawId = req.params.id;
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
+    }
+    const ticket = await getPrisma().ticket.findFirst({
+      where: { id, requesterId: rid },
+      include: {
+        category: { select: { id: true, name: true } },
+        relatedSystem: { select: { id: true, name: true } },
+        requester: { select: { id: true, name: true, email: true } },
+        attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalFilename: true, mimeType: true, sizeBytes: true, removedAt: true, removedReason: true, createdAt: true } },
+      },
+    });
+    if (!ticket) {
+      return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    }
+    res.status(200).json({
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      ticketDate: ticket.ticketDate,
+      currentStatus: ticket.currentStatus,
+      requestedPriority: ticket.requestedPriority,
+      summary: ticket.summary,
+      description: ticket.description,
+      category: ticket.category,
+      relatedSystem: ticket.relatedSystem,
+      requester: ticket.requester,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      attachments: ticket.attachments,
+    });
+  } catch {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});
+
+// POST /api/tickets/:id/attachments — upload (FR-09)
+app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
+  upload.single("file")(req, res, async (err: unknown) => {
+    try {
+      if (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg === "415") return sendError(res, 415, "UNSUPPORTED_MEDIA_TYPE", "File type not allowed.");
+        if ((err as { code?: string }).code === "LIMIT_FILE_SIZE") return sendError(res, 413, "PAYLOAD_TOO_LARGE", "File too large. Max 5 MB.");
+        return sendError(res, 400, "VALIDATION_FAILED", "Invalid file.", { file: "Invalid file." });
+      }
+      const rawRid = req.query.requesterId as string | undefined;
+      if (rawRid === undefined || typeof rawRid !== "string") {
+        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
+      }
+      const rid = Number(rawRid);
+      if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
+        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
+      }
+      const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
+      if (!reqExists) {
+        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+      }
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
+        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
+      }
+      const ticket = await getPrisma().ticket.findFirst({ where: { id, requesterId: rid } });
+      if (!ticket) {
+        if (req.file) try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+      }
+      if (!req.file) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { file: "File is required." });
+      }
+      const activeCount = await getPrisma().attachment.count({ where: { ticketId: id, removedAt: null } });
+      if (activeCount >= MAX_ACTIVE) {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return sendError(res, 409, "CONFLICT", "Maximum of 5 active attachments reached.");
+      }
+      const storedFilename = path.basename(req.file.path);
+      const attachment = await getPrisma().attachment.create({
+        data: {
+          ticketId: id,
+          originalFilename: req.file.originalname,
+          storedFilename,
+          mimeType: req.file.mimetype,
+          sizeBytes: req.file.size,
+        },
+        select: { id: true, ticketId: true, originalFilename: true, mimeType: true, sizeBytes: true, removedAt: true, removedReason: true, createdAt: true },
+      });
+      res.status(201).json(attachment);
+    } catch {
+      if (req.file) try { fs.unlinkSync((req as unknown as { file?: { path: string } }).file?.path ?? ""); } catch { /* ignore */ }
+      sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+    }
+  });
+});
+
+// GET /api/attachments/:id — metadata (FR-10)
+app.get("/api/attachments/:id", async (req: Request, res: Response) => {
+  try {
+    const rawRid = req.query.requesterId as string | undefined;
+    if (rawRid === undefined || typeof rawRid !== "string") return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
+    const rid = Number(rawRid);
+    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
+    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
+    if (!reqExists) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
+    const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
+    if (!att || att.ticket.requesterId !== rid) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    res.status(200).json({ id: att.id, ticketId: att.ticketId, originalFilename: att.originalFilename, mimeType: att.mimeType, sizeBytes: att.sizeBytes, removedAt: att.removedAt, removedReason: att.removedReason, createdAt: att.createdAt });
+  } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
+});
+
+// GET /api/attachments/:id/download — binary (FR-10, BR-17)
+app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+  try {
+    const rawRid = req.query.requesterId as string | undefined;
+    if (rawRid === undefined || typeof rawRid !== "string") return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
+    const rid = Number(rawRid);
+    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
+    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
+    if (!reqExists) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
+    const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
+    if (!att || att.ticket.requesterId !== rid || att.removedAt) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    const filePath = path.join(UPLOAD_DIR, att.storedFilename);
+    if (!fs.existsSync(filePath)) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    res.setHeader("Content-Type", att.mimeType);
+    res.setHeader("Content-Disposition", `attachment; filename="${att.originalFilename}"`);
+    res.sendFile(filePath);
+  } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
+});
+
+// POST /api/attachments/:id/remove — soft-remove (FR-10, BR-15/16)
+app.post("/api/attachments/:id/remove", async (req: Request, res: Response) => {
+  try {
+    const rawRid = req.query.requesterId as string | undefined;
+    if (rawRid === undefined || typeof rawRid !== "string") return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
+    const rid = Number(rawRid);
+    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
+    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
+    if (!reqExists) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!reason) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { reason: "Reason is required." });
+    const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
+    if (!att || att.ticket.requesterId !== rid) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    if (att.removedAt) return sendError(res, 409, "CONFLICT", "Already removed.");
+    const updated = await getPrisma().attachment.update({ where: { id }, data: { removedAt: new Date(), removedReason: reason } });
+    res.status(200).json({ id: updated.id, removedAt: updated.removedAt, removedReason: updated.removedReason });
+  } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
 });
 
 // ---------------------------------------------------------------------------
