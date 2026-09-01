@@ -45,6 +45,7 @@ describe("AttachmentSection", () => {
     expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
     expect(screen.getByLabelText("Choose file")).toBeInTheDocument();
+    expect(screen.getByLabelText("Choose file")).toHaveClass("form-control");
   });
 
   it("Removed shows struck-through and no Download", () => {

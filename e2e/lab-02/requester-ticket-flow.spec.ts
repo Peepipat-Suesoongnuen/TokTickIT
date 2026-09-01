@@ -93,10 +93,18 @@ test("E2E-01 select requester -> create -> search -> open detail", async ({ page
   await page.getByLabel("Requested Priority").selectOption("HIGH");
   await page.getByLabel("Summary").fill(summary);
   await page.getByLabel("Description").fill(`The printer cannot complete a job for marker ${marker}.`);
-  await page.getByRole("button", { name: "Submit Ticket" }).click();
+  const [createResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url() === `${API_URL}/api/tickets` &&
+        response.request().method() === "POST",
+    ),
+    page.getByRole("button", { name: "Submit Ticket" }).click(),
+  ]);
+  expect(createResponse.status()).toBe(201);
 
   const ticketNumberText = page.getByText(/Official Ticket Number:/);
-  await expect(ticketNumberText).toBeVisible();
+  await expect(ticketNumberText).toBeVisible({ timeout: 10_000 });
   const ticketNumber = (await ticketNumberText.locator("strong").textContent())?.trim();
   expect(ticketNumber).toMatch(/^\d{4}-\d{4}$/);
 
