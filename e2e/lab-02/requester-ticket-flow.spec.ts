@@ -96,7 +96,7 @@ test("E2E-01 select requester -> create -> search -> open detail", async ({ page
   const [createResponse] = await Promise.all([
     page.waitForResponse(
       (response) =>
-        response.url() === `${API_URL}/api/tickets` &&
+        new URL(response.url()).pathname === "/api/tickets" &&
         response.request().method() === "POST",
     ),
     page.getByRole("button", { name: "Submit Ticket" }).click(),
