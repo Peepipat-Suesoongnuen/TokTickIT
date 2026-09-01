@@ -68,7 +68,7 @@ export default function AttachmentSection({
         <h2 className="h6">Attachments</h2>
         {canUpload ? (
           <div className="mb-3">
-            <input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={handleFileChange} aria-label="Choose file" disabled={!!uploadingFilename} />
+            <input className="form-control" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={handleFileChange} aria-label="Choose file" disabled={!!uploadingFilename} />
             <div className="form-text">JPG, PNG, WEBP or PDF, up to 5 MB each, max 5 files</div>
           </div>
         ) : (
