@@ -12,3 +12,6 @@ server/prisma/*.db
 # logs & OS
 *.log
 .DS_Store
+# Playwright transient output (Issue 11 screenshots under artifacts/ are evidence and stay tracked)
+playwright-report/
+test-results/
