@@ -102,6 +102,64 @@ export async function listTickets(params: ListTicketsParams) {
   return body as { data: unknown[]; meta: { page: number; pageSize: number; totalCount: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } };
 }
 
+export async function getTicketDetail(ticketId: number, requesterId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requesterId}`);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
+  return body;
+}
+
+export async function uploadAttachment(ticketId: number, requesterId: number, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`, { method: "POST", body: form });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Upload failed" };
+  return body;
+}
+
+export async function getAttachmentMetadata(attachmentId: number, requesterId: number) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}?requesterId=${requesterId}`);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
+  return body;
+}
+
+export async function downloadAttachment(attachmentId: number, requesterId: number) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw { status: res.status, body, message: body?.error?.message ?? "Download failed" };
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  let filename = "download";
+  const starMatch = /filename\*=\s*UTF-8''([^;]+)/i.exec(disposition);
+  if (starMatch?.[1]) {
+    try { filename = decodeURIComponent(starMatch[1].replace(/'/g, "%27")); } catch { /* fallback */ }
+  } else {
+    const m = /filename="([^"]+)"/.exec(disposition);
+    if (m?.[1]) filename = m[1];
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function removeAttachment(attachmentId: number, requesterId: number, reason: string) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/remove?requesterId=${requesterId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to remove attachment" };
+  return body;
+}
+
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem(): Promise<SystemStatus> {
   // A thrown fetch (network error) or a non-ok HTTP response must surface as a

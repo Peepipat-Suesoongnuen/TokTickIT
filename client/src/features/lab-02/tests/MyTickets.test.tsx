@@ -279,7 +279,7 @@ describe("MyTickets", () => {
       expect(screen.getByRole("button", { name: /go to page 3/i })).toBeInTheDocument();
     });
 
-    it("shows disabled Open when Ticket Detail is deferred (Issue 10)", async () => {
+    it("shows Open link to Ticket Detail (Issue 10 enabled)", async () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
         data: [
@@ -291,10 +291,9 @@ describe("MyTickets", () => {
       renderWithProviders();
 
       await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
-      const opens = screen.getAllByText("Open");
+      const opens = screen.getAllByRole("link", { name: "Open" });
       expect(opens.length).toBeGreaterThan(0);
-      // deferred Open is a span with aria-disabled, not a link to /tickets/:id
-      expect(screen.queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
+      expect(opens[0].getAttribute("href")).toBe("/tickets/1");
     });
 
     it("retries loading on Retry click (UI-09)", async () => {

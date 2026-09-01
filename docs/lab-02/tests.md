@@ -171,14 +171,27 @@ Database prerequisites (implemented):
 - Prisma CLI reads `DATABASE_URL` from `schema.prisma`; it does not switch to `TEST_DATABASE_URL` automatically. Prepare the dedicated database with `DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy` followed by `DATABASE_URL="$TEST_DATABASE_URL" npx prisma db seed`.
 - The Prisma seed is idempotent and must run after migrations and before the API/integration test suite.
 - `.env` configured from `.env.example` (copy to `.env`).
-- Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. The `DATABASE_URL` used for migration/seed and the `TEST_DATABASE_URL` used by Vitest must identify the same dedicated test database.
-- Hosted CI (`.github/workflows/ci.yml`) provisions PostgreSQL, migrates and seeds `toktickit_test`, then runs the `TEST_DATABASE_URL`-backed tests on every push/PR.
+ - Isolation: tests use targeted cleanup by `ticketNumber` prefix per suite plus deterministic fixtures; no `deleteMany({})` on the whole DB. The `DATABASE_URL` used for migration/seed and the `TEST_DATABASE_URL` used by Vitest must identify the same dedicated test database.
+ - Hosted CI (`.github/workflows/ci.yml`) provisions PostgreSQL, migrates and seeds `toktickit_test`, then runs the `TEST_DATABASE_URL`-backed tests on every push/PR.
+
+### 5.1 Pre-push checklist — one-round fix (prevent repeat blockers)
+Before pushing any Lab 2 feature branch, tick all:
+- [ ] `TEST_DATABASE_URL` isolated via `server/src/prisma.ts` lazy `getPrisma()`; no `new PrismaClient()` in tests
+- [ ] Exact `ticketNumber in [...]` cleanup (no `deleteMany({})`, no `startsWith("2608`) — see `helpers.ts`
+- [ ] `path.resolve("uploads")` (cwd-independent) not `server/uploads`
+- [ ] `FOR UPDATE` lock + `Promise.all` concurrent `4→2 → 201+409 → active=5` regression test for max 5
+- [ ] `isAllowedMime` paired + `isAllowedSignature` magic bytes (JPEG/PNG/WEBP/PDF) with `415` tests
+- [ ] `Content-Disposition` `filename*` UTF-8 + sanitize, client parses `filename*`
+- [ ] Modal `Removing…` busy, keep reason on fail, `aria-modal` + `Esc`/trap/return focus; `TicketDetail` `requestSeq` + `attachmentError` scope
+- [ ] `ci.yml` guardrails pass + `git diff --check` clean + `tsc --noEmit` clean
 
 ## 6. Final Results
 
 Every row's `Final` column stays **Planned** during feature-branch development (failing-first TDD). Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
 
 **Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ 73bc6bb05bcc393d2dd465aaedbc8669ae85b212):** `cd server && npm test` — 33 passed (31 My Tickets + 2 Lab 1); `cd client && npm test` — 20 passed (17 My Tickets + 3 App); `npm run build` / `tsc --noEmit` clean both sides; `git diff --check` clean; `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` **passed** — server 33 / client 20 — https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320049779 and https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320047712 (server 45s / client 17-21s, 4/4 success). Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
+
+**Feature-branch evidence (Issue 10, `feature/10-ticket-detail-attachments` @ aee23b8):** `cd server && npm test` — 72 passed (31 My Tickets + 14 Detail + 22 Attachments + 3 Lib/Lab1 + 2 Lab1); `cd client && npm test` — 32 passed (17 MyTickets + 5 Detail + 7 AttachmentSection + 3 App); `tsc --noEmit` clean both sides; `git diff --check` clean; `TEST_DATABASE_URL` isolated + `server/uploads` git-ignored + pre-push checklist §5.1 + guardrails. Evidence below remains `Planned` until final `main` green run (see PR #25).
 
 ## 7. Known Limitations or Deferred Tests
 

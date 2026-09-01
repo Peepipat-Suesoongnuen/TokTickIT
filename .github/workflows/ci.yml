@@ -38,6 +38,13 @@ jobs:
         run: npx prisma db seed
       - working-directory: server
         run: npx tsc --noEmit
+      - name: Guardrails — test hygiene (one-round fix)
+        run: |
+          echo "Checking guardrails..."
+          ! grep -R "deleteMany({})" server/tests && echo "no deleteMany({}) OK" || (echo "found deleteMany({})" && exit 1)
+          ! grep -R 'startsWith("2608' server/tests && echo "no startsWith 2608 OK" || (echo "found startsWith 2608" && exit 1)
+          ! grep -R "new PrismaClient" server/tests && echo "no new PrismaClient in tests OK" || (echo "found new PrismaClient" && exit 1)
+          ! grep -R 'path.resolve("server/uploads")' server/tests && echo "no server/uploads path OK" || (echo "found server/uploads path" && exit 1)
       - working-directory: server
         run: npm test
 
