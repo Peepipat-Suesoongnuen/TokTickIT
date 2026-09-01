@@ -54,6 +54,10 @@ export default function AttachmentSection({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
 
+  useEffect(() => {
+    if (removingId !== null) reasonRef.current?.focus();
+  }, [removingId]);
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -82,24 +86,23 @@ export default function AttachmentSection({
             {attachments.map((a) => {
               const isRemoved = !!a.removedAt;
               return (
-                <li key={a.id} className={`list-group-item d-flex justify-content-between align-items-center ${isRemoved ? "text-muted" : ""}`}>
+                <li key={a.id} className={`list-group-item d-flex justify-content-between align-items-center lab2-attachment-row ${isRemoved ? "text-muted" : ""}`}>
                   <div>
-                    <span style={isRemoved ? { textDecoration: "line-through" } : undefined}>{a.originalFilename}</span>
+                    <span className="lab2-attachment-name" style={isRemoved ? { textDecoration: "line-through" } : undefined}>{a.originalFilename}</span>
                     <span className="text-secondary small ms-2">{(a.sizeBytes / 1024).toFixed(1)} KB</span>
                     <span className="text-secondary small ms-2">Uploaded {formatBangkok(a.createdAt)}</span>
                     {isRemoved ? (
                       <span className="ms-2 small">Removed {a.removedAt ? formatBangkok(a.removedAt) : ""} — Reason: {a.removedReason}</span>
                     ) : null}
                   </div>
-                  <div className="d-flex gap-2">
+                  <div className="d-flex gap-2 lab2-attachment-actions">
                     {!isRemoved ? (
                       <>
-                        <button className="btn btn-sm btn-outline-success" onClick={() => onDownload(a.id)}>
+                        <button className="btn btn-sm btn-link zen-tertiary text-decoration-none" onClick={() => onDownload(a.id)}>
                           Download
                         </button>
                         <button
-                          className="btn btn-sm btn-outline-danger"
-                          ref={(el) => { if (removingId === null) triggerRef.current = el; }}
+                          className="btn btn-sm btn-link zen-tertiary text-decoration-none"
                           onClick={(e) => { triggerRef.current = e.currentTarget as HTMLButtonElement; setRemovingId(a.id); }}
                         >
                           Remove
@@ -113,7 +116,7 @@ export default function AttachmentSection({
           </ul>
         )}
         {onRetry ? (
-          <button className="btn btn-sm btn-outline-secondary mt-2" onClick={onRetry}>
+          <button className="btn btn-sm btn-outline-success mt-2" onClick={onRetry}>
             Retry
           </button>
         ) : null}
@@ -127,14 +130,17 @@ export default function AttachmentSection({
             onKeyDown={(e) => {
               if (e.key === "Escape" && !removing) { setRemovingId(null); setReason(""); setModalError(null); triggerRef.current?.focus(); }
               if (e.key === "Tab") {
-                const focusable = Array.from(document.querySelectorAll<HTMLElement>('.modal [tabindex], .modal button, .modal textarea'));
+                const focusable = Array.from(
+                  e.currentTarget.querySelectorAll<HTMLElement>(
+                    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+                  ),
+                ).filter((element) => element.getClientRects().length > 0);
                 if (focusable.length === 0) return;
                 const first = focusable[0]; const last = focusable[focusable.length - 1];
                 if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
               }
             }}
-            ref={(el) => { if (el) reasonRef.current?.focus(); }}
           >
             <div className="modal-dialog">
               <div className="modal-content">
@@ -144,17 +150,17 @@ export default function AttachmentSection({
                 <div className="modal-body">
                   <p>Filename: {attachments.find((a) => a.id === removingId)?.originalFilename}</p>
                   <label htmlFor="removeReason" className="form-label">
-                    Reason <span className="text-danger">*</span>
+                    Reason <span className="text-danger required-marker">*</span>
                   </label>
-                  <textarea id="removeReason" ref={reasonRef} className="form-control" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Reason" disabled={removing} />
-                  {modalError ? <div className="alert alert-danger mt-2">{modalError}</div> : null}
+                  <textarea id="removeReason" ref={reasonRef} className="form-control" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Reason" aria-required="true" disabled={removing} />
+                  {modalError ? <div className="alert alert-danger mt-2" role="alert" aria-live="polite">{modalError}</div> : null}
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-secondary" disabled={removing} onClick={() => { setRemovingId(null); setReason(""); setModalError(null); triggerRef.current?.focus(); }}>
+                  <button className="btn btn-outline-success" disabled={removing} onClick={() => { setRemovingId(null); setReason(""); setModalError(null); triggerRef.current?.focus(); }}>
                     Cancel
                   </button>
                   <button
-                    className="btn btn-danger"
+                    className="btn btn-danger btn-zen-destructive"
                     disabled={!reason.trim() || removing}
                     onClick={async () => {
                       setRemoving(true); setModalError(null);
