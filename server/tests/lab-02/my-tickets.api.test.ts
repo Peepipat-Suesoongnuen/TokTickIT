@@ -129,14 +129,22 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       expect(res.body.data[0].summary.toLowerCase()).toContain("battery");
     });
 
-    it("should find tickets by description case-insensitive (AC-12)", async () => {
+    it("should find tickets by Ticket Number partial match (AC-12, API-09)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&search=vpn`)
+        .get(`/api/tickets?requesterId=${requesterA.id}&search=0002`)
         .expect(200);
 
       expect(res.body.data).toHaveLength(1);
-      expect(res.body.data[0].summary).toBe("Cannot connect to VPN");
-      expect(res.body.data[0]).not.toHaveProperty("description");
+      expect(res.body.data[0].ticketNumber).toBe("2608-0002");
+    });
+
+    it("should not match a term that exists only in Description (AC-12, API-09)", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&search=timeout`)
+        .expect(200);
+
+      expect(res.body.data).toHaveLength(0);
+      expect(res.body.meta.totalCount).toBe(0);
     });
 
     it("should return 400 for whitespace-only search (AC-12)", async () => {
@@ -213,6 +221,17 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
       const priorities = res.body.data.map((t: any) => t.requestedPriority);
       expect(priorities).toEqual(["HIGH", "CRITICAL"]); // LOW=1, MEDIUM=2, HIGH=3, CRITICAL=4
+    });
+
+    it.each([
+      ["asc", ["2608-0001", "2608-0002"]],
+      ["desc", ["2608-0002", "2608-0001"]],
+    ] as const)("should sort by Ticket Number %s (AC-14, API-11)", async (order, expected) => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&sort=ticketNumber&order=${order}`)
+        .expect(200);
+
+      expect(res.body.data.map((ticket: { ticketNumber: string }) => ticket.ticketNumber)).toEqual(expected);
     });
 
     it.each(["updatedAt", "ticketDate"] as const)("should use id DESC when %s values tie", async (sortField) => {

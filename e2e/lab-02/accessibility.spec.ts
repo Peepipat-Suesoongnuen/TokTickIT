@@ -170,11 +170,19 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   await page.goto("/my-tickets");
   await expect(page.getByLabel("Search tickets")).toBeVisible();
   await expect(page.getByLabel("Category")).toBeVisible();
-  await expect(page.getByLabel("Priority")).toBeVisible();
-  await expect(page.getByLabel("Sort field")).toBeVisible();
-  await expect(page.getByLabel("Sort order")).toBeVisible();
+  await expect(page.getByLabel("Priority", { exact: true })).toBeVisible();
+  const ticketNumberSort = page.getByRole("button", { name: /Sort by Ticket Number/ });
+  await expect(ticketNumberSort).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sort by Requested Priority/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sort by Last Updated/ })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: /Last Updated/ })).toHaveAttribute("aria-sort", "descending");
   await expect(page.getByLabel("Page size")).toBeVisible();
   await expectAllVisibleControlsTabReachable(page);
+
+  await resetKeyboardFocus(page);
+  await tabTo(page, ticketNumberSort);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("columnheader", { name: /Ticket Number/ })).toHaveAttribute("aria-sort", "descending");
 
   const search = page.getByLabel("Search tickets");
   await resetKeyboardFocus(page);

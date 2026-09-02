@@ -62,7 +62,7 @@ The IT department is ready to accept real support requests and needs a working e
 - **BR-16** A non-empty removal reason is required when removing an Attachment and must be retained as removal metadata.
 - **BR-17** A removed Attachment remains visible as metadata but cannot be previewed or downloaded.
 - **BR-18** If Ticket creation succeeds but one or more initial Attachment uploads fail, the Ticket and all successfully uploaded Attachments remain saved. A failed upload must not create an active Attachment record. The failed file must be reported to the Requester, who may retry the upload from Ticket Detail.
-- **BR-19** Search, filtering, and sorting operate only on the selected Requester's Tickets. Search performs a case-insensitive partial match on Ticket Summary and Description.
+- **BR-19** Search, filtering, and sorting operate only on the selected Requester's Tickets. Search performs a case-insensitive partial match on Ticket Number or Ticket Summary; Description is not a My Tickets search target because it is not displayed in the list.
 - **BR-20** Pagination defaults to page 1 and page size 10; permitted page sizes are 10, 20, and 50. The query contract is strict: unknown parameter names and invalid known parameter values both return HTTP 400.
 - **BR-21** My Tickets defaults to `updatedAt DESC`, with Ticket ID DESC as the deterministic secondary sort.
 - **BR-22** My Tickets shows an empty state when the selected Requester owns no Tickets, and a distinct no-results state when Tickets exist but none match the current search or filters.
@@ -74,7 +74,7 @@ The IT department is ready to accept real support requests and needs a working e
 - **Application shell**: TokTickIT identity, My Tickets navigation, Create Ticket navigation, selected Requester identity display, clear active-page indication, responsive mobile navigation.
 - **Requester Selection screen**: title, explanation that this is a Lab-2-only testing mechanism, dropdown loaded from PostgreSQL, Continue button, loading/empty/failure states, keyboard accessible (full layout in ui-spec.md).
 - **Create Ticket screen**: system-generated/read-only fields visually distinct at top, classification fields grouped, Summary/Description given sufficient width, Attachments below main fields, primary Submit (busy/disabled states) and secondary actions at bottom; field-level validation messages under fields; required fields marked with red asterisk; success state displays the generated Ticket Number (full layout in ui-spec.md).
-- **My Tickets screen**: search, suitable filters, sorting controls, pagination, Create Ticket action, desktop table / mobile card representation, loading/empty/no-results/failure states (full layout in ui-spec.md).
+- **My Tickets screen**: Ticket Number/Summary search, suitable filters, accessible sorting controls, Clear Filters + Create Ticket actions, pagination, desktop sortable table / mobile card representation, row/card navigation to Ticket Detail, and loading/empty/no-results/failure states (full layout in ui-spec.md).
 - **Ticket Detail screen**: read-only ticket header, distinct Attachment section with active/uploading/invalid/removed/unavailable states, download and soft-remove actions (soft removal via confirmation modal with mandatory reason — full layout in ui-spec.md).
 - **Zen Green Theme**: primary #006B3C, secondary #0B7A46, pale green #EAF6EF, background #F5F7F6, white surfaces, dark charcoal-green text, dark red errors below fields, amber warnings, green success not relying on color alone.
 - **Responsive**: ≥992px multi-column centered; 768–991px two-column where practical; <768px stacked vertical, touch-friendly buttons, no horizontal scrolling; no clipping/overlap at any size.
@@ -180,7 +180,7 @@ Ownership:
 - **AC-11** Given Requester B is selected, when My Tickets loads, then none of Requester A's Tickets appear.
 
 My Tickets list:
-- **AC-12** Given the selected Requester's Tickets whose Summary or Description contain the search term (case-insensitive partial match), when searching, then matching tickets are returned; non-matching ones are excluded.
+- **AC-12** Given the selected Requester's Tickets whose Ticket Number or Summary contain the search term (case-insensitive partial match), when searching, then matching tickets are returned; a term present only in Description does not match.
 - **AC-13** Given a filter (e.g., Category) is applied, when the list loads, then only matching Tickets appear.
 - **AC-14** Given a sort choice, when applied, then ordering matches the documented contract; default order is updatedAt DESC, id DESC.
 - **AC-15** Given more Tickets than one page size, when paginating, then correct pages and metadata (total count, total pages) are returned.
