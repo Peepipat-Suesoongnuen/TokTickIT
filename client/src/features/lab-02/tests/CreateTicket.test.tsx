@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CreateTicket from "../../../pages/CreateTicket";
 import * as api from "../../../api.js";
 import { RequesterProvider } from "../../../contexts/RequesterContext.js";
@@ -23,9 +24,14 @@ function deferred<T>() {
 
 function renderCreateTicket() {
   return render(
-    <RequesterProvider>
-      <CreateTicket />
-    </RequesterProvider>
+    <MemoryRouter initialEntries={["/create"]}>
+      <RequesterProvider>
+        <Routes>
+          <Route path="/create" element={<CreateTicket />} />
+          <Route path="/my-tickets" element={<div>My Tickets destination</div>} />
+        </Routes>
+      </RequesterProvider>
+    </MemoryRouter>
   );
 }
 
@@ -63,6 +69,31 @@ afterEach(() => {
 });
 
 describe("CreateTicket (Lab 2 Issue 8A)", () => {
+  it("UI-26 shows Back to My Tickets in the heading and navigation does not submit", async () => {
+    mockReferenceData();
+    const createSpy = vi.spyOn(api, "createTicket").mockResolvedValue({});
+    renderCreateTicket();
+    await waitForReferenceData();
+
+    const heading = screen.getByRole("heading", { name: "Create Ticket" });
+    const back = screen.getByRole("link", { name: "Back to My Tickets" });
+    expect(back).toHaveAttribute("href", "/my-tickets");
+    const headingRow = back.closest(".lab2-screen-heading");
+    expect(headingRow).toContainElement(heading);
+    expect(headingRow).toHaveClass("justify-content-between", "align-items-center", "lab2-mobile-stack");
+
+    const submit = screen.getByRole("button", { name: "Submit Ticket" });
+    const clear = screen.getByRole("button", { name: "Clear" });
+    expect(submit).toBeInTheDocument();
+    expect(clear).toBeInTheDocument();
+    expect(submit.parentElement).toContainElement(clear);
+    expect(submit.parentElement).not.toContainElement(back);
+    await userEvent.click(back);
+
+    expect(await screen.findByText("My Tickets destination")).toBeInTheDocument();
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["short", "abcd"],
     ["long", "x".repeat(121)],
