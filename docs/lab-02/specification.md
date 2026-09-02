@@ -62,7 +62,7 @@ The IT department is ready to accept real support requests and needs a working e
 - **BR-16** A non-empty removal reason is required when removing an Attachment and must be retained as removal metadata.
 - **BR-17** A removed Attachment remains visible as metadata but cannot be previewed or downloaded.
 - **BR-18** If Ticket creation succeeds but one or more initial Attachment uploads fail, the Ticket and all successfully uploaded Attachments remain saved. A failed upload must not create an active Attachment record. The failed file must be reported to the Requester, who may retry the upload from Ticket Detail.
-- **BR-19** Search, filtering, and sorting operate only on the selected Requester's Tickets. Search performs a case-insensitive partial match on Ticket Number or Ticket Summary; Description is not a My Tickets search target because it is not displayed in the list.
+- **BR-19** Search, filtering, and sorting operate only on the selected Requester's Tickets. Search performs a case-insensitive partial match on Ticket Number or Ticket Summary; Description is not a My Tickets search target because it is not displayed in the list. My Tickets filters include Category, Requested Priority, and Current Status; Lab 2 currently has only status `NEW` and does not provide status-changing workflow.
 - **BR-20** Pagination defaults to page 1 and page size 10; permitted page sizes are 10, 20, and 50. The query contract is strict: unknown parameter names and invalid known parameter values both return HTTP 400.
 - **BR-21** My Tickets defaults to `updatedAt DESC`, with Ticket ID DESC as the deterministic secondary sort.
 - **BR-22** My Tickets shows an empty state when the selected Requester owns no Tickets, and a distinct no-results state when Tickets exist but none match the current search or filters.
@@ -181,7 +181,7 @@ Ownership:
 
 My Tickets list:
 - **AC-12** Given the selected Requester's Tickets whose Ticket Number or Summary contain the search term (case-insensitive partial match), when searching, then matching tickets are returned; a term present only in Description does not match.
-- **AC-13** Given a filter (e.g., Category) is applied, when the list loads, then only matching Tickets appear.
+- **AC-13** Given a Category, Requested Priority, or Current Status filter is applied, when the list loads, then only matching Tickets appear; Lab 2 Current Status filtering accepts `NEW` only.
 - **AC-14** Given a sort choice, when applied, then ordering matches the documented contract; default order is updatedAt DESC, id DESC.
 - **AC-15** Given more Tickets than one page size, when paginating, then correct pages and metadata (total count, total pages) are returned.
 - **AC-16** Given an invalid page number, an invalid page size, an unknown query parameter name, or an invalid known parameter value, when requested, then the API returns 400.

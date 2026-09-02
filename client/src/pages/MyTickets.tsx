@@ -42,6 +42,7 @@ export default function MyTickets() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [priority, setPriority] = useState("");
+  const [currentStatus, setCurrentStatus] = useState("");
   const [sort, setSort] = useState("updatedAt");
   const [order, setOrder] = useState("desc");
   const [page, setPage] = useState(1);
@@ -54,11 +55,12 @@ export default function MyTickets() {
   const ticketRequestSequence = useRef(0);
   const categoryRequestSequence = useRef(0);
 
-  const isFiltered = debouncedSearch !== "" || categoryId !== "" || priority !== "";
+  const isFiltered = debouncedSearch !== "" || categoryId !== "" || priority !== "" || currentStatus !== "";
   const hasResettableState =
     search.trim() !== "" ||
     categoryId !== "" ||
     priority !== "" ||
+    currentStatus !== "" ||
     sort !== "updatedAt" ||
     order !== "desc";
 
@@ -71,7 +73,7 @@ export default function MyTickets() {
   // reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, categoryId, priority, sort, order, pageSize]);
+  }, [debouncedSearch, categoryId, priority, currentStatus, sort, order, pageSize]);
 
   const loadCategories = async (requesterId: number) => {
     const requestSequence = ++categoryRequestSequence.current;
@@ -101,6 +103,7 @@ export default function MyTickets() {
     setSearch("");
     setDebouncedSearch("");
     setPriority("");
+    setCurrentStatus("");
     setSort("updatedAt");
     setOrder("desc");
     setPage(1);
@@ -125,6 +128,7 @@ export default function MyTickets() {
         search: debouncedSearch || undefined,
         categoryId: categoryId ? Number(categoryId) : undefined,
         requestedPriority: priority || undefined,
+        currentStatus: currentStatus || undefined,
         sort,
         order,
         page,
@@ -151,7 +155,7 @@ export default function MyTickets() {
     return () => {
       ticketRequestSequence.current += 1;
     };
-  }, [requester?.id, debouncedSearch, categoryId, priority, sort, order, page, pageSize]);
+  }, [requester?.id, debouncedSearch, categoryId, priority, currentStatus, sort, order, page, pageSize]);
 
   if (!requester) return null;
 
@@ -160,12 +164,13 @@ export default function MyTickets() {
     setDebouncedSearch("");
     setCategoryId("");
     setPriority("");
+    setCurrentStatus("");
     setSort("updatedAt");
     setOrder("desc");
     setPage(1);
   };
 
-  const applySort = (field: "ticketNumber" | "requestedPriority" | "updatedAt") => {
+  const applySort = (field: "ticketNumber" | "ticketDate" | "requestedPriority" | "updatedAt") => {
     setPage(1);
     if (sort === field) {
       setOrder((current) => (current === "desc" ? "asc" : "desc"));
@@ -175,10 +180,10 @@ export default function MyTickets() {
     setOrder("desc");
   };
 
-  const sortState = (field: "ticketNumber" | "requestedPriority" | "updatedAt") =>
+  const sortState = (field: "ticketNumber" | "ticketDate" | "requestedPriority" | "updatedAt") =>
     sort === field ? (order === "asc" ? "ascending" : "descending") : "none";
 
-  const sortGlyph = (field: "ticketNumber" | "requestedPriority" | "updatedAt") =>
+  const sortGlyph = (field: "ticketNumber" | "ticketDate" | "requestedPriority" | "updatedAt") =>
     sort === field ? (order === "asc" ? "↑" : "↓") : "↕";
 
   const openTicketFromContainer = (event: React.MouseEvent<HTMLElement>, ticketId: number) => {
@@ -203,17 +208,19 @@ export default function MyTickets() {
       {/* Toolbar */}
       <div className="card mb-3 p-3">
         <div className="row g-2">
-          <div className="col-md-6">
+          <div className="col-md-4">
+            <label htmlFor="my-tickets-search" className="form-label lab2-toolbar-label">Search</label>
             <input
+              id="my-tickets-search"
               className="form-control"
               placeholder="Search ticket number or summary…"
-              aria-label="Search tickets"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Category" disabled={categoryLoading || categoryError !== ""}>
+            <label htmlFor="my-tickets-category" className="form-label lab2-toolbar-label">Category</label>
+            <select id="my-tickets-category" className="form-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={categoryLoading || categoryError !== ""}>
               <option value="">{categoryLoading ? "Loading categories…" : "All Categories"}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -223,7 +230,8 @@ export default function MyTickets() {
             </select>
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={priority} onChange={(e) => setPriority(e.target.value)} aria-label="Priority">
+            <label htmlFor="my-tickets-priority" className="form-label lab2-toolbar-label">Requested Priority</label>
+            <select id="my-tickets-priority" className="form-select" value={priority} onChange={(e) => setPriority(e.target.value)}>
               <option value="">All Priorities</option>
               <option value="LOW">LOW</option>
               <option value="MEDIUM">MEDIUM</option>
@@ -232,7 +240,15 @@ export default function MyTickets() {
             </select>
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} aria-label="Page size">
+            <label htmlFor="my-tickets-status" className="form-label lab2-toolbar-label">Current Status</label>
+            <select id="my-tickets-status" className="form-select" value={currentStatus} onChange={(e) => setCurrentStatus(e.target.value)}>
+              <option value="">All Statuses</option>
+              <option value="NEW">NEW</option>
+            </select>
+          </div>
+          <div className="col-md-2">
+            <label htmlFor="my-tickets-page-size" className="form-label lab2-toolbar-label">Rows per page</label>
+            <select id="my-tickets-page-size" className="form-select" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
@@ -283,17 +299,38 @@ export default function MyTickets() {
         <>
           {/* Desktop table */}
           <div className="d-none d-md-block table-responsive">
-            <table className="table table-hover align-middle">
+            <table className="table table-hover align-middle lab2-ticket-table">
+              <colgroup>
+                <col className="lab2-col-ticket-number" />
+                <col className="lab2-col-created" />
+                <col className="lab2-col-summary" />
+                <col className="lab2-col-category" />
+                <col className="lab2-col-priority" />
+                <col className="lab2-col-status" />
+                <col className="lab2-col-updated" />
+              </colgroup>
               <thead>
                 <tr>
                   <th aria-sort={sortState("ticketNumber")}>
                     <button
                       type="button"
-                      className="btn btn-link p-0 fw-semibold text-decoration-none lab2-sort-button"
+                      className="btn btn-link p-0 text-decoration-none lab2-sort-button"
                       aria-label={`Sort by Ticket Number${sort === "ticketNumber" ? `, currently ${sortState("ticketNumber")}` : ""}`}
                       onClick={() => applySort("ticketNumber")}
                     >
-                      Ticket Number <span aria-hidden="true">{sortGlyph("ticketNumber")}</span>
+                      <span className="lab2-sort-label">Ticket Number</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("ticketNumber")}</span>
+                    </button>
+                  </th>
+                  <th aria-sort={sortState("ticketDate")}>
+                    <button
+                      type="button"
+                      className="btn btn-link p-0 text-decoration-none lab2-sort-button"
+                      aria-label={`Sort by Created${sort === "ticketDate" ? `, currently ${sortState("ticketDate")}` : ""}`}
+                      onClick={() => applySort("ticketDate")}
+                    >
+                      <span className="lab2-sort-label">Created</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("ticketDate")}</span>
                     </button>
                   </th>
                   <th>Summary</th>
@@ -301,22 +338,24 @@ export default function MyTickets() {
                   <th aria-sort={sortState("requestedPriority")}>
                     <button
                       type="button"
-                      className="btn btn-link p-0 fw-semibold text-decoration-none lab2-sort-button"
+                      className="btn btn-link p-0 text-decoration-none lab2-sort-button"
                       aria-label={`Sort by Requested Priority${sort === "requestedPriority" ? `, currently ${sortState("requestedPriority")}` : ""}`}
                       onClick={() => applySort("requestedPriority")}
                     >
-                      Requested Priority <span aria-hidden="true">{sortGlyph("requestedPriority")}</span>
+                      <span className="lab2-sort-label">Requested Priority</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("requestedPriority")}</span>
                     </button>
                   </th>
-                  <th>Status</th>
+                  <th>Current Status</th>
                   <th aria-sort={sortState("updatedAt")}>
                     <button
                       type="button"
-                      className="btn btn-link p-0 fw-semibold text-decoration-none lab2-sort-button"
+                      className="btn btn-link p-0 text-decoration-none lab2-sort-button"
                       aria-label={`Sort by Last Updated${sort === "updatedAt" ? `, currently ${sortState("updatedAt")}` : ""}`}
                       onClick={() => applySort("updatedAt")}
                     >
-                      Last Updated <span aria-hidden="true">{sortGlyph("updatedAt")}</span>
+                      <span className="lab2-sort-label">Last Updated</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("updatedAt")}</span>
                     </button>
                   </th>
                 </tr>
@@ -333,15 +372,18 @@ export default function MyTickets() {
                         {t.ticketNumber as string}
                       </Link>
                     </td>
-                    <td>{t.summary as string}</td>
-                    <td>{(t.category as { name: string })?.name}</td>
+                    <td className="lab2-date-cell">{t.ticketDate ? formatBangkok(t.ticketDate as string) : "—"}</td>
+                    <td className="lab2-summary-cell">
+                      <div className="lab2-summary-clamp">{t.summary as string}</div>
+                    </td>
+                    <td className="lab2-category-cell">{(t.category as { name: string })?.name}</td>
                     <td>
                       <PriorityBadge value={t.requestedPriority as string} />
                     </td>
                     <td>
                       <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
                     </td>
-                    <td>{formatBangkok(t.updatedAt as string)}</td>
+                    <td className="lab2-date-cell">{formatBangkok(t.updatedAt as string)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -353,6 +395,7 @@ export default function MyTickets() {
             <div className="d-flex flex-wrap gap-2 mb-2" role="group" aria-label="Mobile ticket sorting">
               {([
                 ["ticketNumber", "Ticket Number"],
+                ["ticketDate", "Created"],
                 ["requestedPriority", "Requested Priority"],
                 ["updatedAt", "Last Updated"],
               ] as const).map(([field, label]) => (
@@ -379,12 +422,13 @@ export default function MyTickets() {
                     {t.ticketNumber as string}
                   </Link>
                 </div>
+                <div className="small text-secondary">Created: {t.ticketDate ? formatBangkok(t.ticketDate as string) : "—"}</div>
                 <div>{t.summary as string}</div>
                 <div className="small text-secondary">
                   {(t.category as { name: string })?.name} • <PriorityBadge value={t.requestedPriority as string} /> •{" "}
                   <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
                 </div>
-                <div className="small text-secondary">{formatBangkok(t.updatedAt as string)}</div>
+                <div className="small text-secondary">Last Updated: {formatBangkok(t.updatedAt as string)}</div>
               </div>
             ))}
           </div>

@@ -183,7 +183,7 @@ test("VISUAL-01 captures the ui-spec loading, validation, submitting, success, f
   await expect(page.getByText("You have not created any tickets yet")).toBeVisible();
   await captureState(page, "empty");
 
-  await page.getByLabel("Search tickets").fill("no visual match");
+  await page.getByLabel("Search", { exact: true }).fill("no visual match");
   await expect(page.getByText("No tickets match your search or filters")).toBeVisible();
   await captureState(page, "no-results");
   await page.unroute(listPredicate);
