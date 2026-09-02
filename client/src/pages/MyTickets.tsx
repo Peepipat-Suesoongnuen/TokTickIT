@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { listTickets, fetchCategories, Category } from "../api";
 import { useRequester } from "../contexts/RequesterContext";
 
@@ -34,6 +34,7 @@ function StatusBadge({ value }: { value: string }) {
 
 export default function MyTickets() {
   const { requester } = useRequester();
+  const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [categoryError, setCategoryError] = useState("");
@@ -54,6 +55,12 @@ export default function MyTickets() {
   const categoryRequestSequence = useRef(0);
 
   const isFiltered = debouncedSearch !== "" || categoryId !== "" || priority !== "";
+  const hasResettableState =
+    search.trim() !== "" ||
+    categoryId !== "" ||
+    priority !== "" ||
+    sort !== "updatedAt" ||
+    order !== "desc";
 
   // debounce search 300ms
   useEffect(() => {
@@ -150,28 +157,56 @@ export default function MyTickets() {
 
   const clearFilters = () => {
     setSearch("");
+    setDebouncedSearch("");
     setCategoryId("");
     setPriority("");
     setSort("updatedAt");
     setOrder("desc");
+    setPage(1);
+  };
+
+  const applySort = (field: "ticketNumber" | "requestedPriority" | "updatedAt") => {
+    setPage(1);
+    if (sort === field) {
+      setOrder((current) => (current === "desc" ? "asc" : "desc"));
+      return;
+    }
+    setSort(field);
+    setOrder("desc");
+  };
+
+  const sortState = (field: "ticketNumber" | "requestedPriority" | "updatedAt") =>
+    sort === field ? (order === "asc" ? "ascending" : "descending") : "none";
+
+  const sortGlyph = (field: "ticketNumber" | "requestedPriority" | "updatedAt") =>
+    sort === field ? (order === "asc" ? "↑" : "↓") : "↕";
+
+  const openTicketFromContainer = (event: React.MouseEvent<HTMLElement>, ticketId: number) => {
+    if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return;
+    navigate(`/tickets/${ticketId}`);
   };
 
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-3 lab2-mobile-stack">
         <h2 className="h4 mb-0">My Tickets</h2>
-        <a className="btn btn-success btn-zen-primary" href="/create">
-          Create Ticket
-        </a>
+        <div className="d-flex gap-2 lab2-mobile-stack">
+          <button className="btn btn-outline-success" type="button" onClick={clearFilters} disabled={!hasResettableState}>
+            Clear Filters
+          </button>
+          <Link className="btn btn-success btn-zen-primary" to="/create">
+            Create Ticket
+          </Link>
+        </div>
       </div>
 
       {/* Toolbar */}
       <div className="card mb-3 p-3">
         <div className="row g-2">
-          <div className="col-md-4">
+          <div className="col-md-6">
             <input
               className="form-control"
-              placeholder="Search summary or description…"
+              placeholder="Search ticket number or summary…"
               aria-label="Search tickets"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -197,19 +232,6 @@ export default function MyTickets() {
             </select>
           </div>
           <div className="col-md-2">
-            <select className="form-select" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort field">
-              <option value="updatedAt">Last Updated</option>
-              <option value="ticketDate">Ticket Date</option>
-              <option value="requestedPriority">Priority</option>
-            </select>
-          </div>
-          <div className="col-md-1">
-            <select className="form-select" value={order} onChange={(e) => setOrder(e.target.value)} aria-label="Sort order">
-              <option value="desc">Desc</option>
-              <option value="asc">Asc</option>
-            </select>
-          </div>
-          <div className="col-md-1">
             <select className="form-select" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} aria-label="Page size">
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -217,11 +239,6 @@ export default function MyTickets() {
             </select>
           </div>
         </div>
-        {isFiltered && (
-          <button className="btn btn-outline-success btn-sm mt-2" onClick={clearFilters}>
-            Clear Filters
-          </button>
-        )}
       </div>
 
       {categoryError && (
@@ -269,19 +286,53 @@ export default function MyTickets() {
             <table className="table table-hover align-middle">
               <thead>
                 <tr>
-                  <th>Ticket Number</th>
+                  <th aria-sort={sortState("ticketNumber")}>
+                    <button
+                      type="button"
+                      className="btn btn-link p-0 fw-semibold text-decoration-none lab2-sort-button"
+                      aria-label={`Sort by Ticket Number${sort === "ticketNumber" ? `, currently ${sortState("ticketNumber")}` : ""}`}
+                      onClick={() => applySort("ticketNumber")}
+                    >
+                      Ticket Number <span aria-hidden="true">{sortGlyph("ticketNumber")}</span>
+                    </button>
+                  </th>
                   <th>Summary</th>
                   <th>Category</th>
-                  <th>Priority</th>
+                  <th aria-sort={sortState("requestedPriority")}>
+                    <button
+                      type="button"
+                      className="btn btn-link p-0 fw-semibold text-decoration-none lab2-sort-button"
+                      aria-label={`Sort by Requested Priority${sort === "requestedPriority" ? `, currently ${sortState("requestedPriority")}` : ""}`}
+                      onClick={() => applySort("requestedPriority")}
+                    >
+                      Requested Priority <span aria-hidden="true">{sortGlyph("requestedPriority")}</span>
+                    </button>
+                  </th>
                   <th>Status</th>
-                  <th>Last Updated</th>
-                  <th></th>
+                  <th aria-sort={sortState("updatedAt")}>
+                    <button
+                      type="button"
+                      className="btn btn-link p-0 fw-semibold text-decoration-none lab2-sort-button"
+                      aria-label={`Sort by Last Updated${sort === "updatedAt" ? `, currently ${sortState("updatedAt")}` : ""}`}
+                      onClick={() => applySort("updatedAt")}
+                    >
+                      Last Updated <span aria-hidden="true">{sortGlyph("updatedAt")}</span>
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {data.map((t) => (
-                  <tr key={t.id as number}>
-                    <td>{t.ticketNumber as string}</td>
+                  <tr
+                    key={t.id as number}
+                    className="lab2-ticket-row"
+                    onClick={(event) => openTicketFromContainer(event, t.id as number)}
+                  >
+                    <td>
+                      <Link className="fw-semibold text-success" to={`/tickets/${t.id as number}`}>
+                        {t.ticketNumber as string}
+                      </Link>
+                    </td>
                     <td>{t.summary as string}</td>
                     <td>{(t.category as { name: string })?.name}</td>
                     <td>
@@ -291,11 +342,6 @@ export default function MyTickets() {
                       <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
                     </td>
                     <td>{formatBangkok(t.updatedAt as string)}</td>
-                    <td>
-                      <Link className="btn btn-outline-success btn-sm" to={`/tickets/${t.id as number}`}>
-                        Open
-                      </Link>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -304,18 +350,41 @@ export default function MyTickets() {
 
           {/* Mobile cards */}
           <div className="d-md-none">
+            <div className="d-flex flex-wrap gap-2 mb-2" role="group" aria-label="Mobile ticket sorting">
+              {([
+                ["ticketNumber", "Ticket Number"],
+                ["requestedPriority", "Requested Priority"],
+                ["updatedAt", "Last Updated"],
+              ] as const).map(([field, label]) => (
+                <button
+                  key={field}
+                  type="button"
+                  className={`btn btn-sm ${sort === field ? "btn-success" : "btn-outline-success"}`}
+                  aria-label={`Sort mobile by ${label}${sort === field ? `, currently ${sortState(field)}` : ""}`}
+                  aria-pressed={sort === field}
+                  onClick={() => applySort(field)}
+                >
+                  {label} <span aria-hidden="true">{sortGlyph(field)}</span>
+                </button>
+              ))}
+            </div>
             {data.map((t) => (
-              <div key={t.id as number} className="card mb-2 p-3 lab2-ticket-card">
-                <div className="fw-bold">{t.ticketNumber as string}</div>
+              <div
+                key={t.id as number}
+                className="card mb-2 p-3 lab2-ticket-card lab2-ticket-row"
+                onClick={(event) => openTicketFromContainer(event, t.id as number)}
+              >
+                <div className="fw-bold">
+                  <Link className="text-success" to={`/tickets/${t.id as number}`}>
+                    {t.ticketNumber as string}
+                  </Link>
+                </div>
                 <div>{t.summary as string}</div>
                 <div className="small text-secondary">
                   {(t.category as { name: string })?.name} • <PriorityBadge value={t.requestedPriority as string} /> •{" "}
                   <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
                 </div>
                 <div className="small text-secondary">{formatBangkok(t.updatedAt as string)}</div>
-                <Link className="btn btn-outline-success btn-sm mt-2" to={`/tickets/${t.id as number}`}>
-                  Open
-                </Link>
               </div>
             ))}
           </div>

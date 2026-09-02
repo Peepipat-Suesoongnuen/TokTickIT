@@ -162,6 +162,26 @@ textarea:focus-visible {
   border-color: var(--zen-border);
 }
 
+.lab2-ticket-row {
+  cursor: pointer;
+}
+
+.lab2-ticket-row:hover {
+  background: var(--zen-pale);
+}
+
+.table .lab2-ticket-row:hover > * {
+  background: var(--zen-pale);
+}
+
+.lab2-sort-button {
+  color: var(--zen-text) !important;
+}
+
+.lab2-sort-button:hover {
+  color: var(--zen-secondary) !important;
+}
+
 @media (max-width: 767.98px) {
   .lab2-nav-toggle {
     display: inline-flex;

@@ -31,6 +31,7 @@ function deferred<T>() {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  window.history.pushState({}, "", "/my-tickets");
 });
 
 afterEach(() => {
@@ -126,7 +127,7 @@ describe("MyTickets", () => {
 
       renderWithProviders();
 
-      const searchInput = screen.getByPlaceholderText("Search summary or description…");
+      const searchInput = screen.getByPlaceholderText("Search ticket number or summary…");
       await userEvent.type(searchInput, "laptop");
 
       await waitFor(() => {
@@ -159,27 +160,37 @@ describe("MyTickets", () => {
       });
     });
 
-    it("clears filters when Clear Filters is clicked", async () => {
+    it("keeps top Clear Filters beside Create Ticket and resets filters/sort without changing page size (UI-25)", async () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([{ id: 1, name: "Hardware" }]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
-        data: [],
-        meta: { page: 1, pageSize: 10, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+        data: mockTickets,
+        meta: { page: 1, pageSize: 10, totalCount: 2, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
       });
 
       renderWithProviders();
 
-      const searchInput = screen.getByPlaceholderText("Search summary or description…");
+      const searchInput = screen.getByPlaceholderText("Search ticket number or summary…");
+      const clear = screen.getByRole("button", { name: "Clear Filters" });
+      const create = screen.getByRole("link", { name: "Create Ticket" });
+      expect(clear.parentElement).toBe(create.parentElement);
+      expect(clear).toBeDisabled();
+
+      const pageSize = screen.getByRole("combobox", { name: /page size/i });
+      await userEvent.selectOptions(pageSize, "20");
+      expect(clear).toBeDisabled();
+
       await userEvent.type(searchInput, "test");
 
-      // Need to trigger a filter first to show the Clear Filters button
       const categorySelect = screen.getByRole("combobox", { name: /category/i });
       await userEvent.selectOptions(categorySelect, "1");
+      await userEvent.click(screen.getByRole("button", { name: /Sort by Ticket Number/i }));
+      expect(clear).toBeEnabled();
+      await userEvent.click(clear);
 
-      // Get the first Clear Filters button (toolbar)
-      const clearButtons = screen.getAllByRole("button", { name: "Clear Filters" });
-      await userEvent.click(clearButtons[0]);
-
-      expect(screen.getByPlaceholderText("Search summary or description…")).toHaveValue("");
+      expect(screen.getByPlaceholderText("Search ticket number or summary…")).toHaveValue("");
+      expect(categorySelect).toHaveValue("");
+      expect(pageSize).toHaveValue("20");
+      expect(screen.getByRole("columnheader", { name: /Last Updated/i })).toHaveAttribute("aria-sort", "descending");
     });
   });
 
@@ -217,7 +228,7 @@ describe("MyTickets", () => {
       // Wait for initial load to complete
       await waitFor(() => expect(listSpy).toHaveBeenCalledTimes(1));
 
-      const searchInput = screen.getByPlaceholderText("Search summary or description…");
+      const searchInput = screen.getByPlaceholderText("Search ticket number or summary…");
       await userEvent.type(searchInput, "lap");
 
       // Should not call API immediately (debounce)
@@ -228,6 +239,28 @@ describe("MyTickets", () => {
         expect(listSpy).toHaveBeenCalledTimes(2);
         expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ search: "lap" }));
       }, { timeout: 2000 });
+    }, 10000);
+
+    it("does not restore a stale debounced search after Clear Filters", async () => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      const listSpy = vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: [],
+        meta: { page: 1, pageSize: 10, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+      await waitFor(() => expect(listSpy).toHaveBeenCalledTimes(1));
+
+      const searchInput = screen.getByPlaceholderText("Search ticket number or summary…");
+      await userEvent.type(searchInput, "stale-term");
+      await userEvent.click(screen.getByRole("button", { name: "Clear Filters" }));
+      expect(searchInput).toHaveValue("");
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+      });
+
+      expect(listSpy).not.toHaveBeenCalledWith(expect.objectContaining({ search: "stale-term" }));
     }, 10000);
   });
 
@@ -268,18 +301,21 @@ describe("MyTickets", () => {
       renderWithProviders();
 
       await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
-      expect(screen.getByPlaceholderText("Search summary or description…")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Search ticket number or summary…")).toBeInTheDocument();
       expect(screen.getByLabelText("Search tickets")).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: /category/i })).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: /priority/i })).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: /sort field/i })).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: /sort order/i })).toBeInTheDocument();
+      expect(screen.queryByRole("combobox", { name: /sort field/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("combobox", { name: /sort order/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("columnheader", { name: /Ticket Number/i })).toHaveAttribute("aria-sort", "none");
+      expect(screen.getByRole("columnheader", { name: /Requested Priority/i })).toHaveAttribute("aria-sort", "none");
+      expect(screen.getByRole("columnheader", { name: /Last Updated/i })).toHaveAttribute("aria-sort", "descending");
       expect(screen.getByRole("combobox", { name: /page size/i })).toBeInTheDocument();
       expect(screen.getByRole("navigation", { name: /pagination/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /go to page 3/i })).toBeInTheDocument();
     });
 
-    it("shows Open link to Ticket Detail (Issue 10 enabled)", async () => {
+    it("removes the Action column, keeps Ticket Number as a detail link, and supports row navigation (UI-25)", async () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
         data: [
@@ -291,9 +327,36 @@ describe("MyTickets", () => {
       renderWithProviders();
 
       await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
-      const opens = screen.getAllByRole("link", { name: "Open" });
-      expect(opens.length).toBeGreaterThan(0);
-      expect(opens[0].getAttribute("href")).toBe("/tickets/1");
+      expect(screen.queryByRole("columnheader", { name: "Action" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
+      const ticketLinks = screen.getAllByRole("link", { name: "2608-0001" });
+      expect(ticketLinks.length).toBeGreaterThanOrEqual(1);
+      expect(ticketLinks[0]).toHaveAttribute("href", "/tickets/1");
+
+      const desktopRow = screen.getAllByText("2608-0001")[0].closest("tr");
+      expect(desktopRow).not.toBeNull();
+      await userEvent.click(desktopRow!);
+      expect(window.location.pathname).toBe("/tickets/1");
+    });
+
+    it("uses sortable headers to update sort/order query state (UI-25)", async () => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      const listSpy = vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: mockTickets,
+        meta: { page: 1, pageSize: 10, totalCount: 2, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+      await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
+
+      const ticketNumberSort = screen.getByRole("button", { name: /Sort by Ticket Number/i });
+      await userEvent.click(ticketNumberSort);
+      await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "ticketNumber", order: "desc" })));
+      await waitFor(() => expect(screen.getByRole("columnheader", { name: /Ticket Number/i })).toHaveAttribute("aria-sort", "descending"));
+
+      await userEvent.click(screen.getByRole("button", { name: /Sort by Ticket Number/i }));
+      await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "ticketNumber", order: "asc" })));
+      await waitFor(() => expect(screen.getByRole("columnheader", { name: /Ticket Number/i })).toHaveAttribute("aria-sort", "ascending"));
     });
 
     it("retries loading on Retry click (UI-09)", async () => {

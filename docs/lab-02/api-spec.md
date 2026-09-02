@@ -156,10 +156,10 @@ Paginated list of the selected requester's own Tickets (FR-07, BR-19).
 | Name | Rules |
 |---|---|
 | `requesterId` | required; positive integer |
-| `search` | optional string; **case-insensitive partial match on `summary` OR `description`** (BR-19). The value is trimmed before matching; a value that is empty after trimming is invalid → 400 |
+| `search` | optional string; **case-insensitive partial match on `ticketNumber` OR `summary`** (BR-19). Description is not searched. The value is trimmed before matching; a value that is empty after trimming is invalid → 400 |
 | `categoryId` | optional filter; must reference an existing **active** category; inactive or unknown ids → 400 |
 | `requestedPriority` | optional filter; one of `LOW \| MEDIUM \| HIGH \| CRITICAL` |
-| `sort` | optional; one of `updatedAt` (default), `ticketDate`, `requestedPriority` |
+| `sort` | optional; one of `updatedAt` (default), `ticketDate`, `ticketNumber`, `requestedPriority` |
 | `order` | optional; `asc` \| `desc` (default `desc`) |
 | `page` | optional; integer ≥ 1 (default 1) |
 | `pageSize` | optional; one of `10` (default), `20`, `50` |
@@ -168,7 +168,7 @@ Current Status filtering is **not offered in Lab 2** — final decision: deferre
 
 A `page` value greater than `totalPages` is **not** an error: the API returns 200 with `"data": []` and valid pagination metadata.
 
-**Default sort**: `updatedAt DESC`, secondary `id DESC` (BR-21). `requestedPriority` sorts by severity rank — ASC: `LOW, MEDIUM, HIGH, CRITICAL`; DESC: `CRITICAL, HIGH, MEDIUM, LOW`.
+**Default sort**: `updatedAt DESC`, secondary `id DESC` (BR-21). `requestedPriority` sorts by severity rank — ASC: `LOW, MEDIUM, HIGH, CRITICAL`; DESC: `CRITICAL, HIGH, MEDIUM, LOW`. `ticketNumber` uses the fixed-width `{YY}{MM}-{4 digits}` format, so database string ordering matches chronological/sequence ordering within that format.
 
 **200 Response**
 ```json

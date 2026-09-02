@@ -200,7 +200,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     }
 
     // sort
-    const allowedSort = new Set(["updatedAt", "ticketDate", "requestedPriority"]);
+    const allowedSort = new Set(["updatedAt", "ticketDate", "ticketNumber", "requestedPriority"]);
     const sortField = sort ?? "updatedAt";
     if (!allowedSort.has(sortField)) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { sort: "Invalid sort field." });
@@ -232,8 +232,8 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     if (requestedPriority !== undefined) (where as Record<string, unknown>).requestedPriority = requestedPriority;
     if (searchTrim !== undefined) {
       (where as Record<string, unknown>).OR = [
+        { ticketNumber: { contains: searchTrim, mode: "insensitive" } },
         { summary: { contains: searchTrim, mode: "insensitive" } },
-        { description: { contains: searchTrim, mode: "insensitive" } },
       ];
     }
 
