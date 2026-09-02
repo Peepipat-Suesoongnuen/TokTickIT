@@ -25,6 +25,7 @@ function renderDetail(initialPath = "/tickets/1") {
       <RequesterProvider>
         <Routes>
           <Route path="/tickets/:id" element={<TicketDetail />} />
+          <Route path="/my-tickets" element={<div>My Tickets destination</div>} />
         </Routes>
       </RequesterProvider>
     </MemoryRouter>
@@ -61,6 +62,29 @@ afterEach(() => {
 });
 
 describe("RequesterTicketDetail", () => {
+  it("UI-26 shows top-right Back to My Tickets and navigation does not mutate Ticket or Attachments", async () => {
+    vi.spyOn(api, "getTicketDetail").mockResolvedValue(baseTicket);
+    const uploadSpy = vi.spyOn(api, "uploadAttachment");
+    const downloadSpy = vi.spyOn(api, "downloadAttachment");
+    const removeSpy = vi.spyOn(api, "removeAttachment");
+
+    renderDetail();
+    await waitFor(() => expect(screen.getByText(`Ticket ${baseTicket.ticketNumber}`)).toBeInTheDocument());
+
+    const heading = screen.getByRole("heading", { name: `Ticket ${baseTicket.ticketNumber}` });
+    const back = screen.getByRole("link", { name: "Back to My Tickets" });
+    expect(back).toHaveAttribute("href", "/my-tickets");
+    const headingRow = back.closest(".lab2-screen-heading");
+    expect(headingRow).toContainElement(heading);
+    expect(headingRow).toHaveClass("justify-content-between", "align-items-center", "lab2-mobile-stack");
+
+    await userEvent.click(back);
+    expect(await screen.findByText("My Tickets destination")).toBeInTheDocument();
+    expect(uploadSpy).not.toHaveBeenCalled();
+    expect(downloadSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
+  });
+
   it("shows loading skeleton while fetching", async () => {
     const d = deferred<any>();
     vi.spyOn(api, "getTicketDetail").mockReturnValue(d.promise);

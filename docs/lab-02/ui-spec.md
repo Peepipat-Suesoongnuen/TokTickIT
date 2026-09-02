@@ -75,7 +75,8 @@ Layout order (desktop):
 4. **Attachments** section: file picker accepting `.jpg/.jpeg/.png/.webp/.pdf`; per-file list showing name + size + upload state; helper text "JPG, PNG, WEBP or PDF, up to 5 MB each, max 5 files".
 
    **Invalid selected file** — remains visible in the local file list with an error message explaining the rejected type or size. The invalid file is **not submitted for upload**; the entry is dismissible and does not count toward the active-attachment limit.
-5. **Actions row** bottom: Submit Ticket (primary, busy state while processing BR-12), Cancel/Clear (secondary).
+5. **Screen heading/navigation**: `Create Ticket` heading on the left and **Back to My Tickets** (secondary outlined link to `/my-tickets`) on the top right, immediately above the read-only panel. On mobile this heading/action row may stack without horizontal overflow. The Back action is navigation only and must not submit the form.
+6. **Actions row** bottom: Submit Ticket (primary, busy state while processing BR-12) + Clear (secondary). `Back to My Tickets` is not duplicated in this bottom form-action row.
 
 States:
 - Initial — empty form, reference data loaded, no messages.
@@ -110,6 +111,8 @@ States: loading (spinner/skeleton); empty ("You have not created any tickets yet
 
 ### 5.4 Requester Ticket Detail Screen (View Mode)
 All ticket header information rendered **read-only** (read-only field styling): Ticket Number, Ticket Date, Requester, Category, Related System, Summary, Description (full width), Requested Priority badge, Current Status badge. No edit affordances; no comments/internal notes/actions/status-change controls (Scope exclusion).
+
+Screen heading/navigation: `Ticket {ticketNumber}` on the left and **Back to My Tickets** (secondary outlined real link to `/my-tickets`) on the top right above the read-only Ticket card. The control is navigation only; it does not edit/delete the Ticket or mutate Attachments. On narrow mobile widths the heading/action row may stack cleanly. The existing 404/not-owned safe state also retains its Back-to-My-Tickets route.
 
 **Attachment section** (visually separated card): list rows with name, size, uploaded date, and state-dependent actions:
 

@@ -101,7 +101,12 @@ export default function TicketDetail() {
 
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <h1 className="h4">Ticket {ticket.ticketNumber}</h1>
+      <div className="d-flex justify-content-between align-items-center gap-2 mb-3 lab2-mobile-stack lab2-screen-heading">
+        <h1 className="h4 mb-0">Ticket {ticket.ticketNumber}</h1>
+        <Link className="btn btn-outline-success" to="/my-tickets">
+          Back to My Tickets
+        </Link>
+      </div>
       <div className="card mb-3">
         <div className="card-body">
           <div className="row g-3">

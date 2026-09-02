@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchCategories, fetchRelatedSystems, createTicket, uploadAttachment, Category, RelatedSystem } from "../api";
 import { useRequester } from "../contexts/RequesterContext";
 import { trimValue, isSummaryValid, isDescriptionValid, ALLOWED_PRIORITIES } from "../lib/validation";
@@ -164,7 +165,12 @@ export default function CreateTicket() {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <h2 className="h4 mb-3">Create Ticket</h2>
+      <div className="d-flex justify-content-between align-items-center gap-2 mb-3 lab2-mobile-stack lab2-screen-heading">
+        <h2 className="h4 mb-0">Create Ticket</h2>
+        <Link className="btn btn-outline-success" to="/my-tickets">
+          Back to My Tickets
+        </Link>
+      </div>
 
       {/* Read-only panel */}
       <div className="card mb-3 lab2-surface">

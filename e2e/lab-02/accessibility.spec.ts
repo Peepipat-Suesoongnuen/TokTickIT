@@ -216,6 +216,12 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   await page.keyboard.type("Keyboard entered summary");
   await expect(summary).toHaveValue("Keyboard entered summary");
 
+  const createBack = page.getByRole("link", { name: "Back to My Tickets" });
+  await resetKeyboardFocus(page);
+  await tabTo(page, createBack);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/my-tickets$/);
+
   // Ticket Detail: read-only data and attachment controls expose accessible names and keyboard focus.
   await page.goto(`/tickets/${ticket.id}`);
   await expect(page.getByLabel("Ticket Number")).toHaveValue(ticket.ticketNumber);
@@ -256,4 +262,10 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expectVisibleFocus(removeButton);
+
+  const detailBack = page.getByRole("link", { name: "Back to My Tickets" });
+  await resetKeyboardFocus(page);
+  await tabTo(page, detailBack);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/my-tickets$/);
 });
