@@ -93,7 +93,7 @@ export default function TicketDetail() {
 
   if (loading) return <p className="text-secondary">Loading ticket…</p>;
   if (notFound) return <div><p>Ticket not found</p><Link to="/my-tickets">Back to My Tickets</Link></div>;
-  if (error) return <div><div className="alert alert-danger">{error}</div><button className="btn btn-outline-secondary" onClick={load}>Retry</button></div>;
+  if (error) return <div><div className="alert alert-danger" role="alert" aria-live="polite">{error}</div><button className="btn btn-outline-success" onClick={load}>Retry</button></div>;
   if (!ticket) return null;
 
   const activeCount = ticket.attachments.filter((a) => !a.removedAt).length;
@@ -105,43 +105,43 @@ export default function TicketDetail() {
       <div className="card mb-3">
         <div className="card-body">
           <div className="row g-3">
-            <div className="col-md-4">
+            <div className="col-md-6 col-lg-4">
               <label className="form-label">Ticket Number</label>
-              <input className="form-control" value={ticket.ticketNumber} readOnly style={{ backgroundColor: "#EEF3EF" }} />
+              <input className="form-control form-readonly" value={ticket.ticketNumber} readOnly aria-label="Ticket Number" />
             </div>
-            <div className="col-md-4">
+            <div className="col-md-6 col-lg-4">
               <label className="form-label">Ticket Date</label>
-              <input className="form-control" value={formatBangkok(ticket.ticketDate)} readOnly style={{ backgroundColor: "#EEF3EF" }} aria-label="Ticket Date" />
+              <input className="form-control form-readonly" value={formatBangkok(ticket.ticketDate)} readOnly aria-label="Ticket Date" />
             </div>
-            <div className="col-md-4">
+            <div className="col-md-6 col-lg-4">
               <label className="form-label">Requester</label>
-              <input className="form-control" value={ticket.requester.name} readOnly style={{ backgroundColor: "#EEF3EF" }} />
+              <input className="form-control form-readonly" value={ticket.requester.name} readOnly aria-label="Requester" />
             </div>
             <div className="col-md-6">
               <label className="form-label">Category</label>
-              <input className="form-control" value={ticket.category.name} readOnly style={{ backgroundColor: "#EEF3EF" }} />
+              <input className="form-control form-readonly" value={ticket.category.name} readOnly aria-label="Category" />
             </div>
             <div className="col-md-6">
               <label className="form-label">Related System</label>
-              <input className="form-control" value={ticket.relatedSystem.name} readOnly style={{ backgroundColor: "#EEF3EF" }} />
+              <input className="form-control form-readonly" value={ticket.relatedSystem.name} readOnly aria-label="Related System" />
             </div>
             <div className="col-12">
               <label className="form-label">Summary</label>
-              <input className="form-control" value={ticket.summary} readOnly style={{ backgroundColor: "#EEF3EF" }} />
+              <input className="form-control form-readonly" value={ticket.summary} readOnly aria-label="Summary" />
             </div>
             <div className="col-12">
               <label className="form-label">Description</label>
-              <textarea className="form-control" value={ticket.description} readOnly rows={4} style={{ backgroundColor: "#EEF3EF" }} />
+              <textarea className="form-control form-readonly" value={ticket.description} readOnly rows={4} aria-label="Description" />
             </div>
             <div className="col-md-6">
-              <span className={`badge ${ticket.requestedPriority === "LOW" ? "bg-light text-secondary border" : ticket.requestedPriority === "MEDIUM" ? "bg-success" : ticket.requestedPriority === "HIGH" ? "bg-warning text-dark" : "bg-danger"}`}>{ticket.requestedPriority}</span>
-              <span className="badge ms-2" style={{ backgroundColor: "#EAF6EF", color: "#006B3C" }}>{ticket.currentStatus}</span>
+              <span className={`badge badge-priority-${ticket.requestedPriority.toLowerCase()}`}>{ticket.requestedPriority}</span>
+              <span className={`badge ms-2 ${ticket.currentStatus === "NEW" ? "badge-status-new" : ""}`}>{ticket.currentStatus}</span>
             </div>
           </div>
         </div>
       </div>
-      {uploadError ? <div className="alert alert-danger">{uploadError}</div> : null}
-      {attachmentError ? <div className="alert alert-warning">{attachmentError}</div> : null}
+      {uploadError ? <div className="alert alert-danger" role="alert" aria-live="polite">{uploadError}</div> : null}
+      {attachmentError ? <div className="alert alert-warning" role="alert" aria-live="polite">{attachmentError}</div> : null}
       <AttachmentSection attachments={ticket.attachments} onDownload={handleDownload} onRemove={handleRemove} onRetry={load} onUpload={handleUpload} canUpload={canUpload} />
     </div>
   );

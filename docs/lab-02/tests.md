@@ -1,6 +1,6 @@
 # Lab 2 Test Plan and Results — TokTickIT Requester Ticketing
 
-Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document describes the planned TDD evidence for the next implementation issues; Lab 2 test files for My Tickets (Issue 9) have been added in this PR as feature-branch evidence (see §6), but rows remain `Planned` until the final `main` green run.
+Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document keeps the original planned-test contract and records feature-branch evidence as implementation progresses (see §6). Rows remain `Planned` until the final `main` green run, even when the corresponding automated test already exists and is green on a feature branch or `lab2-staging`.
 
 **Status key:** `Planned` while on the feature branch (failing-first TDD). A row becomes `Pass` **only after a green run on the final `main` branch** — never from a feature-branch run alone.
 
@@ -36,7 +36,7 @@ Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec
 | API-04 | API | AC-01 | POST valid ticket | 201; backend-generated number; status NEW; saved values returned from DB | server/tests/lab-02/create-ticket.api.test.ts | Planned |
 | API-05 | API | AC-02, AC-03 | Summary/description out-of-bounds (min & max) | 400 + fieldErrors with documented copy | server/tests/lab-02/create-ticket.api.test.ts | Planned |
 | API-06 | API | AC-04 | Invalid categoryId / relatedSystemId / requestedPriority | 400 for each case | server/tests/lab-02/create-ticket.api.test.ts | Planned |
-| API-07 | API | BR-08 | Ticket bound to submitted requesterId | Persisted requesterId matches; immutable | server/tests/lab-02/create-ticket.api.test.ts | Planned |
+| API-07 | API | BR-08 | Ticket bound to submitted requesterId | Persisted requesterId matches the submitted requester at creation | server/tests/lab-02/create-ticket.api.test.ts | Planned |
 | API-08 | API | AC-11 | Requester B lists tickets | None of Requester A's tickets appear | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-09 | API | AC-12 | Search: case-insensitive partial on summary OR description; whitespace-only value | Correct match set; whitespace-only → 400 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
 | API-10 | API | AC-13 | Filter by active categoryId and requestedPriority; reject inactive categoryId (no status filter in Lab 2) | Only matching tickets returned; inactive category → 400 | server/tests/lab-02/my-tickets.api.test.ts | Planned |
@@ -58,7 +58,7 @@ Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec
 | API-26 | API | FR-10 | Owner retrieves **metadata** of owned active attachment | 200 correct shape (originalFilename, mimeType, sizeBytes, removedAt null) | server/tests/lab-02/attachments.api.test.ts | Planned |
 | API-27 | API | FR-10 | Owner **downloads** owned active attachment | 200 binary stream; `Content-Type` = stored mime; `Content-Disposition: attachment; filename="<originalFilename>"` | server/tests/lab-02/attachments.api.test.ts | Planned |
 
-Planned manual evidence (deferred, not present in this PR): backend-stop demo for AC-25/AC-26 safe states will be captured in the submission PDF after implementation.
+Planned manual submission evidence: a backend-stop demo for AC-25/AC-26 safe states will still be captured in the final submission PDF. Automated safe-state evidence also exists through the component/API tests and `VISUAL-01` screenshots listed below.
 
 ### UI Component — `client/src/features/lab-02/tests/`
 
@@ -82,8 +82,8 @@ Planned manual evidence (deferred, not present in this PR): backend-stop demo fo
 | UI-16 | UI | AC-08 | Change Requester | Refetch of requester-specific data | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
 | UI-17 | UI | AC-07, AC-09 | Dropdown excludes inactive; empty & failure states render | States render per ui-spec §5.1 | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
 | UI-18 | UI | AC-05, BR-12 | Busy label during submit | "Submitting…" + disabled | client/src/features/lab-02/tests/CreateTicket.test.tsx | Planned |
-| UI-19 | UI | AC-28 | Keyboard navigation + visible focus + accessible labels on key screens & removal modal | All controls reachable/labeled; focus indicators present | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
-| UI-20 | UI | AC-27 | Mobile-width layout classes (jsdom proxy check) | No horizontal overflow classes/styles applied | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
+| UI-19 | UI | AC-28 | Component-level accessibility semantics/focus behavior: nav toggle aria state, first-invalid-field focus, removal modal label/Esc/focus return | Component semantics and focus behavior correct; full keyboard reachability/visible-focus evidence is `A11Y-01` | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
+| UI-20 | UI | AC-27 | Responsive proxy classes on mobile nav and Create actions | Mobile nav/stack classes applied; real-browser no-overflow evidence is `E2E-05` + `VISUAL-01` | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
 | UI-21 | UI | FR-02, FR-12 | Requester Selection loading spinner during fetch | Loading state renders before data arrives | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
 | UI-22 | UI | AC-25, FR-12 | Create Ticket reference-data loading and failure | Skeleton/spinner while loading; on failure Category/Related System stay disabled, Submit disabled, entered Summary/Description preserved (ui-spec §5.2) | client/src/features/lab-02/tests/CreateTicket.test.tsx | Planned |
 | UI-23 | UI | FR-12, AC-08, AC-25 | My Tickets loading, requester-switch race protection, and category metadata failure/Retry | Latest requester wins; stale success/failure ignored; category failure does not hide loaded tickets | client/src/features/lab-02/tests/MyTickets.test.tsx | Planned |
@@ -94,7 +94,7 @@ Planned manual evidence (deferred, not present in this PR): backend-stop demo fo
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Test File | Final |
 |---|---|---|---|---|---|---|
 | STYLE-01 | Style | ui-spec §1 | Header/primary actions use #006B3C token class | Token class present | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
-| STYLE-02 | Style | ui-spec §1 | Selected row/card pale green #EAF6EF | Token class present | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
+| STYLE-02 | Style | ui-spec §1, §4 | Selected Requester identity uses pale-green emphasis class #EAF6EF | Token class present on selected identity | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
 | STYLE-03 | Style | ui-spec §5.3 | Priority/status badge classes per value (LOW gray … CRITICAL red; NEW pale green) | Badge class mapping correct | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
 | STYLE-04 | Style | ui-spec §3 | Required-field asterisks on required labels | Asterisk element present | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
 | STYLE-05 | Style | ui-spec §3 | Read-only vs editable field class distinction | Distinct classes applied | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
@@ -110,6 +110,8 @@ Style tests provide requirement-level evidence for the Zen Green contract (ui-sp
 | E2E-03 | E2E | AC-21, AC-22 | Removal modal: first attempts Confirm with blank reason (**blocked**, AC-22), then enters valid reason and confirms removal succeeds (AC-21) | Confirm disabled while reason blank; after valid reason row becomes removed state and download action gone | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
 | E2E-04 | E2E | AC-08, AC-11 | Switch requester A↔B | Lists swap accordingly; A's tickets never appear for B | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
 | E2E-05 | E2E | AC-27 | Screenshots at 1440/900/375 into artifacts/lab-02/screenshots/ | Files written; visual checklist executable | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
+| A11Y-01 | E2E / accessibility | AC-28; ui-spec §7 | Keyboard-only Requester Selection, My Tickets, Create Ticket, Ticket Detail, and removal-modal flow | Visible enabled controls are Tab-reachable with visible focus; key controls have accessible labels and are operable; modal traps focus, closes on Esc, returns focus | e2e/lab-02/accessibility.spec.ts | Planned |
+| VISUAL-01 | Responsive / visual | ui-spec §5, §7, §9; AC-17, AC-25, AC-26, AC-27, AC-28 | Capture loading, validation, submitting, success, failure, empty, no-results, and removed-attachment states; verify mobile nav touch target and visible focus outline | State screenshots written under artifacts/lab-02/screenshots/states/ with no horizontal page scroll; nav target ≥44×44 and 2 px Zen-green focus outline | e2e/lab-02/visual-states.spec.ts | Planned |
 
 ## 3. Acceptance-Criterion Traceability Matrix (AC → Test IDs)
 
@@ -131,7 +133,7 @@ Style tests provide requirement-level evidence for the Zen Green contract (ui-sp
 | AC-14 | API-11 |
 | AC-15 | API-12 |
 | AC-16 | API-13 |
-| AC-17 | UI-07 |
+| AC-17 | UI-07, VISUAL-01 |
 | AC-18 | API-16 |
 | AC-19 | API-17, UI-13 |
 | AC-20 | API-18 |
@@ -139,10 +141,10 @@ Style tests provide requirement-level evidence for the Zen Green contract (ui-sp
 | AC-22 | API-21, UI-06, E2E-03 |
 | AC-23 | API-22, UI-12 |
 | AC-24 | API-24, API-25 |
-| AC-25 | UI-17, UI-22, UI-09, UI-24 |
-| AC-26 | UI-04 |
-| AC-27 | UI-20, E2E-05, visual checklist §4 |
-| AC-28 | UI-19 |
+| AC-25 | UI-17, UI-22, UI-09, UI-24, VISUAL-01 |
+| AC-26 | UI-04, VISUAL-01 |
+| AC-27 | UI-20, E2E-05, VISUAL-01, visual checklist §4 |
+| AC-28 | UI-19, A11Y-01, VISUAL-01 |
 
 Coverage rule satisfied: every AC maps to ≥ 1 planned automated test whose scenario actually exercises it (no broad ranges). AC-25 will additionally be evidenced by a planned manual backend-stop demo (deferred) for the PDF.
 
@@ -150,7 +152,21 @@ FR/BR coverage is recorded in the `Requirement / AC` column of the Planned Tests
 
 ## 4. Responsive and Visual Checklist
 
-To be executed against [ui-spec.md](./ui-spec.md) §9 at 1440 / 900 / 375 px widths; results will be recorded with screenshots under `artifacts/lab-02/screenshots/` (paths defined there). Checklist items: color tokens, editable/read-only distinction, asterisk + message placement, button hierarchy, badge consistency, no clipping/overlap/horizontal scroll, filter/pagination/attachment usability at all sizes, empty vs no-results distinction. This section describes planned visual evidence; screenshots will be produced during the implementation issues and are not present in this documentation-only PR.
+Issue 12 executes the checklist against [ui-spec.md](./ui-spec.md) §9. `E2E-05` regenerates the desktop/tablet/mobile screen evidence at 1440 / 900 / 375 px and asserts no horizontal page scrolling; `VISUAL-01` deterministically captures the required UI states at mobile width and performs the same horizontal-scroll assertion. The screenshots are stored under `artifacts/lab-02/screenshots/`.
+
+| Checklist item | Issue 12 feature-branch evidence |
+|---|---|
+| Zen Green colors | Central token/classes in `client/src/styles/lab2-theme.css`; `STYLE-01`/`STYLE-02` assertions; rendered screenshots inspected against ui-spec §1 |
+| Editable vs read-only fields | `.form-readonly` applied to Create Ticket/Ticket Detail system fields; `STYLE-05`; screenshots show the gray-green read-only fill distinct from white editable controls |
+| Required asterisks + validation placement | `.required-marker` + `aria-required`; `STYLE-04`; `VISUAL-01` `validation.png`; first invalid Category control receives focus |
+| Button hierarchy + busy/disabled state | Zen primary class for primary actions, Bootstrap outline/destructive variants for secondary/destructive actions; `UI-03`/`UI-18`; `VISUAL-01` `submitting.png` |
+| Priority/status badge consistency | Shared class mapping for LOW/MEDIUM/HIGH/CRITICAL and NEW across list/detail; `STYLE-03`; responsive screenshots inspected |
+| No clipping / overlap / horizontal page scroll | `E2E-05` checks all three target widths; `VISUAL-01` checks each state capture; screenshots visually inspected with no blocking clipping/overlap found |
+| Filters, pagination, attachment controls usable responsively | My Tickets uses desktop table/mobile cards; `VISUAL-01` verifies the mobile navigation target is at least 44×44; attachment input/actions remain visible in responsive/detail evidence; `A11Y-01` verifies visible enabled controls remain keyboard reachable |
+| Empty vs no-results states distinct | `UI-07`; `VISUAL-01` `empty.png` and `no-results.png` use distinct copy and CTA behavior |
+| Loading / validation / submitting / success / failure / removed state evidence | `VISUAL-01` writes all eight state images under `artifacts/lab-02/screenshots/states/` |
+
+The supplied Lab 2 Labsheet references “Figure 1” as an example Ticket UI, but the supplied PDF page contains no separate extractable/renderable figure asset between that reference and §8.3, and the repository contains no approved-illustration asset set. This checklist therefore compares the implementation against the written Labsheet layout/style rules, the version-controlled `ui-spec.md`, and the rendered screenshots actually produced by the application. It does not claim a pixel-for-pixel illustration comparison that cannot be reproduced from the supplied artifacts.
 
 ## 5. Test Commands
 
@@ -195,10 +211,13 @@ Every row's `Final` column stays **Planned** during feature-branch development (
 
 **Feature-branch evidence (Issue 11, `feature/11-e2e-responsive` @ `56fc162`):** `npm run test:e2e` — 5 passed (`E2E-01`…`E2E-05`) against dedicated `toktickit_test`; Playwright starts isolated API/UI servers on ports 3100/5174; responsive screenshots written for Create Ticket, My Tickets, and Ticket Detail at 1440/900/375 plus Requester Selection desktop; automated viewport checks assert no horizontal page scrolling. Hosted CI is verified on both the push run (`33486785881`) and pull-request run (`33486790500`) for `56fc162`: server, client, and E2E jobs all passed. The first hosted Issue 11 run exposed a 375 px Ticket Detail overflow, which was corrected by constraining the attachment file input with Bootstrap `form-control`; E2E-01 response synchronization was also made host-agnostic before the green runs. `Final` remains `Planned` until the required final `main` green run.
 
+**Feature-branch evidence (Issue 12, `feature/12-ui-style-docs`, local verification before PR handoff):** `client/src/features/lab-02/tests/ui-style.test.tsx` covers `STYLE-01`…`STYLE-05`, `UI-19`, and `UI-20`; failing-first checks exposed missing mobile navigation, first-invalid-field focus, removal-modal focus return, and a Bootstrap-specificity defect that suppressed the required visible keyboard outline. `e2e/lab-02/accessibility.spec.ts` (`A11Y-01`) exercises keyboard reachability/operability, programmatic labels, visible focus, and modal focus trapping in a real browser across the AC-28 screens. `e2e/lab-02/visual-states.spec.ts` (`VISUAL-01`) captures loading, validation, submitting, success, failure, empty, no-results, and removed-attachment screenshots under `artifacts/lab-02/screenshots/states/` and verifies the mobile nav touch target/focus outline. Latest local regression: client Vitest **48/48 passed**, server Vitest/Supertest **82/82 passed**, full Playwright **7/7 passed** (`E2E-01`…`E2E-05`, `A11Y-01`, `VISUAL-01`), client/server `tsc --noEmit` passed, both builds passed, and `git diff --check` completed without whitespace errors. Hosted CI is intentionally not claimed because the branch has not been pushed yet. `Final` remains `Planned` until final `main` verification.
+
 ## 7. Known Limitations or Deferred Tests
 
-- Asia/Bangkok display formatting uses deterministic `Intl.DateTimeFormat.formatToParts` output and is covered by the My Tickets component test; Issue 11 now produces responsive screenshots as feature-branch evidence, while the full visual checklist remains assigned to Issue 12.
-- `STYLE-01`…`STYLE-05`, `UI-19`, and `UI-20` are explicitly deferred to Issue 12 (`feature/12-ui-style-docs`), which owns Zen Green style assertions, accessibility/style checking, and the full visual checklist in ui-spec.md §9. Issue 11 covers `E2E-05` with real-browser screenshots and a no-horizontal-scroll assertion but does not claim the Issue 12 checklist is complete.
-- Pre-existing planned-test debt from Issues 7/8 is explicitly deferred to Issue 13 release integration before the final `main` verification: `UNIT-01`…`UNIT-04`, `API-01`…`API-07`, `UI-01`…`UI-05`, `UI-15`…`UI-18`, `UI-21`, and `UI-22`. These planned file paths are not present on the Issue 11 baseline (`lab2-staging` @ `3d5a75c`); Issue 11 does not silently mark them executed or `Pass`.
+- Asia/Bangkok display formatting uses deterministic `Intl.DateTimeFormat.formatToParts` output and is covered by the My Tickets component test; Issue 11 provides responsive screenshots and Issue 12 now executes the full visual checklist in §4.
+- `STYLE-01`…`STYLE-05`, `UI-19`, and `UI-20` are no longer deferred: Issue 12 adds their automated feature-branch evidence in `client/src/features/lab-02/tests/ui-style.test.tsx`. Their `Final` cells remain `Planned` solely because final-main verification has not occurred yet.
+- The earlier Create Ticket coverage debt was corrected by Issue #27 / PR #28: `API-04`…`API-07`, `API-23`, `UI-01`…`UI-05`, `UI-18`, and `UI-22` now have automated files/evidence. The API-07 expected-result wording was narrowed during Issue 12 to match what the test proves (requester binding/persistence at creation) without changing BR-08 itself.
+- Remaining pre-final planned-test debt is limited to planned files/scenarios not yet present on this branch: `UNIT-01`…`UNIT-04`, `API-01`…`API-03`, `UI-15`…`UI-17`, and `UI-21`. These stay assigned to final integration (Issue 13) unless a separate corrective issue is created first.
 - Backend idempotency keys out of scope in Lab 2 (AC-05 enforced at UI layer per api-spec §7).
-- `API-23` fault-injection coverage is explicitly deferred to Issue 13 release integration before final `main`; the planned manual backend-stop demo remains deferred for submission evidence for AC-25/AC-26.
+- The manual backend-stop demo remains deferred to the final submission evidence for AC-25/AC-26; automated failure-state evidence already exists and is not substituted for the requested manual submission demonstration.

@@ -52,9 +52,9 @@ export default function RequesterSelection() {
       )}
 
       {state === "error" && (
-        <div className="alert alert-danger" role="alert">
+        <div className="alert alert-danger" role="alert" aria-live="polite">
           <p className="mb-2">{errorMsg}</p>
-          <button className="btn btn-outline-danger btn-sm" onClick={load}>
+          <button className="btn btn-outline-success btn-sm" onClick={load}>
             Retry
           </button>
         </div>
@@ -70,13 +70,14 @@ export default function RequesterSelection() {
         <>
           <div className="mb-3">
             <label htmlFor="requester-select" className="form-label fw-semibold">
-              Development Requester <span className="text-danger">*</span>
+              Development Requester <span className="text-danger required-marker">*</span>
             </label>
             <select
               id="requester-select"
               className="form-select"
               value={selectedId ?? ""}
               onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
+              aria-required="true"
             >
               <option value="">-- Select a requester --</option>
               {requesters.map((r) => (
@@ -87,7 +88,7 @@ export default function RequesterSelection() {
             </select>
           </div>
           <button
-            className="btn btn-success w-100"
+            className="btn btn-success btn-zen-primary w-100"
             onClick={handleContinue}
             disabled={selectedId === null}
           >

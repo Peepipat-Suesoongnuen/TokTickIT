@@ -24,14 +24,12 @@ export function formatBangkok(dateStr: string): string {
 }
 
 function PriorityBadge({ value }: { value: string }) {
-  const map: Record<string, { bg: string; color: string; border?: string }> = {
-    LOW: { bg: "#f8f9fa", color: "#495057", border: "1px solid #ced4da" },
-    MEDIUM: { bg: "#EAF6EF", color: "#006B3C" },
-    HIGH: { bg: "#fff3e0", color: "#e65100" },
-    CRITICAL: { bg: "#ffebee", color: "#b71c1c" },
-  };
-  const s = map[value] ?? map.LOW;
-  return <span className="badge" style={{ backgroundColor: s.bg, color: s.color, border: s.border ?? "none" }}>{value}</span>;
+  const token = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(value) ? value.toLowerCase() : "low";
+  return <span className={`badge badge-priority-${token}`}>{value}</span>;
+}
+
+function StatusBadge({ value }: { value: string }) {
+  return <span className={`badge ${value === "NEW" ? "badge-status-new" : ""}`}>{value}</span>;
 }
 
 export default function MyTickets() {
@@ -160,9 +158,9 @@ export default function MyTickets() {
 
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      <div className="d-flex justify-content-between align-items-center mb-3 lab2-mobile-stack">
         <h2 className="h4 mb-0">My Tickets</h2>
-        <a className="btn btn-success" href="/create" style={{ backgroundColor: "#006B3C", borderColor: "#006B3C" }}>
+        <a className="btn btn-success btn-zen-primary" href="/create">
           Create Ticket
         </a>
       </div>
@@ -220,16 +218,16 @@ export default function MyTickets() {
           </div>
         </div>
         {isFiltered && (
-          <button className="btn btn-outline-secondary btn-sm mt-2" onClick={clearFilters}>
+          <button className="btn btn-outline-success btn-sm mt-2" onClick={clearFilters}>
             Clear Filters
           </button>
         )}
       </div>
 
       {categoryError && (
-        <div className="alert alert-warning d-flex justify-content-between align-items-center">
+        <div className="alert alert-warning d-flex justify-content-between align-items-center" role="alert" aria-live="polite">
           <span>{categoryError}</span>
-          <button className="btn btn-outline-secondary btn-sm" aria-label="Retry categories" onClick={() => void loadCategories(requester.id)}>
+          <button className="btn btn-outline-success btn-sm" aria-label="Retry categories" onClick={() => void loadCategories(requester.id)}>
             Retry
           </button>
         </div>
@@ -238,9 +236,9 @@ export default function MyTickets() {
       {loading && <p className="text-secondary">Loading tickets…</p>}
 
       {error && (
-        <div className="alert alert-danger d-flex justify-content-between align-items-center">
+        <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert" aria-live="polite">
           <span>{error}</span>
-          <button className="btn btn-outline-danger btn-sm" onClick={load}>
+          <button className="btn btn-outline-success btn-sm" onClick={load}>
             Retry
           </button>
         </div>
@@ -249,7 +247,7 @@ export default function MyTickets() {
       {!loading && !error && data.length === 0 && !isFiltered && (
         <div className="alert alert-info text-center">
           <p className="mb-2">You have not created any tickets yet</p>
-          <a className="btn btn-success btn-sm" href="/create" style={{ backgroundColor: "#006B3C" }}>
+          <a className="btn btn-success btn-zen-primary btn-sm" href="/create">
             Create Ticket
           </a>
         </div>
@@ -258,7 +256,7 @@ export default function MyTickets() {
       {!loading && !error && data.length === 0 && isFiltered && (
         <div className="alert alert-warning text-center">
           <p className="mb-2">No tickets match your search or filters</p>
-          <button className="btn btn-outline-secondary btn-sm" onClick={clearFilters}>
+          <button className="btn btn-outline-success btn-sm" onClick={clearFilters}>
             Clear Filters
           </button>
         </div>
@@ -290,9 +288,7 @@ export default function MyTickets() {
                       <PriorityBadge value={t.requestedPriority as string} />
                     </td>
                     <td>
-                      <span className="badge" style={{ backgroundColor: "#EAF6EF", color: "#006B3C" }}>
-                        {(t.currentStatus as string) ?? "NEW"}
-                      </span>
+                      <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
                     </td>
                     <td>{formatBangkok(t.updatedAt as string)}</td>
                     <td>
@@ -309,14 +305,12 @@ export default function MyTickets() {
           {/* Mobile cards */}
           <div className="d-md-none">
             {data.map((t) => (
-              <div key={t.id as number} className="card mb-2 p-3">
+              <div key={t.id as number} className="card mb-2 p-3 lab2-ticket-card">
                 <div className="fw-bold">{t.ticketNumber as string}</div>
                 <div>{t.summary as string}</div>
                 <div className="small text-secondary">
                   {(t.category as { name: string })?.name} • <PriorityBadge value={t.requestedPriority as string} /> •{" "}
-                  <span className="badge" style={{ backgroundColor: "#EAF6EF", color: "#006B3C" }}>
-                    {t.currentStatus as string}
-                  </span>
+                  <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
                 </div>
                 <div className="small text-secondary">{formatBangkok(t.updatedAt as string)}</div>
                 <Link className="btn btn-outline-success btn-sm mt-2" to={`/tickets/${t.id as number}`}>
@@ -328,7 +322,7 @@ export default function MyTickets() {
 
           {/* Pagination */}
           {meta && meta.totalPages > 0 && (
-            <nav className="d-flex justify-content-between align-items-center mt-3" aria-label="Pagination">
+            <nav className="d-flex justify-content-between align-items-center mt-3 lab2-pagination" aria-label="Pagination">
               <span className="text-secondary small">
                 Page {meta.page} of {meta.totalPages} • {meta.totalCount} tickets
               </span>

@@ -50,9 +50,16 @@ export default function CreateTicket() {
     if (!isDescriptionValid(description)) fe.description = "Description must contain 20–2,000 characters.";
     if (!ALLOWED_PRIORITIES.includes(priority as never)) fe.requestedPriority = "Please select a priority.";
     setFieldErrors(fe);
-    if (Object.keys(fe).length > 0) {
-      const first = document.querySelector<HTMLElement>("[data-field-error]");
-      first?.focus();
+    const firstError = Object.keys(fe)[0];
+    if (firstError) {
+      const fieldId: Record<string, string> = {
+        categoryId: "category",
+        relatedSystemId: "relatedSystem",
+        requestedPriority: "priority",
+        summary: "summary",
+        description: "description",
+      };
+      document.getElementById(fieldId[firstError])?.focus();
     }
     return Object.keys(fe).length === 0;
   };
@@ -125,8 +132,8 @@ export default function CreateTicket() {
 
   if (success) {
     return (
-      <div className="alert alert-success" role="alert" style={{ backgroundColor: "#EAF6EF", borderColor: "#0B7A46", color: "#006B3C" }}>
-        <h5 className="alert-heading">Ticket created successfully</h5>
+      <div className="alert alert-success" role="status" aria-live="polite" style={{ backgroundColor: "#EAF6EF", borderColor: "#0B7A46", color: "#006B3C" }}>
+        <h5 className="alert-heading"><span className="lab2-success-icon" aria-hidden="true">✓</span>Ticket created successfully</h5>
         <p className="mb-2">
           Official Ticket Number: <strong>{success.ticketNumber}</strong>
         </p>
@@ -140,8 +147,8 @@ export default function CreateTicket() {
             ))}
           </ul>
         ) : null}
-        <div className="d-flex gap-2">
-          <a className="btn btn-success" href="/my-tickets">
+        <div className="d-flex gap-2 lab2-mobile-stack">
+          <a className="btn btn-success btn-zen-primary" href="/my-tickets">
             View My Tickets
           </a>
           <a className="btn btn-outline-success" href={`/tickets/${success.id}`}>
@@ -160,19 +167,19 @@ export default function CreateTicket() {
       <h2 className="h4 mb-3">Create Ticket</h2>
 
       {/* Read-only panel */}
-      <div className="card mb-3" style={{ backgroundColor: "#EEF3EF" }}>
+      <div className="card mb-3 lab2-surface">
         <div className="card-body row g-3">
-          <div className="col-md-4">
+          <div className="col-md-6 col-lg-4">
             <label className="form-label fw-semibold small">Ticket Number</label>
-            <input className="form-control" value="Generated after submission" readOnly style={{ backgroundColor: "#EEF3EF" }} />
+            <input className="form-control form-readonly" value="Generated after submission" readOnly aria-label="Ticket Number" />
           </div>
-          <div className="col-md-4">
+          <div className="col-md-6 col-lg-4">
             <label className="form-label fw-semibold small">Ticket Date</label>
-            <input className="form-control" value="—" readOnly style={{ backgroundColor: "#EEF3EF" }} />
+            <input className="form-control form-readonly" value="—" readOnly aria-label="Ticket Date" />
           </div>
-          <div className="col-md-4">
+          <div className="col-md-6 col-lg-4">
             <label className="form-label fw-semibold small">Requester</label>
-            <input className="form-control" value={requester.name} readOnly style={{ backgroundColor: "#EEF3EF" }} />
+            <input className="form-control form-readonly" value={requester.name} readOnly aria-label="Requester" />
           </div>
         </div>
       </div>
@@ -180,9 +187,9 @@ export default function CreateTicket() {
       {/* Reference data loading / failure */}
       {refLoading && <p className="text-secondary">Loading reference data…</p>}
       {refError && (
-        <div className="alert alert-danger d-flex justify-content-between align-items-center">
+        <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert" aria-live="polite">
           <span>{refError}</span>
-          <button type="button" className="btn btn-outline-danger btn-sm" onClick={loadRef}>
+          <button type="button" className="btn btn-outline-success btn-sm" onClick={loadRef}>
             Retry
           </button>
         </div>
@@ -190,9 +197,9 @@ export default function CreateTicket() {
 
       {/* Classification */}
       <div className="row g-3 mb-3">
-        <div className="col-md-4">
+        <div className="col-md-6 col-lg-4">
           <label htmlFor="category" className="form-label fw-semibold">
-            Category <span className="text-danger">*</span>
+            Category <span className="text-danger required-marker">*</span>
           </label>
           <select
             id="category"
@@ -211,9 +218,9 @@ export default function CreateTicket() {
           </select>
           {fieldErrors.categoryId && <div className="invalid-feedback d-block text-danger" data-field-error>{fieldErrors.categoryId}</div>}
         </div>
-        <div className="col-md-4">
+        <div className="col-md-6 col-lg-4">
           <label htmlFor="relatedSystem" className="form-label fw-semibold">
-            Related System <span className="text-danger">*</span>
+            Related System <span className="text-danger required-marker">*</span>
           </label>
           <select
             id="relatedSystem"
@@ -232,11 +239,11 @@ export default function CreateTicket() {
           </select>
           {fieldErrors.relatedSystemId && <div className="invalid-feedback d-block text-danger" data-field-error>{fieldErrors.relatedSystemId}</div>}
         </div>
-        <div className="col-md-4">
+        <div className="col-md-6 col-lg-4">
           <label htmlFor="priority" className="form-label fw-semibold">
-            Requested Priority <span className="text-danger">*</span>
+            Requested Priority <span className="text-danger required-marker">*</span>
           </label>
-          <select id="priority" className="form-select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+          <select id="priority" className="form-select" value={priority} onChange={(e) => setPriority(e.target.value)} aria-required="true">
             {ALLOWED_PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -250,7 +257,7 @@ export default function CreateTicket() {
       {/* Summary / Description */}
       <div className="mb-3">
         <label htmlFor="summary" className="form-label fw-semibold">
-          Summary <span className="text-danger">*</span>
+          Summary <span className="text-danger required-marker">*</span>
         </label>
         <input
           id="summary"
@@ -260,22 +267,23 @@ export default function CreateTicket() {
           maxLength={120}
           aria-required="true"
         />
+        <div className="form-text">5–120 characters</div>
         {fieldErrors.summary && <div className="invalid-feedback d-block text-danger">{fieldErrors.summary}</div>}
       </div>
 
       <div className="mb-3">
         <label htmlFor="description" className="form-label fw-semibold">
-          Description <span className="text-danger">*</span>
+          Description <span className="text-danger required-marker">*</span>
         </label>
         <textarea
           id="description"
-          className={`form-control ${fieldErrors.description ? "is-invalid" : ""}`}
+          className={`form-control lab2-description ${fieldErrors.description ? "is-invalid" : ""}`}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={5}
-          style={{ resize: "vertical" }}
           aria-required="true"
         />
+        <div className="form-text">20–2,000 characters</div>
         {fieldErrors.description && <div className="invalid-feedback d-block text-danger">{fieldErrors.description}</div>}
       </div>
 
@@ -287,8 +295,8 @@ export default function CreateTicket() {
         {pendingFiles.length > 0 ? (
           <ul className="list-group mt-2">
             {pendingFiles.map((pf, idx) => (
-              <li key={idx} className={`list-group-item d-flex justify-content-between align-items-center ${pf.status === "invalid" ? "text-danger" : ""}`}>
-                <span>{pf.file.name} {pf.status === "invalid" ? `— ${pf.reason}` : `— ${(pf.file.size / 1024).toFixed(1)} KB`}</span>
+              <li key={idx} className={`list-group-item d-flex justify-content-between align-items-center lab2-attachment-row ${pf.status === "invalid" ? "text-danger" : ""}`}>
+                <span className="lab2-attachment-name">{pf.file.name} {pf.status === "invalid" ? `— ${pf.reason}` : `— ${(pf.file.size / 1024).toFixed(1)} KB`}</span>
                 <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== idx))}>
                   Dismiss
                 </button>
@@ -299,10 +307,10 @@ export default function CreateTicket() {
         {pendingFiles.filter((p) => p.status === "valid").length >= 5 ? <small className="text-warning">Maximum of 5 active attachments reached</small> : null}
       </div>
 
-      {submitError && <div className="alert alert-danger" role="alert">{submitError}</div>}
+      {submitError && <div className="alert alert-danger" role="alert" aria-live="polite">{submitError}</div>}
 
-      <div className="d-flex gap-2">
-        <button type="submit" className="btn btn-success" disabled={submitting || refLoading || !!refError} style={{ backgroundColor: "#006B3C", borderColor: "#006B3C" }}>
+      <div className="d-flex gap-2 lab2-mobile-stack">
+        <button type="submit" className="btn btn-success btn-zen-primary" disabled={submitting || refLoading || !!refError}>
           {submitting ? (
             <>
               <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Submitting…
@@ -311,7 +319,7 @@ export default function CreateTicket() {
             "Submit Ticket"
           )}
         </button>
-        <button type="button" className="btn btn-outline-secondary" onClick={() => { setSummary(""); setDescription(""); setFieldErrors({}); }}>
+        <button type="button" className="btn btn-outline-success" onClick={() => { setSummary(""); setDescription(""); setFieldErrors({}); }}>
           Clear
         </button>
       </div>

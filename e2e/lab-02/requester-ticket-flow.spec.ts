@@ -53,7 +53,7 @@ async function selectRequester(page: Page, requester: Requester) {
   await expect(page.getByLabel("Development Requester")).toBeVisible();
   await page.getByLabel("Development Requester").selectOption(String(requester.id));
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText(requester.name, { exact: true })).toBeVisible();
+  await expect(page.locator(".lab2-requester-chip")).toContainText(requester.name);
 }
 
 async function assertNoHorizontalPageScroll(page: Page) {
@@ -177,7 +177,7 @@ test("E2E-04 switching requester reloads owned tickets without cross-requester l
   await page.getByRole("button", { name: "Change Requester" }).click();
   await page.getByLabel("Development Requester").selectOption(String(requesterB.id));
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText(requesterB.name, { exact: true })).toBeVisible();
+  await expect(page.locator(".lab2-requester-chip")).toContainText(requesterB.name);
   await expectVisibleExactText(page, summaryB);
   await expect(page.getByText(summaryA, { exact: true })).toHaveCount(0);
 });
