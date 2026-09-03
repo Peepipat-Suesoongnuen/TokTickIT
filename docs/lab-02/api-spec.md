@@ -159,12 +159,13 @@ Paginated list of the selected requester's own Tickets (FR-07, BR-19).
 | `search` | optional string; **case-insensitive partial match on `ticketNumber` OR `summary`** (BR-19). Description is not searched. The value is trimmed before matching; a value that is empty after trimming is invalid → 400 |
 | `categoryId` | optional filter; must reference an existing **active** category; inactive or unknown ids → 400 |
 | `requestedPriority` | optional filter; one of `LOW \| MEDIUM \| HIGH \| CRITICAL` |
+| `currentStatus` | optional filter; Lab 2 currently supports `NEW` only |
 | `sort` | optional; one of `updatedAt` (default), `ticketDate`, `ticketNumber`, `requestedPriority` |
 | `order` | optional; `asc` \| `desc` (default `desc`) |
 | `page` | optional; integer ≥ 1 (default 1) |
 | `pageSize` | optional; one of `10` (default), `20`, `50` |
 
-Current Status filtering is **not offered in Lab 2** — final decision: deferred (all Lab 2 tickets are `NEW`; status filters arrive with the status workflow in a later lab). Unknown parameter names → 400; invalid values → 400 (strict contract, BR-20).
+Current Status filtering is offered as a read-only list filter only. Lab 2 still has no status-changing workflow and the only valid status value is `NEW`; therefore the UI exposes `All Statuses` / `NEW` without inventing additional states. Unknown parameter names → 400; invalid values → 400 (strict contract, BR-20).
 
 A `page` value greater than `totalPages` is **not** an error: the API returns 200 with `"data": []` and valid pagination metadata.
 
@@ -181,6 +182,7 @@ A `page` value greater than `totalPages` is **not** an error: the API returns 20
       "category": { "id": 2, "name": "Hardware" },
       "requestedPriority": "MEDIUM",
       "currentStatus": "NEW",
+      "ticketDate": "2026-08-25T06:00:00.000Z",
       "updatedAt": "2026-08-25T06:30:00.000Z"
     }
   ],
@@ -195,6 +197,8 @@ A `page` value greater than `totalPages` is **not** an error: the API returns 20
 }
 ```
 Search/filter apply before pagination; `totalCount` reflects the filtered result set. Empty result returns `"data": []` with valid meta (UI distinguishes empty vs no-results, BR-22).
+
+Each list item includes the official backend-generated `ticketDate` (stored in UTC) so My Tickets can display creation time in Asia/Bangkok. This is the same Ticket Date used by Ticket Detail and the existing `sort=ticketDate`; Prisma `createdAt` is not part of the requester-facing list contract.
 
 **Errors**: 400 unknown param / invalid value; 500 safe.
 

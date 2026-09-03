@@ -117,6 +117,26 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       expect(res.body.data[0].requester?.id).toBe(requesterB.id);
       expect(res.body.data.every((t: any) => t.requester?.id === requesterB.id)).toBe(true);
     });
+
+    it("should include official ticketDate in My Tickets list items (Issue 12C)", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&sort=ticketNumber&order=asc`)
+        .expect(200);
+
+      expect(res.body.data).toHaveLength(2);
+      expect(res.body.data[0]).toEqual(
+        expect.objectContaining({
+          ticketNumber: "2608-0001",
+          ticketDate: "2026-08-20T10:00:00.000Z",
+        })
+      );
+      expect(res.body.data[1]).toEqual(
+        expect.objectContaining({
+          ticketNumber: "2608-0002",
+          ticketDate: "2026-08-21T10:00:00.000Z",
+        })
+      );
+    });
   });
 
   describe("Search (AC-12)", () => {
@@ -199,6 +219,15 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
       expect(res.body.data).toHaveLength(1);
       expect(res.body.data[0].requestedPriority).toBe("CRITICAL");
+    });
+
+    it("should filter by currentStatus NEW (Issue 12C)", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&currentStatus=NEW`)
+        .expect(200);
+
+      expect(res.body.data).toHaveLength(2);
+      expect(res.body.data.every((ticket: { currentStatus: string }) => ticket.currentStatus === "NEW")).toBe(true);
     });
   });
 
@@ -382,6 +411,14 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
         .expect(400);
 
       expect(res.body.fieldErrors.requestedPriority).toBeDefined();
+    });
+
+    it("should return 400 for invalid currentStatus value", async () => {
+      const res = await request(app)
+        .get(`/api/tickets?requesterId=${requesterA.id}&currentStatus=CLOSED`)
+        .expect(400);
+
+      expect(res.body.fieldErrors.currentStatus).toBeDefined();
     });
 
     it("should return 400 for duplicate query param (AC-16)", async () => {

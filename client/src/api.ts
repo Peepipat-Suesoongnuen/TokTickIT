@@ -80,6 +80,7 @@ export interface ListTicketsParams {
   search?: string;
   categoryId?: number;
   requestedPriority?: string;
+  currentStatus?: string;
   sort?: string;
   order?: string;
   page?: number;
@@ -92,6 +93,7 @@ export async function listTickets(params: ListTicketsParams) {
   if (params.search !== undefined) qs.set("search", params.search);
   if (params.categoryId !== undefined) qs.set("categoryId", String(params.categoryId));
   if (params.requestedPriority !== undefined) qs.set("requestedPriority", params.requestedPriority);
+  if (params.currentStatus !== undefined) qs.set("currentStatus", params.currentStatus);
   if (params.sort !== undefined) qs.set("sort", params.sort);
   if (params.order !== undefined) qs.set("order", params.order);
   if (params.page !== undefined) qs.set("page", String(params.page));

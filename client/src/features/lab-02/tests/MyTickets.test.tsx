@@ -52,6 +52,7 @@ describe("MyTickets", () => {
       relatedSystem: { id: 1, name: "Email" },
       requestedPriority: "LOW",
       currentStatus: "NEW",
+      ticketDate: "2026-08-20T09:00:00.000Z",
       updatedAt: "2026-08-20T10:00:00.000Z",
     },
     {
@@ -63,6 +64,7 @@ describe("MyTickets", () => {
       relatedSystem: { id: 2, name: "VPN" },
       requestedPriority: "CRITICAL",
       currentStatus: "NEW",
+      ticketDate: "2026-08-21T09:00:00.000Z",
       updatedAt: "2026-08-21T10:00:00.000Z",
     },
   ];
@@ -160,6 +162,22 @@ describe("MyTickets", () => {
       });
     });
 
+    it("sends Current Status filter to API", async () => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      const listSpy = vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: [],
+        meta: { page: 1, pageSize: 10, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+      const statusSelect = screen.getByRole("combobox", { name: "Current Status" });
+      await userEvent.selectOptions(statusSelect, "NEW");
+
+      await waitFor(() => {
+        expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ currentStatus: "NEW" }));
+      });
+    });
+
     it("keeps top Clear Filters beside Create Ticket and resets filters/sort without changing page size (UI-25)", async () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([{ id: 1, name: "Hardware" }]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
@@ -175,7 +193,7 @@ describe("MyTickets", () => {
       expect(clear.parentElement).toBe(create.parentElement);
       expect(clear).toBeDisabled();
 
-      const pageSize = screen.getByRole("combobox", { name: /page size/i });
+      const pageSize = screen.getByRole("combobox", { name: /rows per page/i });
       await userEvent.selectOptions(pageSize, "20");
       expect(clear).toBeDisabled();
 
@@ -183,12 +201,15 @@ describe("MyTickets", () => {
 
       const categorySelect = screen.getByRole("combobox", { name: /category/i });
       await userEvent.selectOptions(categorySelect, "1");
+      const statusSelect = screen.getByRole("combobox", { name: "Current Status" });
+      await userEvent.selectOptions(statusSelect, "NEW");
       await userEvent.click(screen.getByRole("button", { name: /Sort by Ticket Number/i }));
       expect(clear).toBeEnabled();
       await userEvent.click(clear);
 
       expect(screen.getByPlaceholderText("Search ticket number or summary…")).toHaveValue("");
       expect(categorySelect).toHaveValue("");
+      expect(statusSelect).toHaveValue("");
       expect(pageSize).toHaveValue("20");
       expect(screen.getByRole("columnheader", { name: /Last Updated/i })).toHaveAttribute("aria-sort", "descending");
     });
@@ -289,11 +310,11 @@ describe("MyTickets", () => {
   });
 
   describe("Pagination and Accessibility (UI fix evidence)", () => {
-    it("renders numbered pagination and accessible toolbar labels", async () => {
+    it("renders numbered pagination, visible toolbar labels, stable columns, and Created time (UI-27)", async () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
         data: [
-          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" },
+          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" },
         ],
         meta: { page: 1, pageSize: 10, totalCount: 25, totalPages: 3, hasNextPage: true, hasPreviousPage: false },
       });
@@ -302,17 +323,64 @@ describe("MyTickets", () => {
 
       await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
       expect(screen.getByPlaceholderText("Search ticket number or summary…")).toBeInTheDocument();
-      expect(screen.getByLabelText("Search tickets")).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: /category/i })).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: /priority/i })).toBeInTheDocument();
+      expect(screen.getByLabelText("Search")).toBeInTheDocument();
+      expect(screen.getByLabelText("Category")).toBeInTheDocument();
+      expect(screen.getByLabelText("Requested Priority")).toBeInTheDocument();
+      expect(screen.getByLabelText("Current Status")).toBeInTheDocument();
       expect(screen.queryByRole("combobox", { name: /sort field/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("combobox", { name: /sort order/i })).not.toBeInTheDocument();
       expect(screen.getByRole("columnheader", { name: /Ticket Number/i })).toHaveAttribute("aria-sort", "none");
+      expect(screen.getByRole("columnheader", { name: /Created/i })).toHaveAttribute("aria-sort", "none");
       expect(screen.getByRole("columnheader", { name: /Requested Priority/i })).toHaveAttribute("aria-sort", "none");
+      expect(screen.getByRole("columnheader", { name: "Current Status" })).toBeInTheDocument();
       expect(screen.getByRole("columnheader", { name: /Last Updated/i })).toHaveAttribute("aria-sort", "descending");
-      expect(screen.getByRole("combobox", { name: /page size/i })).toBeInTheDocument();
+      expect(screen.getByLabelText("Rows per page")).toBeInTheDocument();
+      const table = screen.getByRole("table");
+      expect(table).toHaveClass("lab2-ticket-table");
+      expect(Array.from(table.querySelectorAll("colgroup col")).map((col) => col.className)).toEqual([
+        "lab2-col-ticket-number",
+        "lab2-col-created",
+        "lab2-col-summary",
+        "lab2-col-category",
+        "lab2-col-priority",
+        "lab2-col-status",
+        "lab2-col-updated",
+      ]);
+      const headerNames = screen.getAllByRole("columnheader").map((header) =>
+        (header.textContent ?? "").replace(/\s+/g, "").replace(/[↕↑↓]/g, "")
+      );
+      expect(headerNames).toEqual(["TicketNumber", "Created", "Summary", "Category", "RequestedPriority", "CurrentStatus", "LastUpdated"]);
+      expect(screen.getAllByText("2026-08-20 16:00:00").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Created: 2026-08-20 16:00:00").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByRole("navigation", { name: /pagination/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /go to page 3/i })).toBeInTheDocument();
+    });
+
+    it("UI-27 keeps full Summary text in the DOM while using the two-line clamp container", async () => {
+      const longSummary = "A very long summary that must remain complete in the DOM while the desktop table visually limits it to two lines with an ellipsis instead of slicing the underlying text";
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: [
+          {
+            id: 1,
+            ticketNumber: "2608-0001",
+            summary: longSummary,
+            category: { name: "Account and Access" },
+            requestedPriority: "HIGH",
+            currentStatus: "NEW",
+            ticketDate: "2026-08-20T09:00:00.000Z",
+            updatedAt: "2026-08-20T10:00:00.000Z",
+          },
+        ],
+        meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+      const summaries = await screen.findAllByText(longSummary);
+      const summary = summaries.find((element) => element.classList.contains("lab2-summary-clamp"));
+      expect(summary).toBeDefined();
+      expect(summary).toHaveClass("lab2-summary-clamp");
+      expect(summary).toHaveTextContent(longSummary);
     });
 
     it("removes the Action column, keeps Ticket Number as a detail link, and supports row navigation (UI-25)", async () => {
@@ -357,6 +425,26 @@ describe("MyTickets", () => {
       await userEvent.click(screen.getByRole("button", { name: /Sort by Ticket Number/i }));
       await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "ticketNumber", order: "asc" })));
       await waitFor(() => expect(screen.getByRole("columnheader", { name: /Ticket Number/i })).toHaveAttribute("aria-sort", "ascending"));
+    });
+
+    it("sorts Created through ticketDate with descending-first toggle behavior (UI-27)", async () => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      const listSpy = vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: mockTickets,
+        meta: { page: 1, pageSize: 10, totalCount: 2, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+      await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
+
+      await userEvent.click(screen.getByRole("button", { name: /Sort by Created/i }));
+      await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "ticketDate", order: "desc" })));
+      await waitFor(() => expect(screen.getByRole("columnheader", { name: /Created/i })).toHaveAttribute("aria-sort", "descending"));
+
+      await userEvent.click(screen.getByRole("button", { name: /Sort by Created/i }));
+      await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "ticketDate", order: "asc" })));
+      await waitFor(() => expect(screen.getByRole("columnheader", { name: /Created/i })).toHaveAttribute("aria-sort", "ascending"));
+      expect(screen.getByRole("button", { name: /Sort mobile by Created/i })).toBeInTheDocument();
     });
 
     it("retries loading on Retry click (UI-09)", async () => {

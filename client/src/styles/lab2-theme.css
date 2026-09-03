@@ -166,20 +166,104 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.lab2-ticket-row:hover {
-  background: var(--zen-pale);
+.lab2-ticket-table tbody .lab2-ticket-row:nth-child(odd) > * {
+  background-color: var(--zen-surface);
 }
 
-.table .lab2-ticket-row:hover > * {
-  background: var(--zen-pale);
+.lab2-ticket-table tbody .lab2-ticket-row:nth-child(even) > * {
+  background-color: #F2F4F3;
+}
+
+.lab2-ticket-table tbody .lab2-ticket-row:hover > * {
+  background-color: #E6E9E7;
 }
 
 .lab2-sort-button {
-  color: var(--zen-text) !important;
+  color: inherit !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  max-width: 100%;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.lab2-sort-label {
+  min-width: 0;
+}
+
+.lab2-sort-glyph {
+  flex: 0 0 auto;
+  line-height: 1;
 }
 
 .lab2-sort-button:hover {
-  color: var(--zen-secondary) !important;
+  color: inherit !important;
+  text-decoration: underline !important;
+}
+
+.lab2-ticket-table thead .lab2-sort-button:focus-visible {
+  outline-color: var(--zen-primary) !important;
+}
+
+.lab2-toolbar-label {
+  margin-bottom: 0.3rem;
+  color: var(--zen-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.lab2-ticket-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.lab2-ticket-table thead th {
+  background-color: #DCEDE3;
+  color: #145C3B;
+  border-bottom-color: #B9D5C4;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding-top: 0.8rem;
+  padding-bottom: 0.8rem;
+  vertical-align: middle;
+}
+
+.lab2-ticket-table th,
+.lab2-ticket-table td {
+  overflow-wrap: anywhere;
+}
+
+.lab2-ticket-table .lab2-col-ticket-number { width: 13%; }
+.lab2-ticket-table .lab2-col-summary { width: 23%; }
+.lab2-ticket-table .lab2-col-category { width: 13%; }
+.lab2-ticket-table .lab2-col-priority { width: 15%; }
+.lab2-ticket-table .lab2-col-status { width: 11%; }
+.lab2-ticket-table .lab2-col-created { width: 12%; }
+.lab2-ticket-table .lab2-col-updated { width: 13%; }
+
+.lab2-ticket-table .lab2-summary-cell,
+.lab2-ticket-table .lab2-category-cell {
+  word-break: normal;
+}
+
+.lab2-summary-clamp {
+  display: -webkit-box;
+  min-height: calc(1.35em * 2);
+  max-height: calc(1.35em * 2);
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.35;
+}
+
+.lab2-ticket-table .lab2-date-cell {
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 @media (max-width: 767.98px) {

@@ -109,7 +109,7 @@ test("E2E-01 select requester -> create -> search -> open detail", async ({ page
   expect(ticketNumber).toMatch(/^\d{4}-\d{4}$/);
 
   await page.getByRole("link", { name: "View My Tickets" }).click();
-  await page.getByLabel("Search tickets").fill(ticketNumber!);
+  await page.getByLabel("Search", { exact: true }).fill(ticketNumber!);
   const ticketRow = page.locator("tr", { hasText: summary });
   await expect(ticketRow).toContainText(ticketNumber!);
   await ticketRow.getByRole("link", { name: ticketNumber! }).click();

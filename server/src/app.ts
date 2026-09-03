@@ -136,11 +136,11 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 
 // ---------------------------------------------------------------------------
 // Lab 2 Issue 9 — My Tickets (owned list)
-// GET /api/tickets?requesterId=&search=&categoryId=&requestedPriority=&sort=&order=&page=&pageSize=
+// GET /api/tickets?requesterId=&search=&categoryId=&requestedPriority=&currentStatus=&sort=&order=&page=&pageSize=
 // ---------------------------------------------------------------------------
 app.get("/api/tickets", async (req: Request, res: Response) => {
   try {
-    const allowed = new Set(["requesterId", "search", "categoryId", "requestedPriority", "sort", "order", "page", "pageSize"]);
+    const allowed = new Set(["requesterId", "search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"]);
     for (const k of Object.keys(req.query)) {
       if (!allowed.has(k)) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [k]: "Unknown parameter." });
@@ -148,7 +148,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     }
 
     // Guard: duplicate/malformed query values arrive as string[] -> 400 (BR-20 strict contract)
-    const rawParams = ["requesterId", "search", "categoryId", "requestedPriority", "sort", "order", "page", "pageSize"] as const;
+    const rawParams = ["requesterId", "search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"] as const;
     for (const p of rawParams) {
       const v = (req.query as Record<string, unknown>)[p];
       if (v !== undefined && typeof v !== "string") {
@@ -156,7 +156,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       }
     }
 
-    const { requesterId, search, categoryId, requestedPriority, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
+    const { requesterId, search, categoryId, requestedPriority, currentStatus, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
 
     const fieldErrors: Record<string, string> = {};
 
@@ -199,6 +199,10 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requestedPriority: "Invalid priority." });
     }
 
+    if (currentStatus !== undefined && currentStatus !== "NEW") {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { currentStatus: "Invalid current status." });
+    }
+
     // sort
     const allowedSort = new Set(["updatedAt", "ticketDate", "ticketNumber", "requestedPriority"]);
     const sortField = sort ?? "updatedAt";
@@ -230,6 +234,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     const where: Record<string, unknown> = { requesterId: rid };
     if (cid !== undefined) (where as Record<string, unknown>).categoryId = cid;
     if (requestedPriority !== undefined) (where as Record<string, unknown>).requestedPriority = requestedPriority;
+    if (currentStatus !== undefined) (where as Record<string, unknown>).currentStatus = currentStatus;
     if (searchTrim !== undefined) {
       (where as Record<string, unknown>).OR = [
         { ticketNumber: { contains: searchTrim, mode: "insensitive" } },
@@ -256,6 +261,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
           relatedSystem: { select: { id: true, name: true } },
           requestedPriority: true,
           currentStatus: true,
+          ticketDate: true,
           updatedAt: true,
           requesterId: true,
         },
@@ -272,6 +278,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       relatedSystem: t.relatedSystem,
       requestedPriority: t.requestedPriority,
       currentStatus: t.currentStatus,
+      ticketDate: t.ticketDate,
       updatedAt: t.updatedAt,
       requester: { id: t.requesterId },
     }));
