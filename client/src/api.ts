@@ -87,7 +87,65 @@ export interface ListTicketsParams {
   pageSize?: number;
 }
 
-export async function listTickets(params: ListTicketsParams) {
+export interface TicketListItem {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  category: { id?: number; name: string };
+  relatedSystem?: { id?: number; name: string };
+  requestedPriority: string;
+  currentStatus: string;
+  ticketDate: string;
+  updatedAt: string;
+  requester?: { id: number };
+}
+
+export interface TicketListMeta {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface ListTicketsResponse {
+  data: TicketListItem[];
+  meta: TicketListMeta;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isIsoUtcTimestamp(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) &&
+    Number.isFinite(Date.parse(value));
+}
+
+function parseListTicketsResponse(body: unknown): ListTicketsResponse {
+  if (!isRecord(body) || !Array.isArray(body.data) || !isRecord(body.meta)) {
+    throw new Error("Invalid My Tickets API response.");
+  }
+
+  for (const item of body.data) {
+    if (!isRecord(item)) {
+      throw new Error("Invalid My Tickets API response.");
+    }
+    const ticketDate = item.ticketDate;
+    if (
+      typeof ticketDate !== "string" ||
+      ticketDate.trim() === "" ||
+      !isIsoUtcTimestamp(ticketDate)
+    ) {
+      throw new Error("Invalid My Tickets API response: ticketDate is required and must be an ISO 8601 UTC timestamp.");
+    }
+  }
+
+  return body as unknown as ListTicketsResponse;
+}
+
+export async function listTickets(params: ListTicketsParams): Promise<ListTicketsResponse> {
   const qs = new URLSearchParams();
   qs.set("requesterId", String(params.requesterId));
   if (params.search !== undefined) qs.set("search", params.search);
@@ -101,7 +159,7 @@ export async function listTickets(params: ListTicketsParams) {
   const res = await fetch(`${API_URL}/api/tickets?${qs.toString()}`);
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body };
-  return body as { data: unknown[]; meta: { page: number; pageSize: number; totalCount: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } };
+  return parseListTicketsResponse(body);
 }
 
 export async function getTicketDetail(ticketId: number, requesterId: number) {

@@ -290,8 +290,8 @@ describe("MyTickets", () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
         data: [
-          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" },
-          { id: 2, ticketNumber: "2608-0002", summary: "Test", category: { name: "Hardware" }, requestedPriority: "CRITICAL", currentStatus: "NEW", updatedAt: "2026-08-21T10:00:00.000Z" },
+          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" },
+          { id: 2, ticketNumber: "2608-0002", summary: "Test", category: { name: "Hardware" }, requestedPriority: "CRITICAL", currentStatus: "NEW", ticketDate: "2026-08-21T09:00:00.000Z", updatedAt: "2026-08-21T10:00:00.000Z" },
         ],
         meta: { page: 1, pageSize: 10, totalCount: 2, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
       });
@@ -387,7 +387,7 @@ describe("MyTickets", () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
         data: [
-          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" },
+          { id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" },
         ],
         meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
       });
@@ -452,7 +452,7 @@ describe("MyTickets", () => {
       const listSpy = vi.spyOn(api, "listTickets")
         .mockRejectedValueOnce(new Error("Network error"))
         .mockResolvedValue({
-          data: [{ id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+          data: [{ id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" }],
           meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
         });
 
@@ -489,7 +489,7 @@ describe("MyTickets", () => {
 
       await act(async () => {
         requesterBResult.resolve({
-          data: [{ id: 2, ticketNumber: "B-0001", summary: "Requester B ticket", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+          data: [{ id: 2, ticketNumber: "B-0001", summary: "Requester B ticket", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" }],
           meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
         });
       });
@@ -497,7 +497,7 @@ describe("MyTickets", () => {
 
       await act(async () => {
         requesterAResult.resolve({
-          data: [{ id: 1, ticketNumber: "A-0001", summary: "Requester A ticket", category: { name: "Hardware" }, requestedPriority: "HIGH", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+          data: [{ id: 1, ticketNumber: "A-0001", summary: "Requester A ticket", category: { name: "Hardware" }, requestedPriority: "HIGH", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" }],
           meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
         });
       });
@@ -546,7 +546,7 @@ describe("MyTickets", () => {
         .mockRejectedValueOnce(new Error("Category service unavailable"))
         .mockResolvedValueOnce([{ id: 1, name: "Hardware" }]);
       vi.spyOn(api, "listTickets").mockResolvedValue({
-        data: [{ id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", updatedAt: "2026-08-20T10:00:00.000Z" }],
+        data: [{ id: 1, ticketNumber: "2608-0001", summary: "Test", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" }],
         meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
       });
 

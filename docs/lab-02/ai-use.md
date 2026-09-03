@@ -16,8 +16,9 @@
 | 7 | Continue Issue 12 after the interrupted session. | Re-ran the exact targeted style test rather than assuming the interrupted command passed; continued from filesystem/test evidence. |
 | 8 | Implement UI style/accessibility evidence according to `ui-spec.md`. | TDD exposed missing mobile navigation and three real focus/accessibility defects: first-invalid-field focus, removal-modal focus return, and Bootstrap suppressing the required keyboard outline. Added central Zen Green classes, touch-friendly mobile nav, corrected focus behavior, real-browser keyboard evidence, and deterministic visual-state Playwright evidence. |
 | 9 | Keep documentation evidence truthful while finishing Issue 12. | Updated `tests.md` without changing `Final` to `Pass`, narrowed API-07 evidence wording, removed stale deferrals already completed by PR #28, and recorded exactly what local feature-branch evidence exists versus what still awaits hosted/final-main verification. |
+| 10 | Perform the final Issue #19 audit against the original Lab 2 Labsheet and the local `agent.md` history before allowing commit/push. | Re-read the uploaded 22-page Labsheet, cross-checked branch flow, Test DD/TDD wording, reviewer history, README/setup, screenshots and submission rubric; corrected stale Figure/reviewer evidence, strengthened attachment transaction documentation, and added missing invalid-attachment plus Requester Selection loading/failure screenshot evidence before release handoff. |
 
-## Reflection
+## My Reflection
 
 The most useful prompts were the ones that fixed the **source hierarchy, scope boundary, and evidence rule before implementation**. Requiring the assistant to check the Labsheet/Issue/contracts first, distinguish local tests from hosted CI, and ask for approval before remote workflow reduced rework and stopped confident-but-unverified claims.
 

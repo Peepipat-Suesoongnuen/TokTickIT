@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { listTickets, fetchCategories, Category } from "../api";
+import { listTickets, fetchCategories, Category, TicketListItem, TicketListMeta } from "../api";
 import { useRequester } from "../contexts/RequesterContext";
 
 export function formatBangkok(dateStr: string): string {
@@ -48,8 +48,8 @@ export default function MyTickets() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const [data, setData] = useState<Array<Record<string, unknown>>>([]);
-  const [meta, setMeta] = useState<{ page: number; pageSize: number; totalCount: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } | null>(null);
+  const [data, setData] = useState<TicketListItem[]>([]);
+  const [meta, setMeta] = useState<TicketListMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const ticketRequestSequence = useRef(0);
@@ -135,7 +135,7 @@ export default function MyTickets() {
         pageSize,
       });
       if (requestSequence === ticketRequestSequence.current) {
-        setData(res.data as Array<Record<string, unknown>>);
+        setData(res.data);
         setMeta(res.meta);
       }
     } catch (err: unknown) {
@@ -363,27 +363,27 @@ export default function MyTickets() {
               <tbody>
                 {data.map((t) => (
                   <tr
-                    key={t.id as number}
+                    key={t.id}
                     className="lab2-ticket-row"
-                    onClick={(event) => openTicketFromContainer(event, t.id as number)}
+                    onClick={(event) => openTicketFromContainer(event, t.id)}
                   >
                     <td>
-                      <Link className="fw-semibold text-success" to={`/tickets/${t.id as number}`}>
-                        {t.ticketNumber as string}
+                      <Link className="fw-semibold text-success" to={`/tickets/${t.id}`}>
+                        {t.ticketNumber}
                       </Link>
                     </td>
-                    <td className="lab2-date-cell">{t.ticketDate ? formatBangkok(t.ticketDate as string) : "—"}</td>
+                    <td className="lab2-date-cell">{t.ticketDate ? formatBangkok(t.ticketDate) : "—"}</td>
                     <td className="lab2-summary-cell">
-                      <div className="lab2-summary-clamp">{t.summary as string}</div>
+                      <div className="lab2-summary-clamp">{t.summary}</div>
                     </td>
-                    <td className="lab2-category-cell">{(t.category as { name: string })?.name}</td>
+                    <td className="lab2-category-cell">{t.category.name}</td>
                     <td>
-                      <PriorityBadge value={t.requestedPriority as string} />
+                      <PriorityBadge value={t.requestedPriority} />
                     </td>
                     <td>
-                      <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
+                      <StatusBadge value={t.currentStatus ?? "NEW"} />
                     </td>
-                    <td className="lab2-date-cell">{formatBangkok(t.updatedAt as string)}</td>
+                    <td className="lab2-date-cell">{formatBangkok(t.updatedAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -413,22 +413,22 @@ export default function MyTickets() {
             </div>
             {data.map((t) => (
               <div
-                key={t.id as number}
+                key={t.id}
                 className="card mb-2 p-3 lab2-ticket-card lab2-ticket-row"
-                onClick={(event) => openTicketFromContainer(event, t.id as number)}
+                onClick={(event) => openTicketFromContainer(event, t.id)}
               >
                 <div className="fw-bold">
-                  <Link className="text-success" to={`/tickets/${t.id as number}`}>
-                    {t.ticketNumber as string}
+                  <Link className="text-success" to={`/tickets/${t.id}`}>
+                    {t.ticketNumber}
                   </Link>
                 </div>
-                <div className="small text-secondary">Created: {t.ticketDate ? formatBangkok(t.ticketDate as string) : "—"}</div>
-                <div>{t.summary as string}</div>
+                <div className="small text-secondary">Created: {t.ticketDate ? formatBangkok(t.ticketDate) : "—"}</div>
+                <div>{t.summary}</div>
                 <div className="small text-secondary">
-                  {(t.category as { name: string })?.name} • <PriorityBadge value={t.requestedPriority as string} /> •{" "}
-                  <StatusBadge value={(t.currentStatus as string) ?? "NEW"} />
+                  {t.category.name} • <PriorityBadge value={t.requestedPriority} /> •{" "}
+                  <StatusBadge value={t.currentStatus ?? "NEW"} />
                 </div>
-                <div className="small text-secondary">Last Updated: {formatBangkok(t.updatedAt as string)}</div>
+                <div className="small text-secondary">Last Updated: {formatBangkok(t.updatedAt)}</div>
               </div>
             ))}
           </div>
