@@ -198,7 +198,7 @@ A `page` value greater than `totalPages` is **not** an error: the API returns 20
 ```
 Search/filter apply before pagination; `totalCount` reflects the filtered result set. Empty result returns `"data": []` with valid meta (UI distinguishes empty vs no-results, BR-22).
 
-Each list item includes the official backend-generated `ticketDate` (stored in UTC) so My Tickets can display creation time in Asia/Bangkok. This is the same Ticket Date used by Ticket Detail and the existing `sort=ticketDate`; Prisma `createdAt` is not part of the requester-facing list contract.
+Each list item **must** include the official backend-generated `ticketDate` as a parseable ISO 8601 timestamp (stored in UTC) so My Tickets can display creation time in Asia/Bangkok. This is the same Ticket Date used by Ticket Detail and the existing `sort=ticketDate`; Prisma `createdAt` is not part of the requester-facing list contract. Client list-response handling treats a missing or non-parseable `ticketDate` as a contract failure before normal rendering; any UI `—` fallback is defensive only and is not an alternative valid API state.
 
 **Errors**: 400 unknown param / invalid value; 500 safe.
 
@@ -238,9 +238,9 @@ Upload one permitted Attachment to an owned Ticket (FR-09).
 |---|---|---|
 | Type ∈ {JPG/JPEG, PNG, WEBP, PDF} | content-type + extension check | **415** |
 | Size ≤ 5 MB (5,242,880 bytes) | exact byte check | **413** |
-| ≤ 5 active attachments per ticket | count check before insert | **409** |
+| ≤ 5 active attachments per ticket | per-Ticket transactional row lock (`FOR UPDATE`) serializes count + metadata insert so concurrent uploads cannot exceed five active rows | **409** |
 
-Storage filename is sanitized/generated server-side (Assumption 4); original filename kept as metadata.
+Storage filename is sanitized/generated server-side (Assumption 4); original filename kept as metadata. The upload compensation strategy is: validate first; under a transaction lock, reserve/create the Attachment metadata only when the active-count rule still permits it; write the generated file after DB success; if filesystem write fails, delete the newly created metadata row and return a safe 500. A rejected count/type/size/signature request must not leave an active Attachment row or orphan file.
 
 **201 Response**
 ```json

@@ -124,6 +124,11 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
         .expect(200);
 
       expect(res.body.data).toHaveLength(2);
+      for (const item of res.body.data as Array<{ ticketDate?: unknown }>) {
+        expect(typeof item.ticketDate).toBe("string");
+        expect(item.ticketDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/);
+        expect(Number.isFinite(Date.parse(item.ticketDate as string))).toBe(true);
+      }
       expect(res.body.data[0]).toEqual(
         expect.objectContaining({
           ticketNumber: "2608-0001",

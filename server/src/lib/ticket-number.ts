@@ -5,6 +5,9 @@ export function formatYYMM(date: Date = new Date()): string {
 }
 
 export function formatTicketNumber(yyMm: string, seq: number): string {
+  if (!Number.isInteger(seq) || seq < 1 || seq > 9999) {
+    throw new Error("INVALID_TICKET_SEQUENCE");
+  }
   return `${yyMm}-${String(seq).padStart(4, "0")}`;
 }
 
@@ -21,5 +24,6 @@ export async function getNextSequence(
   const seqStr = (max.ticketNumber as string).split("-")[1];
   const seq = parseInt(seqStr, 10);
   if (Number.isNaN(seq)) return 1;
+  if (seq >= 9999) throw new Error("SEQUENCE_EXHAUSTED");
   return seq + 1;
 }

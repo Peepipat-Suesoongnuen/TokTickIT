@@ -59,12 +59,39 @@ async function fillValidCreateForm(
   await page.getByLabel("Description").fill(`Visual state evidence description for ${marker}.`);
 }
 
-test("VISUAL-01 captures the ui-spec loading, validation, submitting, success, failure, empty, no-results, and removed states", async ({
+test("VISUAL-01 captures required requester/create/list/attachment visual states", async ({
   page,
   request,
 }) => {
   const [requester] = await getRequesters(request);
   const { categories, systems } = await getReferences(request, requester.id);
+
+  // Submission evidence: Requester Selection loading + safe API-failure states.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  let releaseRequesters!: () => void;
+  const requesterGate = new Promise<void>((resolve) => {
+    releaseRequesters = resolve;
+  });
+  await page.route("**/api/requesters", async (route) => {
+    await requesterGate;
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: { code: "INTERNAL_ERROR", message: "Unable to load requesters. Please try again." },
+      }),
+    });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("paragraph").filter({ hasText: "Loading requesters…" })).toBeVisible();
+  await captureState(page, "requester-loading");
+  releaseRequesters();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  await captureState(page, "requester-failure");
+  await page.unroute("**/api/requesters");
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByLabel("Development Requester")).toBeVisible();
+
   await page.setViewportSize({ width: 375, height: 812 });
   await selectRequester(page, requester);
 
@@ -111,6 +138,27 @@ test("VISUAL-01 captures the ui-spec loading, validation, submitting, success, f
   await expect(page.getByText("Please select a category.")).toBeVisible();
   await expect(page.getByLabel("Category")).toBeFocused();
   await captureState(page, "validation");
+
+  // Submission evidence: one permitted + one rejected attachment selected together.
+  await page.goto("/create");
+  await expect(page.getByLabel("Category")).toBeEnabled();
+  await page.getByLabel("Choose files").setInputFiles([
+    {
+      name: "valid-evidence.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\nLab 2 valid attachment evidence\n%%EOF"),
+    },
+    {
+      name: "invalid-evidence.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("invalid attachment evidence"),
+    },
+  ]);
+  await expect(page.getByText(/valid-evidence\.pdf/)).toBeVisible();
+  await expect(page.getByText(/invalid-evidence\.txt.*File type not allowed/)).toBeVisible();
+  await captureState(page, "invalid-attachment");
+  await page.goto("/create");
+  await expect(page.getByLabel("Category")).toBeEnabled();
 
   await fillValidCreateForm(page, categories[0].id, systems[0].id, "submitting");
 

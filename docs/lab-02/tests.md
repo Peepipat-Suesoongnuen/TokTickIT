@@ -1,8 +1,8 @@
 # Lab 2 Test Plan and Results — TokTickIT Requester Ticketing
 
-Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation (Test DD / TDD): every planned test below will be written as a failing test first, then implementation will make it pass. This document keeps the original planned-test contract and records feature-branch evidence as implementation progresses (see §6). Rows remain `Planned` until the final `main` green run, even when the corresponding automated test already exists and is green on a feature branch or `lab2-staging`.
+Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec.md). Created before implementation as the Test DD / TDD plan. Feature behavior changes are developed failing-first where a behavior is not yet implemented. Final-integration work may also close a previously planned **evidence gap** for behavior that already exists; such a test can legitimately pass on its first execution and must be recorded as evidence closure rather than retroactively claimed as a Red→Green implementation cycle. This document keeps the original planned-test contract and records feature-branch evidence as implementation progresses (see §6). Rows remain `Planned` until the final `main` green run, even when the corresponding automated test already exists and is green on a feature branch or `lab2-staging`.
 
-**Status key:** `Planned` while on the feature branch (failing-first TDD). A row becomes `Pass` **only after a green run on the final `main` branch** — never from a feature-branch run alone.
+**Status key:** `Planned` before final-main verification, regardless of whether feature-branch evidence came from a failing-first change or an evidence-gap closure. A row becomes `Pass` **only after a green run on the final `main` branch** — never from a feature-branch or staging-only run alone.
 
 ## 1. Test Strategy
 
@@ -24,7 +24,7 @@ Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec
 | UNIT-01 | Unit | AC-01, BR-01 | Ticket Number format `{YY}{MM}-0001` and monthly reset boundary | Correct format; sequence restarts at month change | server/src/lib/__tests__/ticket-number.test.ts | Planned |
 | UNIT-02 | Unit | BR-01, Assumption 2 | Sequence increment; exhaustion signal at 9999 | Increments deterministically; exhaustion flagged for safe failure | server/src/lib/__tests__/ticket-number.test.ts | Planned |
 | UNIT-03 | Unit | AC-02, AC-03 | Trim + length validation summary 5–120 / description 20–2,000 | Trimmed values validated per BR-10 | server/src/lib/__tests__/validation.test.ts | Planned |
-| UNIT-04 | Unit | AC-04 | Reference-id validity + priority enum `LOW\|MEDIUM\|HIGH\|CRITICAL` | Rejects non-reference ids and invalid enum values | server/src/lib/__tests__/validation.test.ts | Planned |
+| UNIT-04 | Unit | AC-04 | Requested Priority enum `LOW\|MEDIUM\|HIGH\|CRITICAL`; pure reference-id shape only if a production helper exists | Invalid priority rejected; DB reference existence/active validity remains API-06 evidence | server/src/lib/__tests__/validation.test.ts | Planned |
 
 ### API — `server/tests/lab-02/`
 
@@ -58,7 +58,7 @@ Companion to [specification.md](./specification.md) and [api-spec.md](./api-spec
 | API-26 | API | FR-10 | Owner retrieves **metadata** of owned active attachment | 200 correct shape (originalFilename, mimeType, sizeBytes, removedAt null) | server/tests/lab-02/attachments.api.test.ts | Planned |
 | API-27 | API | FR-10 | Owner **downloads** owned active attachment | 200 binary stream; `Content-Type` = stored mime; `Content-Disposition: attachment; filename="<originalFilename>"` | server/tests/lab-02/attachments.api.test.ts | Planned |
 
-Planned manual submission evidence: a backend-stop demo for AC-25/AC-26 safe states will still be captured in the final submission PDF. Automated safe-state evidence also exists through the component/API tests and `VISUAL-01` screenshots listed below.
+Planned submission evidence for AC-25/AC-26 will show the safe failure state with entered values preserved. The Labsheet permits either stopping the backend **or simulating failure**; deterministic failure simulation already exists through component/API tests and `VISUAL-01`, while a live backend-stop demonstration may be added as optional extra evidence if useful for the final PDF/demo.
 
 ### UI Component — `client/src/features/lab-02/tests/`
 
@@ -80,7 +80,7 @@ Planned manual submission evidence: a backend-stop demo for AC-25/AC-26 safe sta
 | UI-14 | UI | BR-14 | Limit helper text at 5 active attachments | "Maximum of 5 active attachments reached" shown | client/src/features/lab-02/tests/AttachmentSection.test.tsx | Planned |
 | UI-15 | UI | AC-06 | No requester selected opens guarded screen | Requester Selection screen shown | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
 | UI-16 | UI | AC-08 | Change Requester | Refetch of requester-specific data | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
-| UI-17 | UI | AC-07, AC-09 | Dropdown excludes inactive; empty & failure states render | States render per ui-spec §5.1 | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
+| UI-17 | UI | AC-07, AC-09 | Dropdown renders the backend's active-only requester response; empty & failure/Retry states render | API response renders as supplied; empty/failure states follow ui-spec §5.1. API-01, not the client, proves inactive exclusion | client/src/features/lab-02/tests/RequesterSelection.test.tsx | Planned |
 | UI-18 | UI | AC-05, BR-12 | Busy label during submit | "Submitting…" + disabled | client/src/features/lab-02/tests/CreateTicket.test.tsx | Planned |
 | UI-19 | UI | AC-28 | Component-level accessibility semantics/focus behavior: nav toggle aria state, first-invalid-field focus, removal modal label/Esc/focus return | Component semantics and focus behavior correct; full keyboard reachability/visible-focus evidence is `A11Y-01` | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
 | UI-20 | UI | AC-27 | Responsive proxy classes on mobile nav and Create actions | Mobile nav/stack classes applied; real-browser no-overflow evidence is `E2E-05` + `VISUAL-01` | client/src/features/lab-02/tests/ui-style.test.tsx | Planned |
@@ -104,6 +104,8 @@ Planned manual submission evidence: a backend-stop demo for AC-25/AC-26 safe sta
 
 Style tests provide requirement-level evidence for the Zen Green contract (ui-spec.md); they are not responsive-behavior evidence.
 
+**Issue 13 client API-boundary hardening:** `client/src/features/lab-02/tests/api.test.tsx` verifies that `listTickets()` accepts valid ISO 8601 UTC `ticketDate` values and rejects missing, non-parseable, or parseable-but-non-ISO-UTC values before normal My Tickets rendering. This strengthens the existing api-spec §5.2 contract rather than introducing a new user-facing Acceptance Criterion.
+
 ### E2E — `e2e/lab-02/`
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Test File | Final |
@@ -112,9 +114,9 @@ Style tests provide requirement-level evidence for the Zen Green contract (ui-sp
 | E2E-02 | E2E | AC-10 | B opens A's ticket via direct URL | Not-found view | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
 | E2E-03 | E2E | AC-21, AC-22 | Removal modal: first attempts Confirm with blank reason (**blocked**, AC-22), then enters valid reason and confirms removal succeeds (AC-21) | Confirm disabled while reason blank; after valid reason row becomes removed state and download action gone | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
 | E2E-04 | E2E | AC-08, AC-11 | Switch requester A↔B | Lists swap accordingly; A's tickets never appear for B | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
-| E2E-05 | E2E | AC-27 | Screenshots at 1440/900/375 into artifacts/lab-02/screenshots/ | Files written; visual checklist executable | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
+| E2E-05 | E2E | AC-27 | Screenshots at 1440/900/375 into artifacts/lab-02/screenshots/; page-level no-overflow at all widths; My Tickets table-wrapper no-overflow at desktop/tablet widths | Files written; no unintended page or visible desktop/tablet table-wrapper horizontal overflow | e2e/lab-02/requester-ticket-flow.spec.ts | Planned |
 | A11Y-01 | E2E / accessibility | AC-28; ui-spec §7 | Keyboard-only Requester Selection, My Tickets, Create Ticket, Ticket Detail, and removal-modal flow | Visible enabled controls are Tab-reachable with visible focus; key controls have accessible labels and are operable; modal traps focus, closes on Esc, returns focus | e2e/lab-02/accessibility.spec.ts | Planned |
-| VISUAL-01 | Responsive / visual | ui-spec §5, §7, §9; AC-17, AC-25, AC-26, AC-27, AC-28 | Capture loading, validation, submitting, success, failure, empty, no-results, and removed-attachment states; verify mobile nav touch target and visible focus outline | State screenshots written under artifacts/lab-02/screenshots/states/ with no horizontal page scroll; nav target ≥44×44 and 2 px Zen-green focus outline | e2e/lab-02/visual-states.spec.ts | Planned |
+| VISUAL-01 | Responsive / visual | ui-spec §5, §7, §9; AC-17, AC-19, AC-25, AC-26, AC-27, AC-28 | Capture Requester Selection loading/failure, Create loading/validation/invalid-attachment/submitting/success/failure, My Tickets empty/no-results, and removed-attachment states; verify mobile nav touch target and visible focus outline | State screenshots written under artifacts/lab-02/screenshots/states/ with no horizontal page scroll; invalid-attachment evidence shows one valid and one rejected file together; nav target ≥44×44 and 2 px Zen-green focus outline | e2e/lab-02/visual-states.spec.ts | Planned |
 
 ## 3. Acceptance-Criterion Traceability Matrix (AC → Test IDs)
 
@@ -138,7 +140,7 @@ Style tests provide requirement-level evidence for the Zen Green contract (ui-sp
 | AC-16 | API-13 |
 | AC-17 | UI-07, VISUAL-01 |
 | AC-18 | API-16 |
-| AC-19 | API-17, UI-13 |
+| AC-19 | API-17, UI-13, VISUAL-01 |
 | AC-20 | API-18 |
 | AC-21 | API-19, API-20, UI-11, E2E-03 |
 | AC-22 | API-21, UI-06, E2E-03 |
@@ -149,13 +151,13 @@ Style tests provide requirement-level evidence for the Zen Green contract (ui-sp
 | AC-27 | UI-20, UI-27, E2E-05, VISUAL-01, visual checklist §4 |
 | AC-28 | UI-19, UI-25, UI-26, A11Y-01, VISUAL-01 |
 
-Coverage rule satisfied: every AC maps to ≥ 1 planned automated test whose scenario actually exercises it (no broad ranges). AC-25 will additionally be evidenced by a planned manual backend-stop demo (deferred) for the PDF.
+Coverage rule satisfied: every AC maps to ≥ 1 planned automated test whose scenario actually exercises it (no broad ranges). AC-25/AC-26 final submission evidence may use the Labsheet-permitted controlled failure simulation; a backend-stop demo is optional extra evidence rather than a mandatory separate requirement.
 
 FR/BR coverage is recorded in the `Requirement / AC` column of the Planned Tests table where automated verification is applicable. Design-only constraints are verified through contract/schema review and are not forced into unrelated Acceptance Criteria. BR-24 is a design constraint verified by schema/design review during Issue 6 (no runtime test).
 
 ## 4. Responsive and Visual Checklist
 
-Issue 12 executes the checklist against [ui-spec.md](./ui-spec.md) §9. `E2E-05` regenerates the desktop/tablet/mobile screen evidence at 1440 / 900 / 375 px and asserts no horizontal page scrolling; `VISUAL-01` deterministically captures the required UI states at mobile width and performs the same horizontal-scroll assertion. The screenshots are stored under `artifacts/lab-02/screenshots/`.
+Issue 12 executes the checklist against [ui-spec.md](./ui-spec.md) §9. `E2E-05` regenerates the desktop/tablet/mobile screen evidence at 1440 / 900 / 375 px and asserts no horizontal page scrolling; Issue 13 additionally asserts that the visible My Tickets `.table-responsive` wrapper itself has no horizontal overflow at desktop/tablet widths. `VISUAL-01` deterministically captures the required UI states at mobile width and performs the same page-level horizontal-scroll assertion. The screenshots are stored under `artifacts/lab-02/screenshots/`.
 
 | Checklist item | Issue 12 feature-branch evidence |
 |---|---|
@@ -164,12 +166,12 @@ Issue 12 executes the checklist against [ui-spec.md](./ui-spec.md) §9. `E2E-05`
 | Required asterisks + validation placement | `.required-marker` + `aria-required`; `STYLE-04`; `VISUAL-01` `validation.png`; first invalid Category control receives focus |
 | Button hierarchy + busy/disabled state | Zen primary class for primary actions, Bootstrap outline/destructive variants for secondary/destructive actions; `UI-03`/`UI-18`; `VISUAL-01` `submitting.png` |
 | Priority/status badge consistency | Shared class mapping for LOW/MEDIUM/HIGH/CRITICAL and NEW across list/detail; `STYLE-03`; responsive screenshots inspected |
-| No clipping / overlap / horizontal page scroll | `E2E-05` checks all three target widths; `VISUAL-01` checks each state capture; screenshots visually inspected with no blocking clipping/overlap found |
+| No clipping / overlap / horizontal page scroll | `E2E-05` checks all three target widths and My Tickets table-wrapper overflow at desktop/tablet widths; `VISUAL-01` checks each state capture; screenshots visually inspected with no blocking clipping/overlap found |
 | Filters, pagination, attachment controls usable responsively | My Tickets uses desktop table/mobile cards; `VISUAL-01` verifies the mobile navigation target is at least 44×44; attachment input/actions remain visible in responsive/detail evidence; `A11Y-01` verifies visible enabled controls remain keyboard reachable |
 | Empty vs no-results states distinct | `UI-07`; `VISUAL-01` `empty.png` and `no-results.png` use distinct copy and CTA behavior |
-| Loading / validation / submitting / success / failure / removed state evidence | `VISUAL-01` writes all eight state images under `artifacts/lab-02/screenshots/states/` |
+| Requester loading/failure + Create validation/invalid-attachment/submitting/success/failure + list/removed evidence | `VISUAL-01` writes the required deterministic state images under `artifacts/lab-02/screenshots/states/`, including one valid + one invalid attachment selected together |
 
-The supplied Lab 2 Labsheet references “Figure 1” as an example Ticket UI, but the supplied PDF page contains no separate extractable/renderable figure asset between that reference and §8.3, and the repository contains no approved-illustration asset set. This checklist therefore compares the implementation against the written Labsheet layout/style rules, the version-controlled `ui-spec.md`, and the rendered screenshots actually produced by the application. It does not claim a pixel-for-pixel illustration comparison that cannot be reproduced from the supplied artifacts.
+The supplied Lab 2 Labsheet includes illustrative UI references: Figure 1 for Ticket Detail, a Development Requester Selection example, and a My Tickets example. Visual inspection compares the implemented screens against those supplied illustrations, the written Labsheet layout/style rules, the version-controlled `ui-spec.md`, and the rendered application screenshots. Because the Labsheet explicitly describes the screens as illustrative and permits modest aesthetic improvements/student-chosen exact arrangements, this is a design-language/layout comparison rather than a pixel-for-pixel clone requirement.
 
 ## 5. Test Commands
 
@@ -206,7 +208,7 @@ Before pushing any Lab 2 feature branch, tick all:
 
 ## 6. Final Results
 
-Every row's `Final` column stays **Planned** during feature-branch development (failing-first TDD). Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
+Every row's `Final` column stays **Planned** during feature-branch development and final-integration evidence closure. Rows move to **Pass** only when the corresponding test runs green on the final `main` branch; terminal output is captured then for the submission PDF (Answer Part 3). No test may be marked Pass from a feature-branch or staging-only run.
 
 **Feature-branch evidence (Issue 9, `feature/9-my-tickets` @ 73bc6bb05bcc393d2dd465aaedbc8669ae85b212):** `cd server && npm test` — 33 passed (31 My Tickets + 2 Lab 1); `cd client && npm test` — 20 passed (17 My Tickets + 3 App); `npm run build` / `tsc --noEmit` clean both sides; `git diff --check` clean; `TEST_DATABASE_URL` isolated (`server/.env.example` + `prisma.ts`); Hosted CI `.github/workflows/ci.yml` **passed** — server 33 / client 20 — https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320049779 and https://github.com/Peepipat-Suesoongnuen/TokTickIT/actions/runs/33320047712 (server 45s / client 17-21s, 4/4 success). Evidence below remains `Planned` per the rule above until the final `main` green run (see PR #24).
 
@@ -222,11 +224,13 @@ Every row's `Final` column stays **Planned** during feature-branch development (
 
 **Feature-branch evidence (Issue 12C / #34, `feature/12c-my-tickets-readability-ticket-date`, final local verification before PR handoff):** contract-first TDD refined My Tickets with five visibly labelled toolbar controls (`Search`, `Category`, `Requested Priority`, `Current Status`, `Rows per page`), added strict `currentStatus=NEW` list filtering without adding status mutation, exposed official `ticketDate` in list items, moved Created directly after Ticket Number, and made Created sortable through existing `sort=ticketDate`. The desktop/tablet table now uses an explicit seven-column fixed layout; sortable/non-sortable headers share uniform typography; the table header uses a muted light Zen Green surface with darker green text so it remains subordinate to the primary app header; neutral white/light-gray zebra rows separate data without reusing the header color; Summary keeps its full DOM value while a two-line CSS line clamp/ellipsis keeps row density consistent. Failing-first tests exposed the absent Current Status filter / Created sort UI and the API's previous rejection of `currentStatus=NEW`. After minimal implementation, targeted My Tickets UI passed **22/22** and targeted My Tickets API passed **37/37**; final full client Vitest passed **55/55**, full server Vitest/Supertest passed **88/88**, full Playwright passed **7/7**, client/server `tsc --noEmit` passed, both builds passed, and `git diff --check` completed without whitespace errors. A local 50-ticket stress dataset measured no horizontal page/table overflow at 1440/900/768 and stable column widths across All / Current Status / long-category / short-category result sets; muted-header contrast measured **6.58:1** in Chromium. One earlier Playwright invocation did not start because a stale local Vite process occupied port 5174; after stopping only that stale repository process, unchanged code reran **7/7 passed**. Final My Tickets responsive screenshots plus empty/no-results state screenshots were regenerated as materially changed evidence. No hosted CI is claimed yet because the branch has not been pushed. `Final` remains `Planned` until final `main` verification.
 
+**Feature-branch evidence (Issue 13 / #19, `feature/13-release-integration`, PR #36):** final integration closes the planned Unit/API/Requester Selection evidence gaps and adds narrowly scoped release/submission hardening without introducing a new user-facing feature. Evidence-gap tests for existing reference-data and Requester Selection behavior were allowed to pass immediately; they are not retroactively claimed as Red→Green implementation. New hardening used failing-first evidence: `getNextSequence()` initially returned `10000` instead of signaling exhaustion after `9999`; `formatTicketNumber()` initially allowed an out-of-range five-digit sequence; and `listTickets()` initially accepted missing/non-parseable `ticketDate` plus a parseable but non-ISO-UTC timestamp. Those failures were corrected with minimal production changes. Added `UNIT-01`…`UNIT-04`, `API-01`…`API-03`, `UI-15`…`UI-17`, `UI-21`, and client API-boundary coverage. `ticketDate` is now a required typed list field and must be a valid ISO 8601 UTC timestamp at the client boundary while the UI `—` remains defensive only. E2E-01 no longer waits on `POST /api/tickets`; it synchronizes on the visible Official Ticket Number and passed **5/5 consecutive local repetitions**. E2E-05 now proves both page-level no-overflow and visible My Tickets `.table-responsive` wrapper no-overflow at desktop/tablet widths. `VISUAL-01` now retains explicit Requester Selection loading/failure evidence and the Labsheet-required one-valid/one-invalid attachment selection state. Latest full local regression after the Labsheet audit: server Vitest/Supertest **100/100 passed**, client Vitest **64/64 passed**, full Playwright **7/7 passed**, client/server `tsc --noEmit` passed, both production builds passed, and `git diff --check` passed. Three new tracked-evidence candidates are intentionally retained: `requester-loading.png`, `requester-failure.png`, and `invalid-attachment.png`; unrelated regenerated screenshots were restored. The feature branch has been committed and pushed, PR #36 is open for human review, and hosted push/PR CI has passed client/server/e2e; the PR description records the exact current head and CI run so this committed evidence does not become self-referentially stale. All `Final` cells remain `Planned` until exact final-`main` verification.
+
 ## 7. Known Limitations or Deferred Tests
 
 - Asia/Bangkok display formatting uses deterministic `Intl.DateTimeFormat.formatToParts` output and is covered by the My Tickets component test; Issue 11 provides responsive screenshots and Issue 12 now executes the full visual checklist in §4.
 - `STYLE-01`…`STYLE-05`, `UI-19`, and `UI-20` are no longer deferred: Issue 12 adds their automated feature-branch evidence in `client/src/features/lab-02/tests/ui-style.test.tsx`. Their `Final` cells remain `Planned` solely because final-main verification has not occurred yet.
 - The earlier Create Ticket coverage debt was corrected by Issue #27 / PR #28: `API-04`…`API-07`, `API-23`, `UI-01`…`UI-05`, `UI-18`, and `UI-22` now have automated files/evidence. The API-07 expected-result wording was narrowed during Issue 12 to match what the test proves (requester binding/persistence at creation) without changing BR-08 itself.
-- Remaining pre-final planned-test debt is limited to planned files/scenarios not yet present on this branch: `UNIT-01`…`UNIT-04`, `API-01`…`API-03`, `UI-15`…`UI-17`, and `UI-21`. These stay assigned to final integration (Issue 13) unless a separate corrective issue is created first.
+- Issue 13 adds the previously missing `UNIT-01`…`UNIT-04`, `API-01`…`API-03`, `UI-15`…`UI-17`, and `UI-21` feature-branch evidence. Their `Final` cells intentionally remain `Planned` until exact final-`main` verification.
 - Backend idempotency keys out of scope in Lab 2 (AC-05 enforced at UI layer per api-spec §7).
-- The manual backend-stop demo remains deferred to the final submission evidence for AC-25/AC-26; automated failure-state evidence already exists and is not substituted for the requested manual submission demonstration.
+- AC-25/AC-26 already have automated failure-state evidence. For the final submission, the Labsheet permits either stopping the backend or simulating failure; use the deterministic failure screenshot/test evidence and add a live backend-stop demonstration only if it improves the final explanation.

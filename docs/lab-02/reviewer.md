@@ -13,10 +13,14 @@ This record is based on GitHub PR/review history. It does not treat an AI review
 | [#21](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/21) | `feature/6-db-design-seed` | Approved by @Chxtamos; merged |
 | [#22](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/22) | `feature/7-requester-context` | Initial comments on error-envelope/render/test debt; corrected/clarified, approved by @thananun-7203; merged |
 | [#23](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/23) | `feature/8-create-ticket` | Approved by @thananun-7203; merged |
-| [#24](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/24) | `feature/9-my-tickets` | Multi-round review/fix cycle including evidence synchronization; merged after follow-up |
-| [#25](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/25) | `feature/10-ticket-detail-attachments` | Multiple review rounds found concurrency, validation, storage, modal/accessibility, and evidence issues; fixes were re-reviewed and PR merged |
+| [#24](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/24) | `feature/9-my-tickets` | Multi-round `CHANGES_REQUESTED` cycle; @Tanaboonnnnn then approved exact final head `a7843ed…` before merge. GitHub's aggregate `reviewDecision` still shows the historical change-request state, so the submitted approval record is the authoritative per-review evidence |
+| [#25](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/25) | `feature/10-ticket-detail-attachments` | Multiple review rounds found concurrency, validation, storage, modal/accessibility, and evidence issues; @Tanaboonnnnn approved corrected head `cc81a7e…` before merge |
 | [#26](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/26) | `feature/11-e2e-responsive` | Approved by @Tanaboonnnnn at exact head after hosted server/client/E2E checks passed; merged |
 | [#28](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/28) | `fix/8-create-ticket-test-coverage` | Approved by @Tanaboonnnnn at exact head after hosted checks passed; merged |
+| [#29](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/29) | `feature/12-ui-style-docs` | Approved by @Tanaboonnnnn on exact head `05a928a…`; reviewer noted only minor evidence-hygiene / maintainability points; merged |
+| [#32](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/32) | `feature/12a-my-tickets-ux-refinement` | Approved by @Tanaboonnnnn on exact head `704a488…`; hosted CI green; merged |
+| [#33](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/33) | `feature/12b-create-ticket-back-navigation` | Approved by @Tanaboonnnnn on exact head `c4b3fae…`; hosted CI green; merged |
+| [#35](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/35) | `feature/12c-my-tickets-readability-ticket-date` | Approved by @Tanaboonnnnn on exact head `930e469…`; merged as `ff25d1e…` with post-merge staging CI green |
 
 ## Review feedback I received and how I handled it
 
@@ -43,6 +47,12 @@ The Ticket Detail / Attachment PR received several rounds of substantive review.
 
 Because both findings were non-blocking and the reviewed exact head was already green, no extra commit was added to PR #28 solely for those suggestions. The wording cleanup is carried by this documentation/style issue.
 
+### PR #35 — non-blocking release-hardening feedback
+
+@Tanaboonnnnn approved exact head `930e469…` and left two non-blocking points: the defensive My Tickets `ticketDate` fallback could hide a malformed backend response, and hosted evidence did not explicitly assert the desktop/tablet table wrapper itself had no horizontal overflow.
+
+Issue #19 handles both without rewriting the already-approved UI behavior: `listTickets()` now validates required ISO 8601 UTC `ticketDate` values at the client API boundary while retaining `—` only as a last-resort defensive render, and Playwright adds an explicit visible `.table-responsive` `scrollWidth <= clientWidth` assertion at desktop/tablet widths. These are release hardening items, not retroactive blockers on PR #35.
+
 ## Pull Requests I reviewed for peers
 
 GitHub records show Lab 2 reviews submitted from @Peepipat-Suesoongnuen, including:
@@ -59,12 +69,15 @@ GitHub records show Lab 2 reviews submitted from @Peepipat-Suesoongnuen, includi
 
 The peer-review rule used throughout Lab 2 was: **their contract → their implementation → their tests → their CI**. Findings were not based on differences from this repository's implementation style.
 
-## Issue 12 review readiness
+## Issue 13 / release review readiness
 
-Before the Issue 12 PR is handed to a peer reviewer, the branch must show:
+Before the Issue #19 integration PR is handed to a peer reviewer, the branch must show:
 
-- `STYLE-01`…`STYLE-05`, `UI-19`, `UI-20`, `A11Y-01`, and `VISUAL-01` automated evidence;
-- completed responsive/visual checklist with the recorded screenshots;
-- current `reviewer.md`, `ai-use.md`, and README instructions;
+- the remaining planned Unit/API/Requester Selection evidence implemented and traceable;
+- Issue #19 ticket-number, `ticketDate`, E2E-01, table-wrapper, and submission-evidence hardening passing locally;
+- completed responsive/visual checklist with current tracked screenshots, including invalid-attachment and Requester Selection loading/failure evidence required for final submission;
+- current `reviewer.md`, `ai-use.md`, README, specification/API/UI/test documents;
 - client/server regression, typecheck/build, E2E, and `git diff --check` evidence;
 - hosted CI reported only after it actually runs on the pushed exact head.
+
+After that integration PR is peer-approved and merged to `lab2-staging`, one separate release PR `lab2-staging -> main` is required. The reviewer/peer performs the merge. Final reviewer.md evidence must then add the Issue #19 integration PR and the release PR with reviewer identity, comments/response summary, approval, exact reviewed head, and final merge SHA.

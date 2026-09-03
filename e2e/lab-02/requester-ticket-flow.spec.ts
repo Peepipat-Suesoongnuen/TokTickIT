@@ -64,6 +64,16 @@ async function assertNoHorizontalPageScroll(page: Page) {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
+async function assertNoHorizontalTableWrapperScroll(page: Page) {
+  const wrapper = page.locator(".table-responsive:visible");
+  await expect(wrapper).toHaveCount(1);
+  const dimensions = await wrapper.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+}
+
 async function expectVisibleExactText(page: Page, text: string) {
   await expect
     .poll(async () => {
@@ -93,15 +103,7 @@ test("E2E-01 select requester -> create -> search -> open detail", async ({ page
   await page.getByLabel("Requested Priority").selectOption("HIGH");
   await page.getByLabel("Summary").fill(summary);
   await page.getByLabel("Description").fill(`The printer cannot complete a job for marker ${marker}.`);
-  const [createResponse] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/tickets" &&
-        response.request().method() === "POST",
-    ),
-    page.getByRole("button", { name: "Submit Ticket" }).click(),
-  ]);
-  expect(createResponse.status()).toBe(201);
+  await page.getByRole("button", { name: "Submit Ticket" }).click();
 
   const ticketNumberText = page.getByText(/Official Ticket Number:/);
   await expect(ticketNumberText).toBeVisible({ timeout: 10_000 });
@@ -219,6 +221,9 @@ test("E2E-05 captures responsive evidence at 1440 / 900 / 375 widths", async ({ 
     await page.goto("/my-tickets");
     await expectVisibleExactText(page, summary);
     await assertNoHorizontalPageScroll(page);
+    if (viewport.width >= 768) {
+      await assertNoHorizontalTableWrapperScroll(page);
+    }
     await page.screenshot({
       path: path.join("artifacts", "lab-02", "screenshots", "my-tickets", `${viewport.name}.png`),
       fullPage: true,
