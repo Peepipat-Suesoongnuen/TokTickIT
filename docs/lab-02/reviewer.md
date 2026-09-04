@@ -116,5 +116,6 @@ Completed release gates:
 Final evidence-sync gate:
 
 - This documentation-only follow-up synchronizes `tests.md` and `reviewer.md` with the verified PR #37/final-main evidence; it does not change production or test behavior.
-- The evidence follow-up must still be peer-reviewed/merged to `main`, and the resulting `main` CI must remain green before Issue #19 is finally closed / moved Done.
-- The author does not self-merge this follow-up.
+- The evidence follow-up must first be peer-reviewed and merged into `lab2-staging`, followed by exact post-merge staging CI verification.
+- Only after staging is green should a separate peer-reviewed release PR promote `lab2-staging -> main`; the resulting exact `main` CI must be green before Issue #19 is finally closed / moved Done.
+- The author does not self-merge either the staging evidence PR or the subsequent release PR.
