@@ -23,7 +23,7 @@ This record is based on GitHub PR/review history. It does not treat an AI review
 | [#35](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/35) | `feature/12c-my-tickets-readability-ticket-date` | Approved by @Tanaboonnnnn on exact head `930e469…`; merged as `ff25d1e…` with post-merge staging CI green |
 | [#36](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/36) | `feature/13-release-integration` | @Tanaboonnnnn first requested evidence-sync changes, then approved exact final head `c763999…`; peer merged as `e213b00…` and post-merge staging CI was green |
 | [#39](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/39) | `fix/14-my-tickets-sort-flicker` | Approved by @Tanaboonnnnn on exact head `5394b7e…`; reviewer noted a non-blocking direct-mobile-sort test gap; peer merged as `42ad3bc…`; exact post-merge staging and release-PR CI were green |
-| [#37](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/37) | `lab2-staging` | Final `lab2-staging -> main` release PR. @thananun-7203 requested documentation/evidence corrections; @Tanaboonnnnn separately requested reopening Issue #19 until release merge + exact final-main verification. Both are process/evidence review findings; approval and merge remain pending re-review |
+| [#37](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/37) | `lab2-staging` | Final `lab2-staging -> main` release PR. @thananun-7203 requested documentation/evidence corrections; @Tanaboonnnnn requested reopening Issue #19, then re-reviewed and **APPROVED** exact final head `b9da7c49…`; @Tanaboonnnnn peer-merged PR #37 into `main` as `967d8fed…`; exact final-main CI run `33877953656` completed successfully |
 
 ## Review feedback I received and how I handled it
 
@@ -68,7 +68,7 @@ The reviewer then re-reviewed exact final head `c763999…`, approved it, and th
 
 The peer merged PR #39 as `42ad3bc…`; exact post-merge staging push CI and the release-PR CI on that same head were green.
 
-### PR #37 — current release review corrections
+### PR #37 — final release review and merge
 
 @thananun-7203 reviewed release head `42ad3bc…` and reported no production-code blocker, but submitted `CHANGES_REQUESTED` for two factual documentation inconsistencies:
 
@@ -81,7 +81,9 @@ Those documentation/evidence corrections were applied on release head `7c39b25�
 
 @Tanaboonnnnn independently reviewed the release process and identified one additional blocking process/evidence inconsistency: Issue #19 had been closed as Completed before PR #37 was merged to `main`, before an exact final-main merge SHA existed, and before hosted final-main client/server/e2e verification. This contradicted Issue #19's own acceptance criterion that it closes / moves Done only after final-main verification is complete.
 
-Issue #19 was therefore reopened. It must remain open until a peer merges PR #37, exact final-main hosted verification succeeds, and final evidence/status synchronization is complete. No final-main success is claimed before those gates occur.
+Issue #19 was therefore reopened. On exact corrected head `b9da7c49e869b378cb2f2536639aaccf12ae70f4`, @Tanaboonnnnn re-reviewed the release, confirmed the blocker was resolved, and submitted **APPROVED**. The same peer then merged PR #37 into `main` as merge commit `967d8fed8f06a4240a34cb30498f3489a67c3ed0` on 2026-09-04.
+
+Hosted final-main CI run `33877953656` ran on that exact merge SHA and completed **SUCCESS**: server and client jobs passed, and the E2E job passed overall. The final-main server suite reported **101/101** tests and the client suite **67/67**. Playwright reported **6 passed + 1 flaky**: E2E-01 timed out once waiting for the visible Official Ticket Number and then passed on Playwright's retry. This retry is recorded explicitly rather than presented as a clean first-pass 7/7 result.
 
 ## Pull Requests I reviewed for peers
 
@@ -99,20 +101,21 @@ GitHub records show Lab 2 reviews submitted from @Peepipat-Suesoongnuen, includi
 
 The peer-review rule used throughout Lab 2 was: **their contract → their implementation → their tests → their CI**. Findings were not based on differences from this repository's implementation style.
 
-## Current release-review status
+## Final release status
 
-Completed before the final release review:
+Completed release gates:
 
 - Issue #19 / PR #36 release-integration evidence and hardening was peer-reviewed and merged into `lab2-staging` as `e213b00…`.
 - Issue #38 / PR #39 sort-refresh UX hardening was peer-reviewed and merged into `lab2-staging` as `42ad3bc…`.
 - The responsive/visual checklist has executed feature/staging evidence recorded in `tests.md` §4 and tracked screenshots.
 - Release-review documentation/evidence corrections on `7c39b25…` were verified by hosted push and PR CI.
-- Issue #19 is reopened because its final close/Done gate depends on PR #37 merge + exact final-main verification.
+- Issue #19 was reopened when review found it had been closed before its release gate.
+- PR #37 exact final head `b9da7c49…` was approved by @Tanaboonnnnn and peer-merged into `main` as `967d8fed…`.
+- Exact final-main CI run `33877953656` on `967d8fed…` completed successfully: server **101/101**, client **67/67**, E2E job success with **6 passed + 1 flaky** (E2E-01 passed on retry).
 
-Current gate:
+Final evidence-sync gate:
 
-- PR #37 (`lab2-staging -> main`) has human `CHANGES_REQUESTED` reviews and is awaiting re-review after the documented corrections/process-state fix.
-- The author does not self-merge; the reviewer/peer performs the release merge after approval.
-- `tests.md` `Final` cells remain `Planned` until exact final-`main` hosted verification exists.
-- Issue #19 remains open until the release merge, exact final-main client/server/e2e verification, and final evidence/status synchronization are complete.
-- After the release merge, this record must be synchronized one final time with PR #37 approval/reviewer identity, exact reviewed head, final merge SHA, and final-main verification evidence. No such future evidence is claimed in advance.
+- This documentation-only follow-up synchronizes `tests.md` and `reviewer.md` with the verified PR #37/final-main evidence; it does not change production or test behavior.
+- The evidence follow-up must first be peer-reviewed and merged into `lab2-staging`, followed by exact post-merge staging CI verification.
+- Only after staging is green should a separate peer-reviewed release PR promote `lab2-staging -> main`; the resulting exact `main` CI must be green before Issue #19 is finally closed / moved Done.
+- The author does not self-merge either the staging evidence PR or the subsequent release PR.
