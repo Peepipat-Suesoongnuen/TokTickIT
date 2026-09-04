@@ -427,6 +427,43 @@ describe("MyTickets", () => {
       await waitFor(() => expect(screen.getByRole("columnheader", { name: /Ticket Number/i })).toHaveAttribute("aria-sort", "ascending"));
     });
 
+    it("keeps desktop and mobile results mounted while a sort refresh is pending", async () => {
+      const sortResult = deferred<any>();
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      const listSpy = vi.spyOn(api, "listTickets")
+        .mockResolvedValueOnce({
+          data: mockTickets,
+          meta: { page: 1, pageSize: 10, totalCount: 2, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+        })
+        .mockImplementationOnce(() => sortResult.promise);
+
+      const { container } = renderWithProviders();
+      await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0));
+
+      await userEvent.click(screen.getByRole("button", { name: /Sort by Ticket Number/i }));
+      await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "ticketNumber", order: "desc" })));
+
+      expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "true");
+      expect(container.querySelector(".lab2-ticket-card")).toBeInTheDocument();
+      expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0);
+      expect(screen.queryByText("Loading tickets…")).not.toBeInTheDocument();
+
+      await act(async () => {
+        sortResult.resolve({
+          data: [{
+            ...mockTickets[1],
+            id: 99,
+            ticketNumber: "2608-0099",
+          }],
+          meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+        });
+      });
+
+      await waitFor(() => expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "false"));
+      expect(screen.getAllByText("2608-0099").length).toBeGreaterThan(0);
+      expect(screen.queryByText("2608-0001")).not.toBeInTheDocument();
+    });
+
     it("sorts Created through ticketDate with descending-first toggle behavior (UI-27)", async () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
       const listSpy = vi.spyOn(api, "listTickets").mockResolvedValue({

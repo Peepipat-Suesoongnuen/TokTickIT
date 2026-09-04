@@ -55,6 +55,7 @@ export default function MyTickets() {
   const ticketRequestSequence = useRef(0);
   const categoryRequestSequence = useRef(0);
 
+  const isInitialLoading = loading && meta === null;
   const isFiltered = debouncedSearch !== "" || categoryId !== "" || priority !== "" || currentStatus !== "";
   const hasResettableState =
     search.trim() !== "" ||
@@ -266,7 +267,7 @@ export default function MyTickets() {
         </div>
       )}
 
-      {loading && <p className="text-secondary">Loading tickets…</p>}
+      {isInitialLoading && <p className="text-secondary">Loading tickets…</p>}
 
       {error && (
         <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert" aria-live="polite">
@@ -295,11 +296,11 @@ export default function MyTickets() {
         </div>
       )}
 
-      {!loading && !error && data.length > 0 && (
+      {!error && data.length > 0 && (
         <>
           {/* Desktop table */}
           <div className="d-none d-md-block table-responsive">
-            <table className="table table-hover align-middle lab2-ticket-table">
+            <table className="table table-hover align-middle lab2-ticket-table" aria-busy={loading}>
               <colgroup>
                 <col className="lab2-col-ticket-number" />
                 <col className="lab2-col-created" />
@@ -391,7 +392,7 @@ export default function MyTickets() {
           </div>
 
           {/* Mobile cards */}
-          <div className="d-md-none">
+          <div className="d-md-none" aria-busy={loading}>
             <div className="d-flex flex-wrap gap-2 mb-2" role="group" aria-label="Mobile ticket sorting">
               {([
                 ["ticketNumber", "Ticket Number"],
