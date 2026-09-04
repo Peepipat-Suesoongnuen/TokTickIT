@@ -120,15 +120,15 @@ All ticket header information rendered **read-only** (read-only field styling): 
 
 Screen heading/navigation: `Ticket {ticketNumber}` on the left and **Back to My Tickets** (secondary outlined real link to `/my-tickets`) on the top right above the read-only Ticket card. The control is navigation only; it does not edit/delete the Ticket or mutate Attachments. On narrow mobile widths the heading/action row may stack cleanly. The existing 404/not-owned safe state also retains its Back-to-My-Tickets route.
 
-**Attachment section** (visually separated card): list rows with name, size, uploaded date, and state-dependent actions:
+**Attachment section** (visually separated card): list rows with name, size, uploaded date, and state-dependent actions. The exact feedback presentation differs between pre-submit local selection on Create Ticket and add-attachment actions on an already-created Ticket: Create Ticket keeps invalid selections as dismissible local rows (§5.2), while Ticket Detail sends a chosen file through the attachment API and reports a rejected upload safely without persisting it.
 
 | Attachment state | Display | Actions |
 |---|---|---|
 | Active | file icon + name + size | Download (tertiary), Remove (tertiary → modal) |
-| Uploading | progress spinner, name dimmed | none |
-| Invalid (rejected type/size) | red text reason under entry | entry not persisted — dismissible |
+| Uploading | progress spinner + uploading filename | none until request completes |
+| Invalid/rejected add | safe upload-error banner with rejection reason; failed file is not persisted | choose a corrected file again |
 | Removed | name struck-through/muted + "Removed {date} — Reason: …" | no download/preview (BR-17) |
-| Unavailable (fetch fails) | muted row + retry link | Retry |
+| Detail/attachment load or action failure | safe error/warning feedback; existing loaded metadata is not silently converted into a different attachment state | Retry/reload action |
 
 Add-attachment control (file picker) enabled while active count < 5 (BR-14); at limit show helper "Maximum of 5 active attachments reached".
 
@@ -161,17 +161,19 @@ States: loading (skeleton); 404/not-owned (safe "Ticket not found" + back link, 
 - API failures: render server `error.message` when present; otherwise generic safe copy ("Unable to connect to TokTickIT API. Please try again."). Never expose raw fetch errors or internals.
 - Success: confirmation includes backend-generated Ticket Number (never client-generated).
 
-## 9. Visual Inspection Checklist (to be executed in Issue 12)
+## 9. Visual Inspection Checklist — executed evidence
 
-- [ ] Colors match tokens (header/actions #006B3C; accents/hover #0B7A46; selections #EAF6EF; bg #F5F7F6)
-- [ ] Editable vs read-only fields visually distinct at a glance
-- [ ] Asterisks on all required fields; messages directly beneath their fields
-- [ ] Button hierarchy consistent (primary/secondary/tertiary/destructive/busy/disabled)
-- [ ] Badges: priority + status consistent across list and detail
-- [ ] No clipping, overlap, unintended horizontal scroll at 1440 / 900 / 375 widths
-- [ ] Filters, pagination, attachment controls usable at all sizes
-- [ ] Empty vs no-results states both reachable and visually distinct
-- [ ] Screens match approved illustrations, not memory
+This checklist was executed during Issue 12 and is cross-referenced by [tests.md](./tests.md) §4. Issue 13 added explicit desktop/tablet My Tickets table-wrapper no-overflow evidence and the retained Requester Selection / invalid-attachment visual states. These checks are **feature/staging evidence**; they do not change any `tests.md` `Final` value to `Pass` before exact final-`main` verification.
+
+- [x] Colors match tokens (header/actions #006B3C; accents/hover #0B7A46; selections #EAF6EF; bg #F5F7F6)
+- [x] Editable vs read-only fields visually distinct at a glance
+- [x] Asterisks on all required fields; messages directly beneath their fields
+- [x] Button hierarchy consistent (primary/secondary/tertiary/destructive/busy/disabled)
+- [x] Badges: priority + status consistent across list and detail
+- [x] No clipping, overlap, unintended horizontal scroll at 1440 / 900 / 375 widths
+- [x] Filters, pagination, attachment controls usable at all sizes
+- [x] Empty vs no-results states both reachable and visually distinct
+- [x] Screens compared against the approved Labsheet illustrations and written UI contract rather than memory; the illustrations are treated as illustrative, not pixel-perfect templates
 
 **Screenshot paths** (Playwright, three viewports each):
 ```

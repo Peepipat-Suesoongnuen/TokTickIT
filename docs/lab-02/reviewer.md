@@ -1,7 +1,7 @@
 # Lab 2 — Peer Review Record
 
 **Author:** Peepipat Suesoongnuen — 67070507207 — GitHub: @Peepipat-Suesoongnuen
-**Lab workflow:** feature branch → peer-reviewed PR → `lab2-staging`; final release integration is handled separately in Issue 13.
+**Lab workflow:** feature branch → peer-reviewed PR → `lab2-staging`; final release is peer-reviewed through `lab2-staging -> main`.
 
 This record is based on GitHub PR/review history. It does not treat an AI review draft as peer-review evidence unless a review was actually submitted on GitHub.
 
@@ -21,6 +21,9 @@ This record is based on GitHub PR/review history. It does not treat an AI review
 | [#32](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/32) | `feature/12a-my-tickets-ux-refinement` | Approved by @Tanaboonnnnn on exact head `704a488…`; hosted CI green; merged |
 | [#33](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/33) | `feature/12b-create-ticket-back-navigation` | Approved by @Tanaboonnnnn on exact head `c4b3fae…`; hosted CI green; merged |
 | [#35](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/35) | `feature/12c-my-tickets-readability-ticket-date` | Approved by @Tanaboonnnnn on exact head `930e469…`; merged as `ff25d1e…` with post-merge staging CI green |
+| [#36](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/36) | `feature/13-release-integration` | @Tanaboonnnnn first requested evidence-sync changes, then approved exact final head `c763999…`; peer merged as `e213b00…` and post-merge staging CI was green |
+| [#39](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/39) | `fix/14-my-tickets-sort-flicker` | Approved by @Tanaboonnnnn on exact head `5394b7e…`; reviewer noted a non-blocking direct-mobile-sort test gap; peer merged as `42ad3bc…`; exact post-merge staging and release-PR CI were green |
+| [#37](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/37) | `lab2-staging` | Final `lab2-staging -> main` release PR. @thananun-7203 submitted `CHANGES_REQUESTED` on staging head `42ad3bc…` for documentation/evidence synchronization; approval and merge remain pending until the corrected head is re-reviewed |
 
 ## Review feedback I received and how I handled it
 
@@ -53,6 +56,29 @@ Because both findings were non-blocking and the reviewed exact head was already 
 
 Issue #19 handles both without rewriting the already-approved UI behavior: `listTickets()` now validates required ISO 8601 UTC `ticketDate` values at the client API boundary while retaining `—` only as a last-resort defensive render, and Playwright adds an explicit visible `.table-responsive` `scrollWidth <= clientWidth` assertion at desktop/tablet widths. These are release hardening items, not retroactive blockers on PR #35.
 
+### PR #36 — release-evidence synchronization before staging merge
+
+@Tanaboonnnnn reviewed the Issue #19 integration work and initially submitted `CHANGES_REQUESTED` on head `d11e234…` because the PR description and `tests.md` still contained stale evidence wording. The implementation/test hardening itself had no functional blocker. I synchronized the canonical PR/test evidence to the current head and hosted runs while keeping every `tests.md` `Final` cell `Planned` until final `main` verification.
+
+The reviewer then re-reviewed exact final head `c763999…`, approved it, and the peer merged PR #36 into `lab2-staging` as `e213b00…`. The final reviewed-head push/PR CI and the post-merge staging CI were green.
+
+### PR #39 — focused sort-refresh fix and mobile-test minor
+
+@Tanaboonnnnn verified that the sort-refresh change keeps the existing desktop table and mobile cards mounted while the replacement request is pending, preserves initial/requester-switch loading behavior, and retains stale-response protection. The reviewer approved exact head `5394b7e…` and recorded one **non-blocking** test-hygiene point: the deferred regression test triggers sorting through the desktop control and asserts both desktop and mobile results, rather than directly clicking the mobile sort control in that same case. Desktop and mobile controls use the same `applySort(field)` request/state path, so this was not treated as a product blocker.
+
+The peer merged PR #39 as `42ad3bc…`; exact post-merge staging push CI and the release-PR CI on that same head were green.
+
+### PR #37 — current release review corrections
+
+@thananun-7203 reviewed release head `42ad3bc…` and reported no production-code blocker, but submitted `CHANGES_REQUESTED` for two factual documentation inconsistencies:
+
+1. `ui-spec.md` §9 still described the visual checklist as future Issue-12 work with unchecked boxes even though `tests.md` §4 records the executed evidence.
+2. `reviewer.md` had not yet recorded PR #36's completed review/merge history.
+
+The reviewer also noted one non-blocking wording issue: `path.resolve("uploads")` is not inherently cwd-independent; it resolves from the process working directory. The documented server/test commands use `server/` as that working directory.
+
+This review remains pending until the corrected release head is pushed, exact-head CI completes, and the reviewer re-reviews it. No approval or final merge is claimed here yet.
+
 ## Pull Requests I reviewed for peers
 
 GitHub records show Lab 2 reviews submitted from @Peepipat-Suesoongnuen, including:
@@ -69,15 +95,18 @@ GitHub records show Lab 2 reviews submitted from @Peepipat-Suesoongnuen, includi
 
 The peer-review rule used throughout Lab 2 was: **their contract → their implementation → their tests → their CI**. Findings were not based on differences from this repository's implementation style.
 
-## Issue 13 / release review readiness
+## Current release-review status
 
-Before the Issue #19 integration PR is handed to a peer reviewer, the branch must show:
+Completed before the final release review:
 
-- the remaining planned Unit/API/Requester Selection evidence implemented and traceable;
-- Issue #19 ticket-number, `ticketDate`, E2E-01, table-wrapper, and submission-evidence hardening passing locally;
-- completed responsive/visual checklist with current tracked screenshots, including invalid-attachment and Requester Selection loading/failure evidence required for final submission;
-- current `reviewer.md`, `ai-use.md`, README, specification/API/UI/test documents;
-- client/server regression, typecheck/build, E2E, and `git diff --check` evidence;
-- hosted CI reported only after it actually runs on the pushed exact head.
+- Issue #19 / PR #36 release-integration evidence and hardening was peer-reviewed and merged into `lab2-staging` as `e213b00…`.
+- Issue #38 / PR #39 sort-refresh UX hardening was peer-reviewed and merged into `lab2-staging` as `42ad3bc…`.
+- The responsive/visual checklist has executed feature/staging evidence recorded in `tests.md` §4 and tracked screenshots.
+- Exact staging push CI and PR #37 CI on `42ad3bc…` passed client, server, and E2E before the current documentation-review correction.
 
-After that integration PR is peer-approved and merged to `lab2-staging`, one separate release PR `lab2-staging -> main` is required. The reviewer/peer performs the merge. Final reviewer.md evidence must then add the Issue #19 integration PR and the release PR with reviewer identity, comments/response summary, approval, exact reviewed head, and final merge SHA.
+Current gate:
+
+- PR #37 (`lab2-staging -> main`) has a human `CHANGES_REQUESTED` review for documentation/evidence synchronization and is awaiting a corrected-head re-review.
+- The author does not self-merge; the reviewer/peer performs the release merge after approval.
+- `tests.md` `Final` cells remain `Planned` until exact final-`main` hosted verification exists.
+- After the release merge, this record must be synchronized one final time with PR #37 approval/reviewer identity, exact reviewed head, final merge SHA, and final-main verification evidence. No such future evidence is claimed in advance.
