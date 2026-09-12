@@ -19,7 +19,7 @@ Retain the Lab 2 design system:
 | Error | existing dark-red field/banner treatment |
 | Focus | visible ~2 px green outline; never removed |
 | Mobile touch target | minimum 44×44 px where applicable |
-| Main content width | approximately 1200 px centered |
+| Main content width | Requester screens preserve the Lab 2 centered ~1200 px baseline; dense IT Staff/Admin data screens may widen to approximately 1360 px when needed to keep required columns readable without horizontal page scrolling |
 
 Existing Lab 2 patterns remain preferred:
 
@@ -502,6 +502,14 @@ CANCELLED
 Use restrained Zen/neutral/warning/success/muted families rather than eight unrelated decorative colors. Every badge always includes text.
 
 In dense table rows, the underlying `WAITING_FOR_REQUESTER` state may render as `WAITING` to keep the badge on one line. This is a presentation label only; the API/business status remains `WAITING_FOR_REQUESTER`.
+
+Table badge alignment and sizing are consistent across Requester, IT Staff, and Administrator lists:
+
+- priority/status/role highlights use a consistent fixed-height bordered family;
+- the left edge of a badge aligns with the first character of its column header/data start rather than floating centered inside the cell;
+- `NEW` renders as text only with no decorative leading dot;
+- `CLOSED` uses the same muted/neutral visual family as `LOW` priority so the two approved states remain visually consistent without implying extra severity;
+- these are presentation rules only and do not change the underlying API values.
 
 ### 8.3 Role badge
 

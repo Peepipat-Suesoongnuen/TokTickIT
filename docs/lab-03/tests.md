@@ -168,7 +168,7 @@ These tests use controlled fixtures / migration snapshots and never destructivel
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
 | STYLE-01 | Style | ui-spec §1, AC-17 | Zen Green base tokens/classes retained | Lab 3 shell/primary actions reuse documented tokens | `client/src/features/lab-03/tests/ui-style.test.tsx` | Planned |
-| STYLE-02 | Style | ui-spec §8, AC-17 | priority/status/role badge semantics | text always present; consistent class mapping; not color-only | same | Planned |
+| STYLE-02 | Style | ui-spec §8, AC-17 | priority/status/role badge semantics and table alignment | text always present; consistent fixed-height bordered family; left edge aligns with column header/data start; `NEW` has no decorative dot; `CLOSED` uses the approved muted family consistent with `LOW`; not color-only | same | Planned |
 | STYLE-03 | Style | ui-spec §6, AC-12, AC-17 | Public vs Internal Notes distinction | private section has explicit text/icon/semantic distinction beyond color | same | Planned |
 | STYLE-04 | Style / a11y | ui-spec §11, AC-17 | visible focus / first-invalid-field / dialogs | focus rules remain aligned with Lab 2 conventions | same | Planned |
 
@@ -266,6 +266,9 @@ Planned execution at representative `1440`, `900`, and `375` widths where releva
 - [ ] Public Comments vs Internal Notes are unmistakably different without relying on color alone.
 - [ ] Admin list/create/edit/reset works desktop/mobile; Search/Role/Status filters and Clear/Refresh/Create actions are present; row/card interaction replaces an Edit column/button; dialogs fit viewport.
 - [ ] status/priority/role badges include text and remain readable.
+- [ ] dense IT Staff/Admin desktop data screens may widen to approximately 1360 px while Requester screens preserve the Lab 2 ~1200 px baseline; no horizontal page scroll is introduced.
+- [ ] table priority/status/role highlights use consistent fixed-height borders and align their left edge with the corresponding column header/data start.
+- [ ] `NEW` status has no decorative leading dot, and `CLOSED` uses the approved muted visual family consistent with `LOW` priority.
 - [ ] loading/saving/success/validation/empty/no-results/forbidden/not-found/failure states are visually distinct where required.
 - [ ] visible focus, keyboard reachability, modal/dialog trap/Escape/focus-return behaviors work.
 - [ ] no unintended horizontal page scrolling; no blocking clipping/overlap.
