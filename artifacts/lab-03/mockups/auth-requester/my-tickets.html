@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TokTickIT Lab 3 Mockup — Requester My Tickets</title>
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <header class="zen-header">
+    <div class="container header-row">
+      <div class="brand">TokTickIT <small>IT Service Desk</small></div>
+      <div class="identity-actions">
+        <span class="identity-chip">👤 Anucha Wongprecha</span>
+        <span class="role-chip">REQUESTER</span>
+        <button class="btn btn-header">Change Password</button>
+        <button class="btn btn-header">Logout</button>
+      </div>
+    </div>
+  </header>
+  <nav class="nav-shell" aria-label="Primary navigation">
+    <div class="container nav-row">
+      <button class="nav-toggle" aria-label="Toggle navigation">☰</button>
+      <div class="nav-links">
+        <a class="nav-link active" href="#">My Tickets</a>
+        <a class="nav-link" href="#">Create Ticket</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container main">
+    <div class="screen-heading">
+      <h1 class="h4">My Tickets</h1>
+      <div class="actions">
+        <button class="btn btn-outline">Clear Filters</button>
+        <button class="btn btn-primary">Create Ticket</button>
+      </div>
+    </div>
+
+    <section class="card toolbar">
+      <div class="toolbar-grid">
+        <div class="field"><label class="toolbar-label">Search</label><input class="control" placeholder="Search ticket number or summary…" /></div>
+        <div class="field"><label class="toolbar-label">Category</label><select class="control"><option>All Categories</option></select></div>
+        <div class="field"><label class="toolbar-label">Requested Priority</label><select class="control"><option>All Priorities</option></select></div>
+        <div class="field"><label class="toolbar-label">Current Status</label><select class="control"><option>All Statuses</option></select></div>
+        <div class="field"><label class="toolbar-label">Rows per page</label><select class="control"><option>10</option></select></div>
+      </div>
+    </section>
+
+    <div class="ticket-table-wrap">
+      <table class="ticket-table">
+        <colgroup><col class="num"><col class="created"><col class="summary"><col class="category"><col class="priority"><col class="status"><col class="updated"></colgroup>
+        <thead><tr><th class="sort">Ticket Number ↕</th><th class="sort">Created ↕</th><th>Summary</th><th>Category</th><th class="sort">Requested Priority ↕</th><th>Current Status</th><th class="sort">Last Updated ↓</th></tr></thead>
+        <tbody>
+          <tr><td><a class="ticket-link">2609-0142</a></td><td>2026-09-12<br>09:10:12</td><td><div class="summary-clamp">Unable to connect to campus VPN after password change</div></td><td>Account and Access</td><td><span class="badge priority-high">HIGH</span></td><td><span class="badge status-in-progress">IN PROGRESS</span></td><td>2026-09-12<br>20:12:44</td></tr>
+          <tr><td><a class="ticket-link">2609-0138</a></td><td>2026-09-11<br>14:42:08</td><td><div class="summary-clamp">Printer queue remains offline in the shared lab</div></td><td>Hardware</td><td><span class="badge priority-medium">MEDIUM</span></td><td><span class="badge status-waiting">WAITING FOR REQUESTER</span></td><td>2026-09-12<br>18:31:05</td></tr>
+          <tr><td><a class="ticket-link">2609-0134</a></td><td>2026-09-10<br>11:06:33</td><td><div class="summary-clamp">LEB2 attachment upload fails near completion</div></td><td>Software</td><td><span class="badge priority-high">HIGH</span></td><td><span class="badge status-resolved">RESOLVED</span></td><td>2026-09-12<br>16:22:51</td></tr>
+          <tr><td><a class="ticket-link">2609-0127</a></td><td>2026-09-08<br>10:20:00</td><td><div class="summary-clamp">Cannot reach internal service from campus Wi-Fi</div></td><td>Network</td><td><span class="badge priority-low">LOW</span></td><td><span class="badge status-closed">CLOSED</span></td><td>2026-09-11<br>15:18:21</td></tr>
+          <tr><td><a class="ticket-link">2609-0120</a></td><td>2026-09-06<br>08:55:27</td><td><div class="summary-clamp">Email sync issue returned after software update</div></td><td>Software</td><td><span class="badge priority-medium">MEDIUM</span></td><td><span class="badge status-reopened">REOPENED</span></td><td>2026-09-10<br>13:09:50</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mobile-sort" aria-label="Mobile sorting mockup">
+      <button class="btn btn-outline">Ticket Number ↕</button><button class="btn btn-outline">Created ↕</button><button class="btn btn-outline">Requested Priority ↕</button><button class="btn btn-primary">Last Updated ↓</button>
+    </div>
+    <section class="mobile-cards">
+      <article class="card ticket-card"><div><a class="ticket-link">2609-0142</a></div><div class="small muted">Created: 2026-09-12 09:10:12</div><div class="summary-line">Unable to connect to campus VPN after password change</div><div class="small muted">Account and Access · <span class="badge priority-high">HIGH</span> · <span class="badge status-in-progress">IN PROGRESS</span></div><div class="small muted">Last Updated: 2026-09-12 20:12:44</div></article>
+      <article class="card ticket-card"><div><a class="ticket-link">2609-0138</a></div><div class="small muted">Created: 2026-09-11 14:42:08</div><div class="summary-line">Printer queue remains offline in the shared lab</div><div class="small muted">Hardware · <span class="badge priority-medium">MEDIUM</span> · <span class="badge status-waiting">WAITING FOR REQUESTER</span></div><div class="small muted">Last Updated: 2026-09-12 18:31:05</div></article>
+      <article class="card ticket-card"><div><a class="ticket-link">2609-0134</a></div><div class="small muted">Created: 2026-09-10 11:06:33</div><div class="summary-line">LEB2 attachment upload fails near completion</div><div class="small muted">Software · <span class="badge priority-high">HIGH</span> · <span class="badge status-resolved">RESOLVED</span></div><div class="small muted">Last Updated: 2026-09-12 16:22:51</div></article>
+    </section>
+
+    <div class="pagination"><span>Page 1 of 4 • 32 tickets</span><div class="pagination-buttons"><button class="btn" disabled>Previous</button><button class="btn active">1</button><button class="btn">2</button><button class="btn">3</button><button class="btn">4</button><button class="btn">Next</button></div></div>
+  </main>
+</body>
+</html>
+

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TokTickIT Lab 3 Mockup — Requester Ticket Detail</title>
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <header class="zen-header"><div class="container header-row"><div class="brand">TokTickIT <small>IT Service Desk</small></div><div class="identity-actions"><span class="identity-chip">👤 Anucha Wongprecha</span><span class="role-chip">REQUESTER</span><button class="btn btn-header">Change Password</button><button class="btn btn-header">Logout</button></div></div></header>
+  <nav class="nav-shell"><div class="container nav-row"><button class="nav-toggle">☰</button><div class="nav-links"><a class="nav-link">My Tickets</a><a class="nav-link">Create Ticket</a></div></div></nav>
+  <main class="container detail main">
+    <div class="screen-heading"><h1 class="h4">Ticket 2609-0142</h1><div class="actions"><button class="btn btn-outline">Back to My Tickets</button></div></div>
+    <section class="card mb-3"><div class="card-body">
+      <div class="row row-3 mb-3"><div class="field"><label class="label">Ticket Number</label><input class="control readonly" value="2609-0142" readonly></div><div class="field"><label class="label">Ticket Date</label><input class="control readonly" value="2026-09-12 09:10:12" readonly></div><div class="field"><label class="label">Requester</label><input class="control readonly" value="Anucha Wongprecha" readonly></div></div>
+      <div class="row row-2 mb-3"><div class="field"><label class="label">Category</label><input class="control readonly" value="Account and Access" readonly></div><div class="field"><label class="label">Related System</label><input class="control readonly" value="VPN" readonly></div></div>
+      <div class="field mb-3"><label class="label">Summary</label><input class="control readonly" value="Unable to connect to campus VPN after password change" readonly></div>
+      <div class="field mb-3"><label class="label">Description</label><textarea class="control readonly" readonly>The VPN client rejects my login after I changed my university password this morning. I restarted the laptop and tried again.</textarea></div>
+      <div class="row row-2"><div class="field"><label class="label">Assigned To</label><input class="control readonly" value="Bob Staff" readonly></div><div class="field"><label class="label">Ticket State</label><div class="control readonly status-row"><span class="badge priority-high">HIGH</span><span class="badge status-in-progress">IN PROGRESS</span></div></div></div>
+    </div></section>
+
+    <section class="card detail-tools">
+      <div class="detail-tabs" role="tablist" aria-label="Ticket detail sections">
+        <button class="detail-tab active" type="button" role="tab" aria-selected="true" data-tab="comments">Public Comments</button>
+        <button class="detail-tab" type="button" role="tab" aria-selected="false" data-tab="attachments">Attachments</button>
+        <button class="detail-tab" type="button" role="tab" aria-selected="false" data-tab="service-actions">Service Actions</button>
+      </div>
+
+      <div id="comments" class="detail-panel active" role="tabpanel">
+        <h2>Public Comments</h2>
+        <p class="form-text">Visible to you and the IT team.</p>
+        <div class="comment"><div class="comment-meta"><span class="comment-author">Anucha Wongprecha</span><span>Requester</span><span>2026-09-12 10:22</span></div><div>The VPN still rejects my login after restarting.</div></div>
+        <div class="comment"><div class="comment-meta"><span class="comment-author">Bob Staff</span><span>IT Staff</span><span>2026-09-12 10:45</span></div><div>Please download the refreshed VPN profile and try once more.</div></div>
+        <div class="comment-input-row">
+          <div><textarea class="control comment-compose" placeholder="Add a public comment…"></textarea><div class="form-text">0 / 2000</div></div>
+          <button class="btn btn-primary comment-post">Post Comment</button>
+        </div>
+      </div>
+
+      <div id="attachments" class="detail-panel" role="tabpanel" hidden>
+        <h2>Attachments</h2>
+        <div class="form-text mb-2">JPG, PNG, WEBP or PDF, up to 5 MB each, max 5 files</div>
+        <input class="control mb-2" type="file">
+        <div class="attachment-row"><span>vpn-error.png · 182 KB</span><div class="actions"><button class="btn btn-outline">Download</button><button class="btn btn-outline">Remove</button></div></div>
+      </div>
+
+      <div id="service-actions" class="detail-panel" role="tabpanel" hidden>
+        <div class="service-action-row">
+          <div class="service-action-copy">
+            <h2>Problem Appears Resolved</h2>
+            <p class="muted mb-2">Let IT know that the reported problem appears resolved. This does not close the ticket.</p>
+          </div>
+          <button class="btn btn-outline">Problem Appears Resolved</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const tabs = document.querySelectorAll('.detail-tab');
+    const panels = document.querySelectorAll('.detail-panel');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((item) => {
+          item.classList.toggle('active', item === tab);
+          item.setAttribute('aria-selected', item === tab ? 'true' : 'false');
+        });
+        panels.forEach((panel) => {
+          const selected = panel.id === tab.dataset.tab;
+          panel.classList.toggle('active', selected);
+          panel.hidden = !selected;
+        });
+      });
+    });
+  </script>
+</body>
+</html>
