@@ -556,6 +556,7 @@ Precondition: Ticket owner remains `null` at mutation time.
 Atomic result:
 
 - `ticketOwnerId = authenticated Staff/Admin`;
+- the authenticated claimant must still be active and owner-eligible at commit time under the shared owner-integrity concurrency protocol; if a concurrent Administrator update makes the claimant ineligible first, Claim returns `409 OWNER_NOT_ELIGIBLE` without changing owner/status;
 - claiming is valid only for an unassigned `NEW` Ticket;
 - `currentStatus = OPEN` in the same transaction.
 
@@ -576,7 +577,8 @@ For currently unassigned state, `expectedOwnerId` is `null`.
 
 Rules:
 
-- new owner must be active IT Staff/Admin;
+- new owner must be active IT Staff/Admin; an already-ineligible target returns `409 OWNER_NOT_ELIGIBLE`;
+- owner eligibility is revalidated under the shared owner-integrity concurrency protocol at commit time, not only when the request first reads the User; if the target becomes inactive or changes to an ineligible role before the owner mutation can commit, the mutation returns `409 OWNER_NOT_ELIGIBLE` and does not change Ticket ownership/status;
 - first assignment on `NEW` atomically sets `OPEN`;
 - reassign after first assignment does not change status;
 - same-owner update is idempotent if expected state matches;
@@ -777,6 +779,8 @@ Required conflicts:
 
 The last-active-Administrator invariant must be protected transactionally against concurrent Administrator updates.
 
+For an update that deactivates a User or changes the role away from `IT_STAFF`/`ADMINISTRATOR`, the non-terminal Ticket-owner check is also a commit-time concurrency invariant shared with Claim/Assign/Reassign. If a concurrent owner mutation establishes non-terminal ownership first, this Administrator update returns `409 USER_HAS_ACTIVE_TICKETS` without partial User changes. If the Administrator update commits first, a concurrent owner mutation targeting that User must revalidate eligibility and return `409 OWNER_NOT_ELIGIBLE`. Both requests must never commit if that would leave a non-terminal Ticket owned by an inactive User or a `REQUESTER`.
+
 Historical requester/Ticket relationships are not rewritten when current User role changes.
 
 ### 13.4 `POST /api/admin/users/:id/initial-password`
@@ -813,13 +817,30 @@ This is not a standalone Unlock User feature; clearing lock state is part of the
 
 | Operation | Required atomic/conditional behavior |
 |---|---|
-| First Claim/Assign | owner update + `NEW → OPEN` together; owner must still be null/expected |
-| Reassign | `expectedOwnerId` must match |
+| First Claim/Assign | owner update + `NEW → OPEN` together; owner must still be null/expected; target owner eligibility revalidated at commit |
+| Reassign | `expectedOwnerId` must match; target owner eligibility revalidated at commit |
 | IT Priority | `expectedItPriority` must match |
 | Status | `expectedCurrentStatus` must match; transition + owner/indication repair together |
-| Admin User update | evaluate complete resulting state + last-admin/owner invariants + update together |
+| Admin User update | evaluate complete resulting state + last-admin/owner invariants + update together; deactivate/demote revalidates non-terminal ownership at commit |
 | Set initial password | credential + mandatory state + lock reset + session invalidation together |
 | Change password | credential + mandatory state + old-session invalidation + fresh-session establishment as one logical success |
+
+Claim/Assign/Reassign and Administrator deactivate/demote operations that target the same User participate in one concurrency-safe owner-integrity protocol. The implementation may use row-level locking, an appropriate serializable/transaction isolation strategy, conditional writes with revalidation/retry, or an equivalent mechanism; the required observable behavior is that both conflicting operations cannot commit an invalid owner state. Expected concurrency conflicts are surfaced as safe `409` responses rather than raw database/serialization failures.
+
+If the owner mutation loses because its target User is no longer eligible:
+
+```http
+409 Conflict
+```
+
+```json
+{
+  "error": {
+    "code": "OWNER_NOT_ELIGIBLE",
+    "message": "The selected ticket owner is no longer eligible. Refresh and try again."
+  }
+}
+```
 
 Stale Ticket mutation response:
 

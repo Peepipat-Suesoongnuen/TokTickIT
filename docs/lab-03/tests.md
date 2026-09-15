@@ -111,6 +111,16 @@ Security-sensitive behavior is proved at the backend boundary. Hiding a button o
 | API-45 | API | BR-08, BR-10, BR-44, BR-62, AC-15 | set new initial password | valid ASCII/multibyte policy accepted and Argon2id-hashed; invalid policy causes no partial change; on success mandatory change true, lock reset, all target sessions revoked, no secret response | Planned |
 | API-46 | API | AC-07, AC-13 | IT Staff/Requester call `/api/admin/*` | `403` before protected User detail is exposed | Planned |
 
+### Cross-feature owner/admin concurrency — `server/tests/lab-03/owner-admin-concurrency.api.test.ts`
+
+These tests run the Staff owner mutation and Administrator User mutation as real overlapping database operations. A mocked or sequential-only test does not prove BR-76.
+
+| ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
+|---|---|---|---|---|---|
+| API-47 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | first assign to User X races with Admin deactivation of X | both cannot commit; assign-first → Admin `409 USER_HAS_ACTIVE_TICKETS`; deactivate-first → assign `409 OWNER_NOT_ELIGIBLE`; final non-terminal owner invariant always valid | Planned |
+| API-48 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | first assign to User X races with Admin demotion of X to `REQUESTER` | both cannot commit; assign-first → Admin `409 USER_HAS_ACTIVE_TICKETS`; demote-first → assign `409 OWNER_NOT_ELIGIBLE`; final non-terminal owner invariant always valid | Planned |
+| API-49 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | reassign to target User X races with Admin deactivate/demote of X | parameterized deactivate + role-away cases preserve the previous valid owner or commit the eligible target, never an inactive/Requester owner; conflicting loser receives safe `409` | Planned |
+
 ## 4. Security / Authorization Tests
 
 Security rows may share implementation files with API rows, but remain separately traceable because they prove hostile/unauthorized behavior rather than only functional happy paths.
@@ -201,12 +211,12 @@ These tests use controlled fixtures / migration snapshots and never destructivel
 | AC-06 Requester Lab 3 Features | API-16–18, UI-06, E2E-03 |
 | AC-07 Authorization | API-19, API-24, API-34, API-46, SEC-01, UI-03, E2E-06 |
 | AC-08 Staff Queue | API-19–23, UI-07, E2E-02 |
-| AC-09 Ownership | API-25–28, UI-08, E2E-02 |
+| AC-09 Ownership | API-25–28, API-47–49, UI-08, E2E-02 |
 | AC-10 IT Priority | API-29, UI-08, E2E-02 |
 | AC-11 Status Workflow | UNIT-04, API-30–33, UI-08, E2E-02, E2E-04 |
 | AC-12 Communication | UNIT-05, API-17, API-34–37, SEC-03, SEC-08, UI-09, E2E-02–03 |
 | AC-13 Administrator User Management | UNIT-02, API-38–40, API-46, UI-10, E2E-05 |
-| AC-14 Administrator Safety | API-41–44, UI-11, E2E-05 |
+| AC-14 Administrator Safety | API-41–44, API-47–49, UI-11, E2E-05 |
 | AC-15 Initial Password Reset | UNIT-01, UNIT-06, UNIT-07, API-10, API-45, E2E-05 |
 | AC-16 Migration and Seed | MIG-01–06 |
 | AC-17 UI/UX | UI-01–13, STYLE-01–04, A11Y-01, VISUAL-01 |
@@ -224,10 +234,10 @@ This keeps Issue execution aligned with the engineering contract while allowing 
 | #45 Authentication | `auth.api.test.ts`, shared `password-hash.test.ts`, password/session/login-protection unit tests, Login/ChangePassword UI tests; consumes the approved Argon2id helper established with #44 |
 | #46 Authorization + Requester regression | `requester-regression.api.test.ts`, `authorization.api.test.ts`, Requester UI regression tests |
 | #47 Staff Queue | `staff-queue.api.test.ts`, `StaffQueue.test.tsx` |
-| #48 Staff workflow | `staff-workflow.api.test.ts`, `StaffTicketDetail.test.tsx`, status unit tests |
+| #48 Staff workflow | `staff-workflow.api.test.ts`, shared `owner-admin-concurrency.api.test.ts`, `StaffTicketDetail.test.tsx`, status unit tests |
 | #49 Comments/Notes | `notes.api.test.ts`, communication UI tests, security rendering tests |
-| #50 Admin | `admin-users.api.test.ts`, `AdminUsers.test.tsx` |
-| #51 E2E/security/visual | all `e2e/lab-03/*`, final cross-feature security/visual gaps |
+| #50 Admin | `admin-users.api.test.ts`, shared `owner-admin-concurrency.api.test.ts`, `AdminUsers.test.tsx` |
+| #51 E2E/security/visual | all `e2e/lab-03/*`, final cross-feature security/concurrency/visual gaps |
 | #52 Release | exact staging/main full-suite verification and truthful evidence synchronization |
 
 ## 11. Test Commands and Isolation Contract
@@ -295,6 +305,6 @@ Only item 4 changes the authoritative `Final` column from `Planned` to `Pass` (o
 - Email invitation/reset delivery is out of scope.
 - Standalone Unlock User UI/API is out of scope.
 - Status-history/audit-trail tests are deferred with the feature itself.
-- Comment/note edit/delete and attachments are out of scope.
+- Comment/note edit/delete and comment/note attachments are out of scope.
 - Actions Taken/SLA/escalation/notification tests are deferred to later labs.
 - Production cloud/infrastructure penetration testing is outside this course increment; application-level security boundaries remain required and planned above.
