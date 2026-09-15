@@ -635,7 +635,7 @@ Processing order conceptually:
 2. find Ticket;
 3. compare expected current status;
 4. validate listed transition;
-5. enforce owner eligibility required by resulting active state;
+5. enforce owner eligibility required by the resulting active state, and when this transition supplies/replaces an owner, revalidate that target under the shared owner-integrity concurrency protocol at commit time;
 6. atomically update status and any required owner/indication changes.
 
 Rules:
@@ -648,7 +648,7 @@ Rules:
 - `CANCELLED` may retain/null historical owner and is terminal;
 - `CLOSED` retains historical owner;
 - `RESOLVED → REOPENED` normally keeps its still-eligible owner because owner-integrity rules apply while Resolved;
-- `CLOSED → REOPENED` requires a replacement `ownerId` in the same request if historical owner is no longer eligible;
+- `CLOSED → REOPENED` requires a replacement `ownerId` in the same request if historical owner is no longer eligible; that replacement owner must still be active and owner-eligible at commit time under the shared owner-integrity concurrency protocol, otherwise the status mutation returns `409 OWNER_NOT_ELIGIBLE` without reopening the Ticket;
 - any transition to `REOPENED` clears `requesterResolutionIndicatedAt` atomically.
 
 Permitted matrix is authoritative in `specification.md` §5.
@@ -779,7 +779,7 @@ Required conflicts:
 
 The last-active-Administrator invariant must be protected transactionally against concurrent Administrator updates.
 
-For an update that deactivates a User or changes the role away from `IT_STAFF`/`ADMINISTRATOR`, the non-terminal Ticket-owner check is also a commit-time concurrency invariant shared with Claim/Assign/Reassign. If a concurrent owner mutation establishes non-terminal ownership first, this Administrator update returns `409 USER_HAS_ACTIVE_TICKETS` without partial User changes. If the Administrator update commits first, a concurrent owner mutation targeting that User must revalidate eligibility and return `409 OWNER_NOT_ELIGIBLE`. Both requests must never commit if that would leave a non-terminal Ticket owned by an inactive User or a `REQUESTER`.
+For an update that deactivates a User or changes the role away from `IT_STAFF`/`ADMINISTRATOR`, the non-terminal Ticket-owner check is also a commit-time concurrency invariant shared with every operation that can establish/change a non-terminal owner, including Claim/Assign/Reassign and Reopen owner repair. If a concurrent owner mutation establishes non-terminal ownership first, this Administrator update returns `409 USER_HAS_ACTIVE_TICKETS` without partial User changes. If the Administrator update commits first, a concurrent owner mutation targeting that User must revalidate eligibility and return `409 OWNER_NOT_ELIGIBLE`. Both requests must never commit if that would leave a non-terminal Ticket owned by an inactive User or a `REQUESTER`.
 
 Historical requester/Ticket relationships are not rewritten when current User role changes.
 
@@ -820,12 +820,12 @@ This is not a standalone Unlock User feature; clearing lock state is part of the
 | First Claim/Assign | owner update + `NEW → OPEN` together; owner must still be null/expected; target owner eligibility revalidated at commit |
 | Reassign | `expectedOwnerId` must match; target owner eligibility revalidated at commit |
 | IT Priority | `expectedItPriority` must match |
-| Status | `expectedCurrentStatus` must match; transition + owner/indication repair together |
+| Status | `expectedCurrentStatus` must match; transition + owner/indication repair together; if the transition establishes/replaces a non-terminal owner, target eligibility is revalidated at commit |
 | Admin User update | evaluate complete resulting state + last-admin/owner invariants + update together; deactivate/demote revalidates non-terminal ownership at commit |
 | Set initial password | credential + mandatory state + lock reset + session invalidation together |
 | Change password | credential + mandatory state + old-session invalidation + fresh-session establishment as one logical success |
 
-Claim/Assign/Reassign and Administrator deactivate/demote operations that target the same User participate in one concurrency-safe owner-integrity protocol. The implementation may use row-level locking, an appropriate serializable/transaction isolation strategy, conditional writes with revalidation/retry, or an equivalent mechanism; the required observable behavior is that both conflicting operations cannot commit an invalid owner state. Expected concurrency conflicts are surfaced as safe `409` responses rather than raw database/serialization failures.
+Claim/Assign/Reassign/Reopen owner repair and Administrator deactivate/demote operations that target the same User participate in one concurrency-safe owner-integrity protocol. The implementation may use row-level locking, an appropriate serializable/transaction isolation strategy, conditional writes with revalidation/retry, or an equivalent mechanism; the required observable behavior is that both conflicting operations cannot commit an invalid owner state. Expected concurrency conflicts are surfaced as safe `409` responses rather than raw database/serialization failures.
 
 If the owner mutation loses because its target User is no longer eligible:
 

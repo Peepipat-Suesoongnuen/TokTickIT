@@ -335,7 +335,8 @@ Rules:
 - reassigning does not implicitly change status;
 - `CLOSED` and `CANCELLED` operation controls are read-only except a permitted Reopen path from Closed;
 - selecting/confirming `CLOSED` or `CANCELLED` requires a confirmation dialog;
-- stale `409 TICKET_STATE_CHANGED` shows `Ticket has changed. Refresh and try again.` with a Refresh action rather than silently overwriting newer data.
+- stale `409 TICKET_STATE_CHANGED` shows `Ticket has changed. Refresh and try again.` with a Refresh action rather than silently overwriting newer data;
+- `409 OWNER_NOT_ELIGIBLE` shows that the selected owner is no longer eligible and asks the user to Refresh/reselect an eligible owner rather than silently retrying with stale owner data.
 
 For `CLOSED → REOPENED` where the historical owner is no longer eligible, UI requires selecting a valid replacement owner before submitting Reopen.
 

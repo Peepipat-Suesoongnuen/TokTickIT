@@ -117,9 +117,10 @@ These tests run the Staff owner mutation and Administrator User mutation as real
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-47 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | first assign to User X races with Admin deactivation of X | both cannot commit; assign-first → Admin `409 USER_HAS_ACTIVE_TICKETS`; deactivate-first → assign `409 OWNER_NOT_ELIGIBLE`; final non-terminal owner invariant always valid | Planned |
-| API-48 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | first assign to User X races with Admin demotion of X to `REQUESTER` | both cannot commit; assign-first → Admin `409 USER_HAS_ACTIVE_TICKETS`; demote-first → assign `409 OWNER_NOT_ELIGIBLE`; final non-terminal owner invariant always valid | Planned |
+| API-47 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | Claim or first Assign to User X races with Admin deactivation of X | parameterized Claim/Assign cases prove both cannot commit; owner-first → Admin `409 USER_HAS_ACTIVE_TICKETS`; deactivate-first → owner mutation `409 OWNER_NOT_ELIGIBLE`; final non-terminal owner invariant always valid | Planned |
+| API-48 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | Claim or first Assign to User X races with Admin demotion of X to `REQUESTER` | parameterized Claim/Assign cases prove both cannot commit; owner-first → Admin `409 USER_HAS_ACTIVE_TICKETS`; demote-first → owner mutation `409 OWNER_NOT_ELIGIBLE`; final non-terminal owner invariant always valid | Planned |
 | API-49 | API / concurrency | BR-22, BR-45, BR-76, AC-09, AC-14 | reassign to target User X races with Admin deactivate/demote of X | parameterized deactivate + role-away cases preserve the previous valid owner or commit the eligible target, never an inactive/Requester owner; conflicting loser receives safe `409` | Planned |
+| API-50 | API / concurrency | BR-22, BR-32, BR-45, BR-76, AC-11, AC-14 | `CLOSED → REOPENED` replacement owner X races with Admin deactivate/demote of X | parameterized deactivate + role-away cases either reopen with an eligible owner or keep the Ticket Closed; never commit `REOPENED` with an inactive/Requester owner; conflicting loser receives safe `409` | Planned |
 
 ## 4. Security / Authorization Tests
 
@@ -167,7 +168,7 @@ These tests use controlled fixtures / migration snapshots and never destructivel
 | UI-05 | UI / regression | AC-05 | My Tickets with eight statuses | Lab 2 seven columns/search/filter/sort/pagination/card states preserved; Summary one-line ellipsis; compact WAITING display remains mapped to `WAITING_FOR_REQUESTER`; no Owner column | `RequesterMyTickets.test.tsx` | Planned |
 | UI-06 | UI | AC-06 | Requester Detail additions | detail retains My Tickets fields including Req. Priority/Status/Last Updated; Assigned To/Unassigned; breadcrumb; Public Comments; `Ticket Actions` availability matches the appears-resolved status matrix; no Internal Notes | `RequesterTicketDetail.test.tsx` | Planned |
 | UI-07 | UI | AC-08, AC-17 | Staff Queue | approved filters/sort; eight desktop columns (Ticket No., Summary, Category, Req. Priority, IT Priority, Status, Owner, Updated); one-line Summary/Category/Owner; aligned badges; mobile cards; loading/empty/no-results/forbidden/failure | `StaffQueue.test.tsx` | Planned |
-| UI-08 | UI | AC-09–AC-11 | Staff Detail operations | Queue fields remain visible in detail; plain-text requester indication; breadcrumb/tab layout; Claim/Owner/IT Priority/status controls reflect state; stale conflict refresh feedback | `StaffTicketDetail.test.tsx` | Planned |
+| UI-08 | UI | AC-09–AC-11 | Staff Detail operations | Queue fields remain visible in detail; plain-text requester indication; breadcrumb/tab layout; Claim/Owner/IT Priority/status controls reflect state; stale `TICKET_STATE_CHANGED` and `OWNER_NOT_ELIGIBLE` conflicts provide actionable Refresh/reselect feedback | `StaffTicketDetail.test.tsx` | Planned |
 | UI-09 | UI | AC-12, AC-17 | Public vs Internal communication | explicit private label/lock semantic; composers stay above timelines; Public Comment uses compact 200-char control; Internal Note uses multiline/auto-grow textarea with 2000-char counter/validation; aligned actions; no color-only distinction | `TicketCommunication.test.tsx` | Planned |
 | UI-10 | UI | AC-13 | Admin list/create/edit/reset | Search + optional Role filter with Clear/Refresh/Create; no Status filter; Name/Email/Role/Status columns; row/card opens Edit without Edit button; consistent role/status badges; required fields/one role; eye-icon password visibility; no password echo; responsive semantics | `AdminUsers.test.tsx` | Planned |
 | UI-11 | UI | AC-14 | Admin safety/conflict feedback | self/last-admin/active-owner messages are actionable and preserve edit input | `AdminUsers.test.tsx` | Planned |
@@ -213,10 +214,10 @@ These tests use controlled fixtures / migration snapshots and never destructivel
 | AC-08 Staff Queue | API-19–23, UI-07, E2E-02 |
 | AC-09 Ownership | API-25–28, API-47–49, UI-08, E2E-02 |
 | AC-10 IT Priority | API-29, UI-08, E2E-02 |
-| AC-11 Status Workflow | UNIT-04, API-30–33, UI-08, E2E-02, E2E-04 |
+| AC-11 Status Workflow | UNIT-04, API-30–33, API-50, UI-08, E2E-02, E2E-04 |
 | AC-12 Communication | UNIT-05, API-17, API-34–37, SEC-03, SEC-08, UI-09, E2E-02–03 |
 | AC-13 Administrator User Management | UNIT-02, API-38–40, API-46, UI-10, E2E-05 |
-| AC-14 Administrator Safety | API-41–44, API-47–49, UI-11, E2E-05 |
+| AC-14 Administrator Safety | API-41–44, API-47–50, UI-11, E2E-05 |
 | AC-15 Initial Password Reset | UNIT-01, UNIT-06, UNIT-07, API-10, API-45, E2E-05 |
 | AC-16 Migration and Seed | MIG-01–06 |
 | AC-17 UI/UX | UI-01–13, STYLE-01–04, A11Y-01, VISUAL-01 |
