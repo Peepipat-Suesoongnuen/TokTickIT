@@ -59,6 +59,7 @@ Security-sensitive behavior is proved at the backend boundary. Hiding a button o
 | API-13 | API | BR-20, AC-04, AC-05 | Requester B lists/opens A Ticket | A data absent; direct protected detail returns safe `404` | Planned |
 | API-14 | API | BR-51, AC-05 | My Tickets search/filter/sort/pagination with eight statuses | Lab 2 semantics preserved except authenticated identity + expanded status enum | Planned |
 | API-15 | API | BR-51, AC-05 | Requester Attachment upload/metadata/download/remove lifecycle | Lab 2 type/size/count/soft-remove/ownership behavior remains green | Planned |
+| API-15b | API | BR-51, AC-05, AC-09 | Staff/Admin attachment read/download on authorized Ticket | Staff/Admin `GET /api/attachments/:id` metadata + `/download` succeed on visible Ticket; upload/remove remain denied | Planned |
 | API-16 | API | AC-06 | Requester detail owner display contract | owner `{id,name}` or null returned; no owner email/internal notes | Planned |
 | API-17 | API | BR-34–BR-38, AC-06, AC-12 | own Public Comments GET/POST | append-only, backend author/time, trim + 1–200, deterministic order | Planned |
 | API-18 | API | BR-05, AC-06 | Problem Appears Resolved state matrix + idempotency | `NEW/OPEN/IN_PROGRESS/WAITING_FOR_REQUESTER/REOPENED` may set indication without status change; repeat in allowed state keeps timestamp; `RESOLVED/CLOSED/CANCELLED` return `409 INVALID_TICKET_STATE` with no mutation | Planned |
@@ -147,8 +148,9 @@ These tests use controlled fixtures / migration snapshots and never destructivel
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| MIG-01 | Migration | BR-49, AC-16 | Lab 2 DevelopmentRequester → User mapping | every existing Ticket requester points to the correct evolved User | Planned |
+| MIG-01 | Migration | BR-49, AC-16 | Lab 2 DevelopmentRequester → User mapping (preserve IDs) | exact old requester id == new User id; every existing Ticket requester points to the correct evolved User with no remapping | Planned |
 | MIG-02 | Migration | BR-50, AC-16 | existing Tickets/Attachments/Categories/RelatedSystems preserved | counts/identities/critical metadata remain valid; no discard/recreate shortcut | Planned |
+| MIG-02b | Migration | BR-49, AC-16 | normalized-email collision aborts safely | fixture `Alice@x` + `alice@x` → migration fails before any mutation; no partial FK rewrite, no merged accounts | Planned |
 | MIG-03 | Migration | BR-24, AC-16 | existing Ticket IT Priority initialization | `itPriority == requestedPriority` after migration | Planned |
 | MIG-04 | Migration | BR-10, BR-52, AC-16 | migrated Requester credential state | password is an Argon2id non-plaintext hash with approved baseline parameters; `mustChangePassword=true`; local credential rule documented | Planned |
 | MIG-05 | Migration / seed | BR-75, AC-16 | clean baseline + non-destructive idempotent rerun | clean seed creates ≥4 active +1 inactive Requester, ≥3 active +1 inactive Staff, ≥1 active Admin without duplicates; after mutating seeded user password/role/activation/mandatory-lock state and Ticket owner/IT Priority/status/resolution indication, rerun preserves those mutations | Planned |

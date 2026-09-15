@@ -70,7 +70,7 @@ The temporary Requester selector is replaced with real email/password login. Req
 - **BR-10** Passwords and initial passwords are never stored or logged in plaintext and are never returned in API responses or evidence. Password storage uses Argon2id with a unique random salt per hash and PHC-encoded parameters. The Lab 3 baseline is memory cost `m=19456` KiB, time cost `t=2`, and parallelism `p=1`; parameters may be raised after performance verification but must not be silently weakened.
 - **BR-11** Administrator-created accounts and Administrator-set new initial passwords set `mustChangePassword = true`; the flag is cleared only after a successful valid password change.
 - **BR-12** An invalid password-change attempt leaves the existing credential and mandatory-password-change state unchanged.
-- **BR-13** Five consecutive incorrect-password attempts for an existing account lock that account for 15 minutes. A successful login before the threshold resets the counter. The lock expires automatically. Correct credentials are rejected while the account is locked. Setting a new initial password clears failed-attempt/lock state. IP-level rate limiting is an additional control; its exact threshold is configuration, not a business rule. Nonexistent emails do not create account-lock records.
+- **BR-13** Five consecutive incorrect-password attempts for an existing account lock that account for 15 minutes. Failed-attempt increments are atomic (no lost updates under concurrency). A successful login before the threshold resets the counter. The lock expires automatically. Correct credentials are rejected while the account is locked. Setting a new initial password clears failed-attempt/lock state. IP-level rate limiting is an additional control; its exact threshold is configuration, not a business rule. Nonexistent emails do not create account-lock records.
 - **BR-14** Deactivating a user makes any previously issued session unusable for protected requests.
 - **BR-15** The current-user response contains only safe data required by the client: `id`, `name`, `email`, `role`, `active`, and `mustChangePassword`.
 - **BR-16** An authenticated session has an absolute maximum age of 8 hours with no sliding extension. At exactly the expiration instant it is expired. Time-dependent tests use a controllable clock.
@@ -163,7 +163,8 @@ The temporary Requester selector is replaced with real email/password login. Req
 | Login / current user / logout / password change | Own account | Own account | Own account |
 | Create Ticket | Allow | Deny | Deny |
 | My Tickets / own Requester Detail | Own only | Deny | Deny |
-| Requester Attachment operations | Own Ticket only | Deny | Deny |
+| Requester Attachment metadata/download | Own Ticket only | Allow (authorized Ticket visibility) | Allow (authorized Ticket visibility) |
+| Requester Attachment upload/remove | Own Ticket only | Deny | Deny |
 | Public Comments | Own Ticket | Authorized Ticket | Authorized Ticket |
 | Problem Appears Resolved | Own Ticket | Deny | Deny |
 | Shared Ticket Queue / Staff Detail | Deny | Allow | Allow (explicit project rule) |
@@ -266,8 +267,8 @@ Requester/submitted-by and Ticket Owner/assigned-to are distinct. A User who lat
 
 ### Migration
 
-- Migrate/evolve each `DevelopmentRequester` to a `User` while preserving the requester IDs or using an explicit deterministic mapping that keeps every existing Ticket’s requester relationship correct.
-- Detect case-insensitive email collisions before canonicalization; migration must fail safely rather than silently merging unrelated accounts.
+- Migrate/evolve each `DevelopmentRequester` to a `User` while preserving requester IDs: exact old requester id == new User id, so every existing Ticket's requester relationship stays correct without remapping.
+- Detect case-insensitive email collisions before canonicalization (e.g. `Alice@x` + `alice@x`); migration must fail safely before any mutation with no partial FK rewrite rather than silently merging unrelated accounts.
 - Each migrated Requester receives the approved local initial credential, stored only as a secure hash, with `mustChangePassword = true`.
 - Existing Ticket `requestedPriority` is preserved; `itPriority` is initialized from it.
 - Existing Tickets remain valid with `ticketOwnerId = null` unless the migration/seed deliberately assigns realistic eligible owners without changing requester ownership.
