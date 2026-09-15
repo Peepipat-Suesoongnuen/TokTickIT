@@ -34,8 +34,8 @@ The session token must not be stored in browser `localStorage` or `sessionStorag
 
 ### 1.3 Password storage and login protection
 
-- Passwords use bcrypt cost factor 12 with the library-generated unique salt.
-- Passwords are 8–64 characters, require uppercase + lowercase + special character, and a new password must differ from the current password.
+- Passwords use Argon2id with a unique library-generated random salt and PHC-encoded parameters. The Lab 3 baseline is `m=19456` KiB, `t=2`, `p=1`; implementations may raise these costs after performance verification but must not silently lower them.
+- Passwords are 8–64 Unicode code points, require uppercase + lowercase + special character, and a changed password must differ from the current password. Password input is not trimmed, Unicode-normalized, or silently truncated before hashing; multibyte UTF-8 passwords within the character limit remain valid.
 - Existing-account failed-password counter locks the account after 5 consecutive incorrect-password attempts for 15 minutes.
 - Successful authentication before the fifth failure resets the counter.
 - Lock expiry is automatic; correct credentials while locked still fail.
@@ -80,7 +80,7 @@ No response exposes stack traces, SQL/Prisma errors, password/hash values, raw s
 | `204` | successful action with no body |
 | `400` | malformed/invalid/unknown request input |
 | `401` | no valid authentication: absent/invalid/expired/inactive session |
-| `403` | authenticated but role/action forbidden, or `PASSWORD_CHANGE_REQUIRED` gate |
+| `403` | forbidden role/action, `PASSWORD_CHANGE_REQUIRED`, or failed state-changing request Origin policy |
 | `404` | resource absent or deliberately hidden protected resource |
 | `409` | valid request conflicts with current business/resource state or stale expected state |
 | `413` | Attachment exceeds size limit |
@@ -137,9 +137,11 @@ Other protected application endpoints return:
 
 ### 1.9 CSRF and CORS
 
-- Credentialed CORS allows only the configured TokTickIT application origin(s), never `*`.
-- State-changing authenticated requests (`POST`, `PATCH`, Attachment mutation, etc.) require an approved `Origin` when the browser supplies Origin headers under the deployed architecture.
-- SameSite=Lax is required on the session cookie.
+- Credentialed CORS allows only configured TokTickIT application origin(s), never `*`; an approved origin receives the exact matching `Access-Control-Allow-Origin` and credential support.
+- Every state-changing request (`POST`, `PUT`, `PATCH`, `DELETE`) requires an `Origin` header that exactly matches an approved application origin. This includes `POST /api/auth/login`, password change, logout, Ticket/Attachment mutations, Staff mutations, and Administrator mutations.
+- Missing `Origin`, `Origin: null`, or an unapproved Origin is rejected before mutation and before account/resource-specific processing with `403 ORIGIN_NOT_ALLOWED` and the standard safe error envelope. These rejected origins do not receive credentialed CORS authorization.
+- Safe read methods (`GET`, `HEAD`) do not require Origin for CSRF validation, though ordinary CORS rules still govern cross-origin browser reads. Approved `OPTIONS` preflight may advertise only the configured origin/methods/headers and never performs authentication or business mutation.
+- `SameSite=Lax` is required on the session cookie as defense in depth.
 - A separate synchronizer CSRF token is not required for this first-party architecture; this decision must be revisited if cross-site authenticated requests become a requirement.
 
 ## 2. Safe User Representation
@@ -452,6 +454,8 @@ Posting a Public Comment does not automatically change Ticket status, including 
 
 Requester only; own Ticket only.
 
+Allowed Current Status values are `NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, and `REOPENED`. `RESOLVED`, `CLOSED`, and `CANCELLED` reject the action with `409 INVALID_TICKET_STATE`; rejection does not change Current Status or an existing indication timestamp.
+
 No request body.
 
 Success `200` returns the updated indication field or safe Ticket summary:
@@ -464,7 +468,7 @@ Success `200` returns the updated indication field or safe Ticket summary:
 
 The endpoint does not mutate `currentStatus`.
 
-The operation is idempotent while the indication is already present: a repeated call returns the existing indication timestamp rather than creating a second event or changing Ticket status. A later Reopen clears the indication according to the status contract.
+Within an allowed Current Status, the operation is idempotent while the indication is already present: a repeated call returns the existing indication timestamp rather than creating a second event or changing Ticket status. If the Ticket has since moved to `RESOLVED`, `CLOSED`, or `CANCELLED`, a repeated request is rejected by the status precondition and leaves the stored indication unchanged. A later Reopen clears the indication according to the status contract.
 
 ## 8. IT Staff Queue
 
@@ -696,10 +700,9 @@ Supported optional query:
 | Parameter | Semantics |
 |---|---|
 | `search` | trimmed case-insensitive partial User name OR email |
-| `role` | `REQUESTER\|IT_STAFF\|ADMINISTRATOR` |
-| `active` | `true\|false`; UI presents this as Active/Inactive Status |
+| `role` | `REQUESTER\|IT_STAFF\|ADMINISTRATOR`; optional |
 
-Advanced mandatory pagination/multi-column sorting is intentionally out of scope.
+`active`/Status is intentionally not a list query filter in Lab 3. Under the strict request contract, supplying `active` or another unlisted query parameter returns `400`. Status remains part of each returned User row and remains editable through the User update API. Advanced mandatory pagination/multi-column sorting and multiple simultaneous list filters are intentionally out of scope.
 
 Response:
 

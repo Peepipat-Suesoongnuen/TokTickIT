@@ -193,7 +193,7 @@ Requester detail keeps Ticket Information visible at the top, then uses a compac
 ```text
 Ticket Information
 
-Public Comments | Attachments | Service Actions
+Public Comments | Attachments | Ticket Actions
 ```
 
 Internal Notes are not rendered at all for Requesters—not disabled, not empty, and not referenced as hidden content.
@@ -226,7 +226,7 @@ Rules:
 
 #### Problem Appears Resolved
 
-`Problem Appears Resolved` appears inside the `Service Actions` tab rather than as a permanently expanded section. Provide a clear action with explanatory copy, for example:
+`Problem Appears Resolved` appears inside the `Ticket Actions` tab rather than as a permanently expanded section. The enabled action is available only while Current Status is `NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, or `REOPENED`; `RESOLVED`, `CLOSED`, and `CANCELLED` do not expose an enabled action. Provide a clear action with explanatory copy, for example:
 
 ```text
 [ Problem Appears Resolved ]
@@ -305,7 +305,7 @@ Ticket Information is visible first, followed by a tab-style lower-section switc
 ```text
 Ticket Information
 
-Public Comments | Internal Notes | Attachments | Service Actions
+Public Comments | Internal Notes | Attachments | Ticket Actions
 ```
 
 ### 6.1 Ticket Information
@@ -361,13 +361,14 @@ and separately:
 🔒 Internal Notes
 Visible only to IT Staff and Administrators
 
-[ Add internal note… ][ Add Note ]          0 / 2000
+[ Add internal note…                         ]
+[ multiline / auto-grow textarea             ] [ Add Note ]    0 / 2000
 [ private note timeline ]
 ```
 
 Internal Notes use a neutral/amber private emphasis while remaining part of the Zen Green system. The UI must use explicit words (`Internal Notes`, `Visible only…`) and not rely on color alone.
 
-The Public Comment composer uses 1–200 characters. Internal Notes use 1–2,000 characters. Both composers remain at the top of their tab, are compact one-line-height controls, and have safe loading/empty/submitting/failure states.
+The Public Comment composer uses 1–200 characters and remains a compact one-line-height control. Internal Notes use 1–2,000 characters and use a multiline textarea with a reasonable initial height that auto-grows with content (and may allow vertical resize) rather than forcing a 2,000-character note into one line. Both composers remain at the top of their tab and have safe loading/empty/submitting/failure states.
 
 ## 7. Administrator User Management
 
@@ -380,7 +381,6 @@ User Management             [ Clear Filters ] [ Refresh ] [ Create User ]
 
 Search name or email
 Role [ All Roles ▼ ]
-Status [ All Statuses ▼ ]
 
 -------------------------------------------------------
 Name            Email                  Role              Status
@@ -398,7 +398,7 @@ Role
 Status
 ```
 
-The full desktop row opens Edit User; there is no separate Edit button/column. The row is keyboard reachable/operable. Mobile uses the same information hierarchy in a clickable/focusable user card with no Edit button. Advanced mandatory pagination/multi-column sorting/bulk actions are not added.
+The full desktop row opens Edit User; there is no separate Edit button/column. The row is keyboard reachable/operable. Mobile uses the same information hierarchy in a clickable/focusable user card with no Edit button. Search and the optional Role filter are the only Lab 3 list-narrowing controls; Status remains visible as a column/card value and editable account property, not a list filter. Advanced mandatory pagination/multi-column sorting/bulk actions or multiple simultaneous list filters are not added.
 
 Role and Status badges reuse the same bordered, fixed-height highlight family as Ticket priority/status badges rather than a separate lightweight pill style.
 
