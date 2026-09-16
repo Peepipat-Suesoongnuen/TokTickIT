@@ -226,7 +226,7 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
         },
       });
       const reloaded = await prisma().ticket.findUnique({ where: { id: ticket.id } });
-      expect(reloaded!.itPriority).toBe(reloaded!.requestedPriority as unknown as typeof reloaded!.itPriority);
+      expect(String(reloaded!.itPriority)).toBe(String(reloaded!.requestedPriority));
       expect(reloaded!.ticketOwnerId).toBeNull();
       const reloadedUser = await prisma().user.findUnique({ where: { id: user.id } });
       expect(reloadedUser!.passwordHash.startsWith("$argon2id$")).toBe(true);
