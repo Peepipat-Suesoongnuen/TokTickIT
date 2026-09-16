@@ -574,6 +574,7 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
           summary: trimmedSummary,
           description: trimmedDescription,
           requestedPriority: requestedPriority as never,
+          itPriority: requestedPriority as never,
           currentStatus: "NEW",
         },
         include: {
