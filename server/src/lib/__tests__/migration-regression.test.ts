@@ -6,6 +6,11 @@ import { getPrisma } from "../../prisma.js";
 import { ensureMirroredLegacyRequester } from "../../../tests/legacy-fixture.js";
 import { assertNoEmailCollision } from "../../../prisma/migration-guards.js";
 import { verifyPassword } from "../password-hash.js";
+import {
+  LOCAL_INITIAL_PASSWORD,
+  MIGRATED_PASSWORD_BACKFILL_MARKER,
+  backfillMigratedCredentials,
+} from "../migrated-credentials.js";
 
 // DB-backed migration regression (MIG-01..04, MIG-02b).
 // Runs against the isolated test DB (NODE_ENV=test + TEST_DATABASE_URL).
@@ -203,7 +208,7 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
     expect(sql.indexOf("SELECT 1 / (CASE WHEN EXISTS")).toBeLessThan(sql.indexOf('INSERT INTO "User"'));
   });
 
-  it("MIG-03 sets itPriority == requestedPriority; MIG-04 sets Argon2id hash + mustChangePassword", async () => {
+  it("MIG-03 sets itPriority == requestedPriority; MIG-04 marker + backfill gives distinct Argon2id hashes", async () => {
     // Fixture ticket mirroring the migration's MIG-03 backfill
     // (itPriority initialized from requestedPriority, owner NULL).
     const stamp = Date.now();
@@ -254,8 +259,49 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
     // Hash embedded in migration SQL verifies against the approved
     // local-only credential 'Requester#2026-local' (BR-52).
     const sql = readMigrationSql();
-    const m = sql.match(/'(\$argon2id\$[^']+)'/);
-    expect(m).not.toBeNull();
-    await expect(verifyPassword(m![1], "Requester#2026-local")).resolves.toBe(true);
+    expect(sql).toContain(`'${MIGRATED_PASSWORD_BACKFILL_MARKER}'`);
+    expect(sql).not.toContain("$argon2id$");
+
+    // Marker present post-SQL: migrated rows carry the placeholder, not a hash.
+    const stamp2 = Date.now();
+    const markerUsers = await Promise.all(
+      [1, 2].map((n) =>
+        prisma().user.create({
+          data: {
+            name: `MIG-04 Marker ${n}`,
+            email: `mig04-marker${n}-${stamp2}@example.com`,
+            passwordHash: MIGRATED_PASSWORD_BACKFILL_MARKER,
+            role: "REQUESTER",
+            isActive: true,
+            mustChangePassword: true,
+            failedLoginAttempts: 0,
+          },
+        })
+      )
+    );
+    try {
+      for (const mu of markerUsers) {
+        const reloaded = await prisma().user.findUniqueOrThrow({ where: { id: mu.id } });
+        expect(reloaded.passwordHash).toBe(MIGRATED_PASSWORD_BACKFILL_MARKER);
+        // Marker fails closed: not a valid PHC string, verify returns false.
+        await expect(verifyPassword(reloaded.passwordHash, LOCAL_INITIAL_PASSWORD)).resolves.toBe(false);
+      }
+      // Backfill in-test: all marker rows get DISTINCT $argon2id$ hashes that
+      // verify, with mustChangePassword preserved.
+      const { updated } = await backfillMigratedCredentials(prisma());
+      expect(updated).toBeGreaterThanOrEqual(markerUsers.length);
+      const backfilled = await Promise.all(
+        markerUsers.map((mu) => prisma().user.findUniqueOrThrow({ where: { id: mu.id } }))
+      );
+      const hashes = backfilled.map((u) => u.passwordHash);
+      expect(new Set(hashes).size).toBe(hashes.length);
+      for (const u of backfilled) {
+        expect(u.passwordHash.startsWith("$argon2id$")).toBe(true);
+        await expect(verifyPassword(u.passwordHash, LOCAL_INITIAL_PASSWORD)).resolves.toBe(true);
+        expect(u.mustChangePassword).toBe(true);
+      }
+    } finally {
+      await prisma().user.deleteMany({ where: { id: { in: markerUsers.map((u) => u.id) } } });
+    }
   });
 });

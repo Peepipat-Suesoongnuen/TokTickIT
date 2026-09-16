@@ -118,10 +118,15 @@ CREATE INDEX "InternalNote_ticketId_idx" ON "InternalNote"("ticketId");
 -- CreateIndex
 CREATE INDEX "Ticket_ticketOwnerId_idx" ON "Ticket"("ticketOwnerId");
 
--- MIG-01/MIG-04: data move with preserved IDs, canonical email, Argon2id hash of
--- the approved local-only initial credential 'Requester#2026-local' (BR-52;
--- local/testing credential only, never a real secret), mustChangePassword=true.
-INSERT INTO "User" (id, name, email, "passwordHash", role, "isActive", "mustChangePassword", "failedLoginAttempts", "createdAt", "updatedAt") SELECT id, name, LOWER(TRIM(email)), '$argon2id$v=19$m=19456,t=2,p=1$FwA+BKgN9U+6KPYKwfgNPg$2w/SK3oDMVDk+3bJjGDvGCMZbhbd7nSmSF2hK0LabCk', 'REQUESTER', "isActive", true, 0, NOW(), NOW() FROM "DevelopmentRequester";
+-- MIG-01/MIG-04: data move with preserved IDs, canonical email, a backfill
+-- MARKER as passwordHash (pure SQL cannot Argon2, so no real hash is inlined
+-- here), mustChangePassword=true. The backfill step
+-- (prisma/backfill-migrated-passwords.ts -> backfillMigratedCredentials())
+-- replaces the marker with a unique per-row Argon2id hash of the approved
+-- local-only initial credential 'Requester#2026-local' (BR-52; local/testing
+-- credential only, never a real secret). The marker is not a valid PHC
+-- string, so logins fail closed until the backfill runs.
+INSERT INTO "User" (id, name, email, "passwordHash", role, "isActive", "mustChangePassword", "failedLoginAttempts", "createdAt", "updatedAt") SELECT id, name, LOWER(TRIM(email)), 'MIGRATED_NEEDS_BACKFILL', 'REQUESTER', "isActive", true, 0, NOW(), NOW() FROM "DevelopmentRequester";
 SELECT setval(pg_get_serial_sequence('"User"','id'), (SELECT MAX(id) FROM "User"));
 
 -- MIG-02b backstop (BR-40/BR-46): case-insensitive email uniqueness at DB level,

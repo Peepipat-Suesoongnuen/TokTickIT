@@ -1,5 +1,6 @@
 import { getPrisma } from "../src/prisma.js";
 import { hashPassword } from "../src/lib/password-hash.js";
+import { LOCAL_INITIAL_PASSWORD } from "../src/lib/migrated-credentials.js";
 import { canonicalizeEmail } from "../src/lib/identity.js";
 
 // Lab 3 — non-destructive idempotent seed (BR-75, MIG-05/MIG-06).
@@ -12,8 +13,9 @@ import { canonicalizeEmail } from "../src/lib/identity.js";
 // Seeded credentials are local/testing-only (BR-52). The initial password below
 // reuses the Task 4 local-only literal — never commit real secrets.
 
-// Local/testing-only initial credential (BR-52), same literal as the Task 4 migration.
-const LOCAL_INITIAL_PASSWORD = "Requester#2026-local";
+// Local/testing-only initial credential (BR-52) lives in
+// src/lib/migrated-credentials.ts (single source of truth, shared with the
+// migration backfill) — never commit real secrets.
 
 export const SEED_PUBLIC_COMMENT = "Thanks for looking into this. The issue still happens after restarting the app.";
 export const SEED_INTERNAL_NOTE = "Checked the logs with the team. Likely a configuration issue; will follow up.";
@@ -163,12 +165,14 @@ export async function runSeed(): Promise<void> {
   // -------------------------------------------------------------------------
   // 3. Users — create-missing-only (BR-75: update {} never touches mutables)
   // -------------------------------------------------------------------------
-  const passwordHash = await hashPassword(LOCAL_INITIAL_PASSWORD);
   let usersCreated = 0;
   for (const f of USER_FIXTURES) {
     const email = canonicalizeEmail(f.email);
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) continue;
+    // Unique Argon2id salt per credential (api-spec.md:37): hash INSIDE the
+    // loop so every row gets its own hashPassword() call.
+    const passwordHash = await hashPassword(LOCAL_INITIAL_PASSWORD);
     // Preserve the legacy DevelopmentRequester id where possible so old
     // references still join: reuse the id only when that User id is free.
     const legacy = await prisma.developmentRequester.findUnique({ where: { email: f.email } }).catch(() => null);

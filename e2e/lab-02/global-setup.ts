@@ -35,6 +35,22 @@ function runSeed(env: NodeJS.ProcessEnv) {
   }
 }
 
+function runBackfill(env: NodeJS.ProcessEnv) {
+  const tsxCli = path.resolve("server", "node_modules", "tsx", "dist", "cli.mjs");
+  const backfillFile = path.resolve("server", "prisma", "backfill-migrated-passwords.ts");
+  const result = spawnSync(process.execPath, [tsxCli, backfillFile], {
+    cwd: path.resolve("server"),
+    env,
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `Prisma backfill failed.\n${result.error?.message ?? ""}\n${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+    );
+  }
+}
 export default async function globalSetup() {
   const testDatabaseUrl = getTestDatabaseUrl();
   const env = {
@@ -48,4 +64,5 @@ export default async function globalSetup() {
   // Unique E2E fixtures avoid destructive resets while keeping runs repeatable.
   runPrisma(["migrate", "deploy"], env);
   runSeed(env);
+  runBackfill(env);
 }

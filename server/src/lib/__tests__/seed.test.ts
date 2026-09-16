@@ -1,6 +1,8 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { getPrisma } from "../../../src/prisma.js";
 import { runSeed, SEED_PUBLIC_COMMENT, SEED_INTERNAL_NOTE } from "../../../prisma/seed.js";
+import { verifyPassword } from "../password-hash.js";
+import { LOCAL_INITIAL_PASSWORD } from "../migrated-credentials.js";
 
 // MIG-05 (idempotent rerun), MIG-06 (baseline fixtures), BR-75 (rerun never
 // resets mutable columns). Runs against the test DB (NODE_ENV=test +
@@ -85,6 +87,18 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
     });
     expect(legacyAfterSecond).toHaveLength(legacyAfterFirst.length);
     expect(new Set(legacyAfterSecond.map((l) => l.id))).toEqual(new Set(legacyAfterFirst.map((l) => l.id)));
+
+    // Unique salt per credential: all 10 seeded hashes are DISTINCT strings
+    // and each verifies against the local initial password.
+    const seededUsers = await prisma.user.findMany({
+      where: { email: { in: SEED_EMAILS } },
+      select: { passwordHash: true },
+    });
+    expect(seededUsers).toHaveLength(10);
+    expect(new Set(seededUsers.map((u) => u.passwordHash)).size).toBe(10);
+    for (const u of seededUsers) {
+      await expect(verifyPassword(u.passwordHash, LOCAL_INITIAL_PASSWORD)).resolves.toBe(true);
+    }
   });
 
   it("rerun preserves mutations (password/role/activation/owner/priority/status/resolution)", async () => {
