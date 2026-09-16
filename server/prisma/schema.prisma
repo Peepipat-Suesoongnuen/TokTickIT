@@ -56,8 +56,19 @@ model Category {
 }
 
 // ---------------------------------------------------------------------------
-// Lab 2 — DevelopmentRequester removed in Task 4 migration (data moved to User).
+// Lab 2 — DevelopmentRequester kept as frozen legacy (scalar fields only, NO
+// tickets back-relation) until the #45/#46 auth cutover removes the
+// requester-selector routes.
 // ---------------------------------------------------------------------------
+model DevelopmentRequester {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([isActive])
+}
 
 // ---------------------------------------------------------------------------
 // Lab 2 — Related System

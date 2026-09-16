@@ -145,5 +145,5 @@ ALTER TABLE "InternalNote" ADD CONSTRAINT "InternalNote_ticketId_fkey" FOREIGN K
 -- AddForeignKey
 ALTER TABLE "InternalNote" ADD CONSTRAINT "InternalNote_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- Drop the migrated-from table last (FK already repointed to "User").
-DROP TABLE "DevelopmentRequester";
+-- Legacy "DevelopmentRequester" table is intentionally KEPT (frozen until the
+-- #45/#46 auth cutover removes the requester-selector routes).
