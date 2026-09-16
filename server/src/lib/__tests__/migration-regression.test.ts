@@ -155,7 +155,7 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
     // Scratch-table exercise of the REAL guard statement from migration.sql:
     // never touches shared tables; scratch table dropped in `finally`.
     const sql = readMigrationSql();
-    const guardStart = sql.indexOf("SELECT 1 / (1 -");
+    const guardStart = sql.indexOf("SELECT 1 / (CASE WHEN EXISTS");
     expect(guardStart).toBeGreaterThanOrEqual(0);
     const guardStmt = sql.slice(guardStart, sql.indexOf(";", guardStart) + 1);
     const scratch = `"DevelopmentRequester_MIG02b_Scratch_${Date.now()}"`;
@@ -166,6 +166,12 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
         `INSERT INTO ${scratch} (email) VALUES ('Alice@x'), ('alice@x')`
       );
       const collidingGuard = guardStmt.replaceAll('"DevelopmentRequester"', scratch);
+      await expect(prisma().$executeRawUnsafe(collidingGuard)).rejects.toThrow(/division by zero/);
+      // TWO independent colliding pairs -> guard still aborts (any-group semantics).
+      await prisma().$executeRawUnsafe(`DELETE FROM ${scratch}`);
+      await prisma().$executeRawUnsafe(
+        `INSERT INTO ${scratch} (email) VALUES ('A@x'), ('a@x'), ('B@y'), ('b@y')`
+      );
       await expect(prisma().$executeRawUnsafe(collidingGuard)).rejects.toThrow(/division by zero/);
       // Clean fixture -> guard applies as a no-op.
       await prisma().$executeRawUnsafe(`DELETE FROM ${scratch}`);
@@ -194,7 +200,7 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
       await prisma().$executeRawUnsafe(`DROP TABLE IF EXISTS ${scratch}`);
     }
     // Guard statement precedes any INSERT INTO "User" in migration.sql.
-    expect(sql.indexOf("SELECT 1 / (1 -")).toBeLessThan(sql.indexOf('INSERT INTO "User"'));
+    expect(sql.indexOf("SELECT 1 / (CASE WHEN EXISTS")).toBeLessThan(sql.indexOf('INSERT INTO "User"'));
   });
 
   it("MIG-03 sets itPriority == requestedPriority; MIG-04 sets Argon2id hash + mustChangePassword", async () => {

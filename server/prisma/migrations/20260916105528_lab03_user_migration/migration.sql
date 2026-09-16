@@ -1,12 +1,14 @@
 -- MIG-02b: collision abort FIRST — before any mutation, no partial FK rewrite.
 -- NOTE: implemented as a data-dependent division-by-zero (not DO/RAISE) because the
 -- locked-down local Postgres host blocks plpgsql library loads (58P01), and a
--- constant failing CAST is constant-folded even when the collision is absent.
--- Zero colliding groups -> SELECT 1/(1-0) = 1 (no-op); >=1 group -> division
--- by zero aborts the migration with no prior writes all the same.
+-- constant failing CAST — or even a constant 1/0 inside a CASE branch — is
+-- constant-folded at plan time, erroring even when no collision exists.
+-- The divisor below is data-dependent: 0 colliding groups -> SELECT 1/1 = 1
+-- (no-op); >=1 colliding group -> SELECT 1/0 raises division by zero and aborts
+-- the migration with no prior writes.
 -- Host restriction: plpgsql (DO $$ RAISE) is blocked by Application Control on this
 -- host — the cryptic 'division by zero' below is the intentional MIG-02b abort signal.
-SELECT 1 / (1 - (SELECT COUNT(*) FROM (SELECT LOWER(TRIM(email)) AS e FROM "DevelopmentRequester" GROUP BY LOWER(TRIM(email)) HAVING COUNT(*) > 1) AS collisions));
+SELECT 1 / (CASE WHEN EXISTS(SELECT 1 FROM "DevelopmentRequester" GROUP BY LOWER(TRIM(email)) HAVING COUNT(*) > 1) THEN 0 ELSE 1 END);
 
 -- CreateEnum
 CREATE TYPE "Role" AS ENUM ('REQUESTER', 'IT_STAFF', 'ADMINISTRATOR');
@@ -121,6 +123,10 @@ CREATE INDEX "Ticket_ticketOwnerId_idx" ON "Ticket"("ticketOwnerId");
 -- local/testing credential only, never a real secret), mustChangePassword=true.
 INSERT INTO "User" (id, name, email, "passwordHash", role, "isActive", "mustChangePassword", "failedLoginAttempts", "createdAt", "updatedAt") SELECT id, name, LOWER(TRIM(email)), '$argon2id$v=19$m=19456,t=2,p=1$FwA+BKgN9U+6KPYKwfgNPg$2w/SK3oDMVDk+3bJjGDvGCMZbhbd7nSmSF2hK0LabCk', 'REQUESTER', "isActive", true, 0, NOW(), NOW() FROM "DevelopmentRequester";
 SELECT setval(pg_get_serial_sequence('"User"','id'), (SELECT MAX(id) FROM "User"));
+
+-- MIG-02b backstop (BR-40/BR-46): case-insensitive email uniqueness at DB level,
+-- so no write path can persist Alice@x + alice@x even bypassing helpers.
+CREATE UNIQUE INDEX IF NOT EXISTS "User_email_ci_unique" ON "User" (LOWER("email"));
 
 -- MIG-03: initialize itPriority from requestedPriority; ticketOwnerId stays NULL.
 UPDATE "Ticket" SET "itPriority" = "requestedPriority"::text::"ItPriority";

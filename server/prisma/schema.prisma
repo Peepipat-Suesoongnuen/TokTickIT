@@ -56,9 +56,9 @@ model Category {
 }
 
 // ---------------------------------------------------------------------------
-// Lab 2 — DevelopmentRequester kept as frozen legacy (scalar fields only, NO
-// tickets back-relation) until the #45/#46 auth cutover removes the
-// requester-selector routes.
+// Lab 2 — DevelopmentRequester: frozen legacy (scalar fields only, NO
+// tickets back-relation). Sunset at the #45/#46 auth cutover, which drops this
+// table together with the requester-selector routes.
 // ---------------------------------------------------------------------------
 model DevelopmentRequester {
   id        Int      @id @default(autoincrement())
@@ -93,6 +93,8 @@ model Ticket {
   requesterId       Int
   categoryId        Int
   relatedSystemId   Int
+  // Owner-eligibility enforcement deferred: #48 owner mutations + #50 admin
+  // safety via the shared BR-76 invariant — NOT claimed complete in #44.
   ticketOwnerId     Int?
   summary           String
   description       String            @db.Text
