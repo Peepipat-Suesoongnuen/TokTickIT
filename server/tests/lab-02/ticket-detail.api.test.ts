@@ -16,6 +16,25 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
   const TICKET_A_NUM = "2608-1101";
   const TICKET_B_NUM = "2608-1102";
 
+  // Lab 3 healing: Ticket.requesterId now FKs User(id), while routes still
+  // validate against DevelopmentRequester — mirror each fixture as a same-id User.
+  async function mirrorUser(id: number, name: string, email: string, isActive = true) {
+    await prisma.user.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        name,
+        email,
+        passwordHash: "lab2-fixture-hash",
+        role: "REQUESTER",
+        isActive,
+        mustChangePassword: true,
+        failedLoginAttempts: 0,
+      },
+    });
+  }
+
   beforeAll(async () => {
     await prisma.ticket.deleteMany({
       where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM] } },
@@ -41,6 +60,7 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
       create: { name: "Requester A Detail", email: "requesterA-detail@test.com", isActive: true },
     });
     requesterA = { id: reqA.id };
+    await mirrorUser(reqA.id, "Requester A Detail", "requesterA-detail@test.com");
 
     const reqB = await prisma.developmentRequester.upsert({
       where: { email: "requesterB-detail@test.com" },
@@ -48,6 +68,7 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
       create: { name: "Requester B Detail", email: "requesterB-detail@test.com", isActive: true },
     });
     requesterB = { id: reqB.id };
+    await mirrorUser(reqB.id, "Requester B Detail", "requesterB-detail@test.com");
 
     const tA = await prisma.ticket.create({
       data: {
@@ -58,6 +79,7 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
         summary: "Detail ticket A",
         description: "Description for ticket A that is long enough to be valid for creation",
         requestedPriority: "HIGH",
+        itPriority: "HIGH",
         currentStatus: "NEW",
       },
     });
@@ -72,6 +94,7 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
         summary: "Detail ticket B",
         description: "Description for ticket B that is long enough to be valid for creation",
         requestedPriority: "LOW",
+        itPriority: "LOW",
         currentStatus: "NEW",
       },
     });
@@ -105,6 +128,9 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
       where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM] } },
     });
     await prisma.developmentRequester.deleteMany({
+      where: { email: { in: ["requesterA-detail@test.com", "requesterB-detail@test.com", "inactive-detail@test.com"] } },
+    });
+    await prisma.user.deleteMany({
       where: { email: { in: ["requesterA-detail@test.com", "requesterB-detail@test.com", "inactive-detail@test.com"] } },
     });
   });

@@ -28,6 +28,21 @@ describe("Initial attachment partial failure evidence (API-22 / AC-23)", () => {
       create: { name: "API 22 Partial Upload Requester", email: requesterEmail, isActive: true },
     });
     requester = { id: req.id };
+    // Lab 3 healing: POST /api/tickets writes Ticket.requesterId → User(id) FK.
+    await prisma.user.upsert({
+      where: { id: req.id },
+      update: {},
+      create: {
+        id: req.id,
+        name: "API 22 Partial Upload Requester",
+        email: requesterEmail,
+        passwordHash: "lab2-fixture-hash",
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: true,
+        failedLoginAttempts: 0,
+      },
+    });
 
     const cat = await prisma.category.findFirst({ where: { isActive: true }, orderBy: { name: "asc" } });
     const system = await prisma.relatedSystem.findFirst({ where: { isActive: true }, orderBy: { name: "asc" } });
@@ -41,6 +56,7 @@ describe("Initial attachment partial failure evidence (API-22 / AC-23)", () => {
       await prisma.ticket.deleteMany({ where: { requesterId: requester.id } });
     }
     await prisma.developmentRequester.deleteMany({ where: { email: requesterEmail } });
+    await prisma.user.deleteMany({ where: { email: requesterEmail } });
   });
 
   it("keeps the Ticket and successful upload saved when a later initial-style upload fails", async () => {

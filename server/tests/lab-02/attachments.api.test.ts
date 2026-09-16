@@ -28,6 +28,25 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
   const TICKET_A_NUM = "2608-1201";
   const TICKET_B_NUM = "2608-1202";
 
+  // Lab 3 healing: Ticket.requesterId now FKs User(id), while routes still
+  // validate against DevelopmentRequester — mirror each fixture as a same-id User.
+  async function mirrorUser(id: number, name: string, email: string, isActive = true) {
+    await prisma.user.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        name,
+        email,
+        passwordHash: "lab2-fixture-hash",
+        role: "REQUESTER",
+        isActive,
+        mustChangePassword: true,
+        failedLoginAttempts: 0,
+      },
+    });
+  }
+
   beforeAll(async () => {
     await prisma.ticket.deleteMany({
       where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM] } },
@@ -53,6 +72,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
       create: { name: "Requester A Attach", email: "requesterA-attach@test.com", isActive: true },
     });
     requesterA = { id: reqA.id };
+    await mirrorUser(reqA.id, "Requester A Attach", "requesterA-attach@test.com");
 
     const reqB = await prisma.developmentRequester.upsert({
       where: { email: "requesterB-attach@test.com" },
@@ -60,6 +80,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
       create: { name: "Requester B Attach", email: "requesterB-attach@test.com", isActive: true },
     });
     requesterB = { id: reqB.id };
+    await mirrorUser(reqB.id, "Requester B Attach", "requesterB-attach@test.com");
 
     const tA = await prisma.ticket.create({
       data: {
@@ -70,6 +91,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
         summary: "Attachment ticket A",
         description: "Description for attachment ticket A that is long enough to be valid",
         requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
         currentStatus: "NEW",
       },
     });
@@ -84,6 +106,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
         summary: "Attachment ticket B",
         description: "Description for attachment ticket B that is long enough to be valid",
         requestedPriority: "LOW",
+        itPriority: "LOW",
         currentStatus: "NEW",
       },
     });
@@ -97,6 +120,9 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
       where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM, ...transient] } },
     });
     await prisma.developmentRequester.deleteMany({
+      where: { email: { in: ["requesterA-attach@test.com", "requesterB-attach@test.com"] } },
+    });
+    await prisma.user.deleteMany({
       where: { email: { in: ["requesterA-attach@test.com", "requesterB-attach@test.com"] } },
     });
   });
@@ -173,6 +199,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
             summary: "Limit ticket",
             description: "Description for limit ticket that is long enough to be valid",
             requestedPriority: "LOW",
+        itPriority: "LOW",
+            itPriority: "LOW",
             currentStatus: "NEW",
           },
         });
@@ -239,6 +267,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
             summary: "Concurrent ticket",
             description: "Description for concurrent ticket that is long enough to be valid",
             requestedPriority: "LOW",
+        itPriority: "LOW",
+            itPriority: "LOW",
             currentStatus: "NEW",
           },
         });

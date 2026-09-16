@@ -29,6 +29,21 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
       },
     });
     requester = { id: req.id };
+    // Lab 3 healing: POST /api/tickets writes Ticket.requesterId → User(id) FK.
+    await prisma.user.upsert({
+      where: { id: req.id },
+      update: {},
+      create: {
+        id: req.id,
+        name: "Issue 27 Create Ticket Requester",
+        email: requesterEmail,
+        passwordHash: "lab2-fixture-hash",
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: true,
+        failedLoginAttempts: 0,
+      },
+    });
 
     const category = await prisma.category.findFirst({
       where: { isActive: true },
@@ -57,6 +72,7 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
       await prisma.ticket.deleteMany({ where: { requesterId: requester.id } });
     }
     await prisma.developmentRequester.deleteMany({ where: { email: requesterEmail } });
+    await prisma.user.deleteMany({ where: { email: requesterEmail } });
   });
 
   function validPayload(overrides: Record<string, unknown> = {}) {

@@ -4,6 +4,8 @@
 -- constant failing CAST is constant-folded even when the collision is absent.
 -- Zero colliding groups -> SELECT 1/(1-0) = 1 (no-op); >=1 group -> division
 -- by zero aborts the migration with no prior writes all the same.
+-- Host restriction: plpgsql (DO $$ RAISE) is blocked by Application Control on this
+-- host — the cryptic 'division by zero' below is the intentional MIG-02b abort signal.
 SELECT 1 / (1 - (SELECT COUNT(*) FROM (SELECT LOWER(TRIM(email)) AS e FROM "DevelopmentRequester" GROUP BY LOWER(TRIM(email)) HAVING COUNT(*) > 1) AS collisions));
 
 -- CreateEnum
