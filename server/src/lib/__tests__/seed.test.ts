@@ -70,6 +70,7 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
   it("rerun preserves mutations (password/role/activation/owner/priority/status/resolution)", async () => {
     await runSeed();
     const victim = await prisma.user.findUniqueOrThrow({ where: { email: "anucha.w@toktick.it" } });
+    const originalPasswordHash = victim.passwordHash;
     const ticket = await prisma.ticket.findUniqueOrThrow({ where: { ticketNumber: "SEED-0001" } });
 
     const mutatedPassword = "mutated-hash-BR75-proof";
@@ -108,7 +109,7 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
     });
     await prisma.user.update({
       where: { id: victim.id },
-      data: { role: "REQUESTER", isActive: true },
+      data: { passwordHash: originalPasswordHash, role: "REQUESTER", isActive: true },
     });
     await runSeed();
   });

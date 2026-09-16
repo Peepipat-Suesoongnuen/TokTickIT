@@ -3,10 +3,11 @@ import { hashPassword } from "../src/lib/password-hash.js";
 import { canonicalizeEmail } from "../src/lib/identity.js";
 
 // Lab 3 — non-destructive idempotent seed (BR-75, MIG-05/MIG-06).
-// Every upsert uses `update: {}` (create-missing-only): reruns MUST NEVER reset
-// mutable columns (passwordHash, role, isActive, mustChangePassword,
-// failedLoginAttempts, lockedUntil, ticketOwnerId, itPriority, currentStatus,
-// requesterResolutionIndicatedAt).
+// Users/Tickets/comments/notes upserts use `update: {}` (create-missing-only):
+// reruns MUST NEVER reset mutable columns (passwordHash, role, isActive,
+// mustChangePassword, failedLoginAttempts, lockedUntil, ticketOwnerId,
+// itPriority, currentStatus, requesterResolutionIndicatedAt).
+// Reference-data upserts (categories/related-systems) may update name/isActive.
 //
 // Seeded credentials are local/testing-only (BR-52). The initial password below
 // reuses the Task 4 local-only literal — never commit real secrets.
