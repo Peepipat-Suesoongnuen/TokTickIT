@@ -106,3 +106,64 @@ jobs:
           name: lab2-responsive-screenshots
           path: artifacts/lab-02/screenshots/
           if-no-files-found: error
+
+  # Proves the REAL migration SQL end-to-end on a scratch DB (not Prisma
+  # replays): baseline deploy -> Lab-2-like fixtures -> `migrate deploy`
+  # (expected MIG-02b abort with colliding pair, then clean redeploy) ->
+  # backfill -> assert IDs/FKs/attachments/priorities/hashes.
+  migration-proof:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: toktickit
+          POSTGRES_PASSWORD: toktickit
+          POSTGRES_DB: toktickit_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MIGPROOF_DATABASE_URL: postgresql://toktickit:toktickit@localhost:5432/toktickit_migproof?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - working-directory: server
+        run: npm ci
+      - name: Create scratch database
+        run: PGPASSWORD=toktickit psql -h localhost -U toktickit -d toktickit_test -c "CREATE DATABASE toktickit_migproof;"
+      - name: Deploy BASELINE migrations only (new migration hidden)
+        working-directory: server
+        run: |
+          # Hide the new user-migration dir so `migrate deploy` applies the
+          # Lab-2 baseline only. Restored at the start of the next step.
+          mv prisma/migrations/20260916105528_lab03_user_migration /tmp/hidden_lab03_user_migration
+          DATABASE_URL="$MIGPROOF_DATABASE_URL" npx prisma migrate deploy
+      - name: Fixtures, expected-abort deploy, clean redeploy, backfill, verify
+        working-directory: server
+        run: |
+          # Restore the hidden migration dir FIRST so the workspace stays
+          # intact for debugging even if a later command fails.
+          mv /tmp/hidden_lab03_user_migration prisma/migrations/20260916105528_lab03_user_migration
+          DATABASE_URL="$MIGPROOF_DATABASE_URL" npx tsx prisma/migration-proof-fixtures.ts
+          # Real-path MIG-02b proof: with the colliding Alice pair present,
+          # `migrate deploy` MUST abort (division by zero) with no prior writes.
+          set +e
+          DATABASE_URL="$MIGPROOF_DATABASE_URL" npx prisma migrate deploy
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then echo "expected migrate deploy to FAIL on email collision"; exit 1; fi
+          # Mark the failed attempt rolled back, drop the colliding pair (it
+          # owns no tickets, so the RESTRICT FK is satisfied), redeploy for real.
+          DATABASE_URL="$MIGPROOF_DATABASE_URL" npx prisma migrate resolve --rolled-back "20260916105528_lab03_user_migration"
+          PGPASSWORD=toktickit psql -h localhost -U toktickit -d toktickit_migproof -c "DELETE FROM \"DevelopmentRequester\" WHERE email IN ('migproof-alice@example.com','MIGPROOF-ALICE@example.com');"
+          DATABASE_URL="$MIGPROOF_DATABASE_URL" npx prisma migrate deploy
+          DATABASE_URL="$MIGPROOF_DATABASE_URL" npm run prisma:backfill
+          DATABASE_URL="$MIGPROOF_DATABASE_URL" npx tsx prisma/migration-proof-verify.ts
