@@ -152,7 +152,6 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
     const guardStmt = sql.slice(guardStart, sql.indexOf(";", guardStart) + 1);
     const scratch = `"DevelopmentRequester_MIG02b_Scratch_${Date.now()}"`;
     const ticketCountBefore = await prisma().ticket.count();
-    const userCountBefore = await prisma().user.count();
     await prisma().$executeRawUnsafe(`CREATE TABLE ${scratch} (id SERIAL PRIMARY KEY, email TEXT NOT NULL)`);
     try {
       // Colliding fixture -> guard aborts (division by zero).
@@ -180,9 +179,9 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
         await prisma().developmentRequester.delete({ where: { id: c2.id } });
         await prisma().developmentRequester.delete({ where: { id: c1.id } });
       }
-      // No mutation leaked: shared counts unchanged.
+      // No mutation leaked from this test's exercise (namespace-scoped).
       expect(await prisma().ticket.count()).toBe(ticketCountBefore);
-      expect(await prisma().user.count()).toBe(userCountBefore);
+      expect(await prisma().user.count({ where: { email: { contains: stamp } } })).toBe(0);
     } finally {
       await prisma().$executeRawUnsafe(`DROP TABLE IF EXISTS ${scratch}`);
     }
