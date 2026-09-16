@@ -3,6 +3,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { getPrisma } from "../../prisma.js";
+import { ensureMirroredLegacyRequester } from "../../../tests/legacy-fixture.js";
 import { assertNoEmailCollision } from "../../../prisma/migration-guards.js";
 import { verifyPassword } from "../password-hash.js";
 
@@ -22,9 +23,14 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
 
   it("MIG-01 preserves IDs: old requester id == new user id, tickets still joined", async () => {
     // BEFORE-evidence: pre-migration requester ids recorded from the fixture.
+    // Allocated above both id maxes (Issue #44: fresh-DB sequences are stale,
+    // so autoincrement ids land inside the seed User range) with a same-id
+    // User mirror, so the "old id == new id" assertion is meaningful.
     const fixtureEmail = `mig01-${Date.now()}@example.com`;
-    const requester = await prisma().developmentRequester.create({
-      data: { name: "MIG-01 Fixture", email: fixtureEmail, isActive: true },
+    const requester = await ensureMirroredLegacyRequester(prisma(), {
+      name: "MIG-01 Fixture",
+      email: fixtureEmail,
+      isActive: true,
     });
     const preMigrationIds = [requester.id];
     try {
@@ -102,23 +108,19 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
       requesters: await prisma().developmentRequester.count(),
     };
     // Data move replayed for one fixture row: legacy count +1 row mirrored to User.
+    // (Same collision-free allocation as MIG-01; see comment above.)
     const stamp = Date.now();
-    const requester = await prisma().developmentRequester.create({
-      data: { name: "MIG-02 Fixture", email: `mig02-${stamp}@example.com`, isActive: true },
+    const requester = await ensureMirroredLegacyRequester(prisma(), {
+      name: "MIG-02 Fixture",
+      email: `mig02-${stamp}@example.com`,
+      isActive: true,
     });
     try {
-      await prisma().user.create({
-        data: {
-          id: requester.id,
-          name: requester.name,
-          email: requester.email.toLowerCase().trim(),
-          passwordHash: "$argon2id$placeholder-mig02",
-          role: "REQUESTER",
-          isActive: true,
-          mustChangePassword: true,
-          failedLoginAttempts: 0,
-        },
-      });
+      // The fixture helper already mirrored the legacy row to User with the
+      // same id (the migration's data move); verify the pair instead of
+      // re-creating it.
+      const mirrored = await prisma().user.findUniqueOrThrow({ where: { id: requester.id } });
+      expect(mirrored.email).toBe(`mig02-${stamp}@example.com`);
       // AFTER: compare against BEFORE — user/requester counts grow by exactly
       // the fixture row; tickets/attachments/categories/systems are untouched.
       const after = {

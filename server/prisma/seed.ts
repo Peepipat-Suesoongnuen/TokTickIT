@@ -103,6 +103,24 @@ const TICKET_FIXTURES: TicketFixture[] = [
   },
 ];
 
+// Explicit-id inserts never advance Postgres sequences, so after seeding rows
+// with explicit ids (migrated-DB User path below, legacy step 3b) the next
+// autoincrement create() would reuse a live id (P2002 on fresh DBs). Advance
+// BOTH sequences past the greatest id in EITHER table: fixtures mirror
+// DevelopmentRequester ids as same-id Users, so the two id spaces must not
+// overlap. pg_get_serial_sequence resolves the real sequence names (nothing
+// hardcoded); COALESCE keeps empty tables at 0 so the next nextval() is 1.
+async function resyncIdentitySequences(prisma: ReturnType<typeof getPrisma>): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('"DevelopmentRequester"', 'id'), ` +
+      `(SELECT GREATEST(COALESCE(MAX(id), 0), COALESCE((SELECT MAX(id) FROM "User"), 0)) FROM "DevelopmentRequester"))`
+  );
+  await prisma.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('"User"', 'id'), ` +
+      `(SELECT GREATEST(COALESCE(MAX(id), 0), COALESCE((SELECT MAX(id) FROM "DevelopmentRequester"), 0)) FROM "User"))`
+  );
+}
+
 export async function runSeed(): Promise<void> {
   const prisma = getPrisma();
 
@@ -172,13 +190,16 @@ export async function runSeed(): Promise<void> {
   }
   const userCount = await prisma.user.count();
   console.log(`Seeded ${userCount} users (${usersCreated} created).`);
+  await resyncIdentitySequences(prisma);
 
   // -------------------------------------------------------------------------
   // 3b. Legacy DevelopmentRequester rows — create-if-missing for the frozen
   //    legacy routes (/api/requesters). A fresh DB (migrate deploy + seed)
   //    has zero legacy rows, so create them here with the matching User id
   //    (legacy row id == User row id for the same fixture). Create-only:
-  //    existing rows are never updated (BR-75 spirit).
+  //    existing rows are never updated (BR-75 spirit). The upsert-by-id is
+  //    atomic: a concurrent fixture insert racing this seed surfaces as P2002
+  //    only, which is swallowed (row already exists); any other error rethrows.
   // -------------------------------------------------------------------------
   let legacyCreated = 0;
   for (const f of USER_FIXTURES.filter((u) => u.role === "REQUESTER")) {
@@ -186,19 +207,26 @@ export async function runSeed(): Promise<void> {
     const already = await prisma.developmentRequester.findUnique({ where: { email } }).catch(() => null);
     if (already) continue;
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-    const idTaken = (await prisma.developmentRequester.findUnique({ where: { id: user.id } }).catch(() => null)) != null;
-    await prisma.developmentRequester.create({
-      data: {
-        ...(idTaken ? {} : { id: user.id }),
-        name: f.name,
-        email,
-        isActive: f.isActive,
-      },
-    });
-    legacyCreated++;
+    try {
+      await prisma.developmentRequester.upsert({
+        where: { id: user.id },
+        update: {},
+        create: {
+          id: user.id,
+          name: f.name,
+          email,
+          isActive: f.isActive,
+        },
+      });
+    } catch (e) {
+      if ((e as { code?: string })?.code !== "P2002") throw e;
+    }
+    const created = await prisma.developmentRequester.findUnique({ where: { email } }).catch(() => null);
+    if (created) legacyCreated++;
   }
   const legacyCount = await prisma.developmentRequester.count();
   console.log(`Seeded ${legacyCount} legacy requesters (${legacyCreated} created).`);
+  await resyncIdentitySequences(prisma);
 
   // -------------------------------------------------------------------------
   // 4. Tickets — upsert by ticketNumber with update {} (BR-75)
