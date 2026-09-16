@@ -83,6 +83,9 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
       await prisma().category.delete({ where: { id: category.id } });
       await prisma().relatedSystem.delete({ where: { id: system.id } });
     } finally {
+      // FK-safe cleanup: delete dependent Tickets first (scoped to this
+      // test's own requester ids), then the fixture users, then the legacy row.
+      await prisma().ticket.deleteMany({ where: { requesterId: { in: preMigrationIds } } });
       await prisma().user.deleteMany({ where: { id: { in: preMigrationIds } } });
       await prisma().developmentRequester.delete({ where: { id: requester.id } });
     }
@@ -138,6 +141,9 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
         await expect(prisma().ticket.findUnique({ where: { id: a.ticketId } })).resolves.not.toBeNull();
       }
     } finally {
+      // FK-safe cleanup: delete dependent Tickets first (scoped to this
+      // test's own requester id), then the fixture user, then the legacy row.
+      await prisma().ticket.deleteMany({ where: { requesterId: requester.id } });
       await prisma().user.deleteMany({ where: { id: requester.id } });
       await prisma().developmentRequester.delete({ where: { id: requester.id } });
     }
@@ -151,7 +157,6 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
     expect(guardStart).toBeGreaterThanOrEqual(0);
     const guardStmt = sql.slice(guardStart, sql.indexOf(";", guardStart) + 1);
     const scratch = `"DevelopmentRequester_MIG02b_Scratch_${Date.now()}"`;
-    const ticketCountBefore = await prisma().ticket.count();
     await prisma().$executeRawUnsafe(`CREATE TABLE ${scratch} (id SERIAL PRIMARY KEY, email TEXT NOT NULL)`);
     try {
       // Colliding fixture -> guard aborts (division by zero).
@@ -180,7 +185,8 @@ describe("migration regression (MIG-01..04, MIG-02b)", () => {
         await prisma().developmentRequester.delete({ where: { id: c1.id } });
       }
       // No mutation leaked from this test's exercise (namespace-scoped).
-      expect(await prisma().ticket.count()).toBe(ticketCountBefore);
+      await expect(prisma().developmentRequester.findUnique({ where: { id: c1.id } })).resolves.toBeNull();
+      await expect(prisma().developmentRequester.findUnique({ where: { id: c2.id } })).resolves.toBeNull();
       expect(await prisma().user.count({ where: { email: { contains: stamp } } })).toBe(0);
     } finally {
       await prisma().$executeRawUnsafe(`DROP TABLE IF EXISTS ${scratch}`);

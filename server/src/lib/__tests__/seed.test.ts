@@ -22,6 +22,8 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
     "admin@toktick.it",
   ];
 
+  const SEED_REQUESTER_EMAILS = SEED_EMAILS.slice(0, 5);
+
   // Seed-scoped counts: other suites run in parallel workers against the same
   // test DB, so global totals are racy — scope to the fixed seed email set.
   async function roleActivationCounts() {
@@ -59,12 +61,30 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
     expect(commentsAfterFirst).toBe(1);
     expect(notesAfterFirst).toBe(1);
 
+    // Legacy DevelopmentRequester rows: 5 exist with ids matching their Users.
+    const legacyAfterFirst = await prisma.developmentRequester.findMany({
+      where: { email: { in: SEED_REQUESTER_EMAILS } },
+    });
+    expect(legacyAfterFirst).toHaveLength(5);
+    for (const email of SEED_REQUESTER_EMAILS) {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const legacy = legacyAfterFirst.find((l) => l.email === email);
+      expect(legacy).toBeDefined();
+      expect(legacy!.id).toBe(user.id);
+    }
+
     // Second run creates nothing new (MIG-05 idempotency)
     await runSeed();
     expect(await roleActivationCounts()).toEqual(countsAfterFirst);
     expect(await prisma.ticket.count({ where: { ticketNumber: { in: SEED_TICKETS } } })).toBe(ticketsAfterFirst);
     expect(await prisma.publicComment.count({ where: { content: SEED_PUBLIC_COMMENT } })).toBe(commentsAfterFirst);
     expect(await prisma.internalNote.count({ where: { content: SEED_INTERNAL_NOTE } })).toBe(notesAfterFirst);
+    // Double-run creates 0 new legacy rows (same ids as before).
+    const legacyAfterSecond = await prisma.developmentRequester.findMany({
+      where: { email: { in: SEED_REQUESTER_EMAILS } },
+    });
+    expect(legacyAfterSecond).toHaveLength(legacyAfterFirst.length);
+    expect(new Set(legacyAfterSecond.map((l) => l.id))).toEqual(new Set(legacyAfterFirst.map((l) => l.id)));
   });
 
   it("rerun preserves mutations (password/role/activation/owner/priority/status/resolution)", async () => {
@@ -89,6 +109,15 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
         requesterResolutionIndicatedAt: resolutionAt,
       },
     });
+    // Legacy rows are create-only: rename one, rerun must preserve it.
+    const legacyVictim = await prisma.developmentRequester.findUniqueOrThrow({
+      where: { email: "busaba.s@toktick.it" },
+    });
+    const originalLegacyName = legacyVictim.name;
+    await prisma.developmentRequester.update({
+      where: { id: legacyVictim.id },
+      data: { name: "Mutated Legacy Name" },
+    });
 
     await runSeed();
 
@@ -101,8 +130,14 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
     expect(afterTicket.itPriority).toBe("CRITICAL");
     expect(afterTicket.currentStatus).toBe("RESOLVED");
     expect(afterTicket.requesterResolutionIndicatedAt).toEqual(resolutionAt);
+    const afterLegacy = await prisma.developmentRequester.findUniqueOrThrow({ where: { id: legacyVictim.id } });
+    expect(afterLegacy.name).toBe("Mutated Legacy Name");
 
     // Restore the mutated fixtures so the suite stays order-independent
+    await prisma.developmentRequester.update({
+      where: { id: legacyVictim.id },
+      data: { name: originalLegacyName },
+    });
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: { ticketOwnerId: null, itPriority: "MEDIUM", currentStatus: "NEW", requesterResolutionIndicatedAt: null },

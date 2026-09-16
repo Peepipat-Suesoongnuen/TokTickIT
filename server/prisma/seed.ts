@@ -174,6 +174,33 @@ export async function runSeed(): Promise<void> {
   console.log(`Seeded ${userCount} users (${usersCreated} created).`);
 
   // -------------------------------------------------------------------------
+  // 3b. Legacy DevelopmentRequester rows — create-if-missing for the frozen
+  //    legacy routes (/api/requesters). A fresh DB (migrate deploy + seed)
+  //    has zero legacy rows, so create them here with the matching User id
+  //    (legacy row id == User row id for the same fixture). Create-only:
+  //    existing rows are never updated (BR-75 spirit).
+  // -------------------------------------------------------------------------
+  let legacyCreated = 0;
+  for (const f of USER_FIXTURES.filter((u) => u.role === "REQUESTER")) {
+    const email = canonicalizeEmail(f.email);
+    const already = await prisma.developmentRequester.findUnique({ where: { email } }).catch(() => null);
+    if (already) continue;
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const idTaken = (await prisma.developmentRequester.findUnique({ where: { id: user.id } }).catch(() => null)) != null;
+    await prisma.developmentRequester.create({
+      data: {
+        ...(idTaken ? {} : { id: user.id }),
+        name: f.name,
+        email,
+        isActive: f.isActive,
+      },
+    });
+    legacyCreated++;
+  }
+  const legacyCount = await prisma.developmentRequester.count();
+  console.log(`Seeded ${legacyCount} legacy requesters (${legacyCreated} created).`);
+
+  // -------------------------------------------------------------------------
   // 4. Tickets — upsert by ticketNumber with update {} (BR-75)
   // -------------------------------------------------------------------------
   const category = await prisma.category.findFirstOrThrow({ where: { name: "Hardware" } });
