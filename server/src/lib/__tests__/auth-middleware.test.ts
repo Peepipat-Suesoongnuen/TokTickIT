@@ -1,8 +1,12 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
 import {
   SESSION_COOKIE_NAME,
+  ORIGIN_NOT_ALLOWED_CODE,
+  UNAUTHENTICATED_CODE,
+  PASSWORD_CHANGE_REQUIRED_CODE,
   PASSWORD_CHANGE_ALLOWLIST,
   createAuthMiddleware,
   getApprovedOrigins,
@@ -248,6 +252,43 @@ describe("middleware chain order/interaction (throwaway app, stubbed loader)", (
     expect(dumped).not.toContain("tokenHash");
     expect(dumped).not.toContain("failedLoginAttempts");
     expect(dumped).not.toContain("lockedUntil");
+  });
+  it("malformed-encoded cookie value -> 401 JSON envelope (no HTML throw)", async () => {
+    for (const bad of ["%", "%ZZ"]) {
+      const res = await request(authed({}))
+        .post("/api/tickets")
+        .set("Origin", APPROVED)
+        .set("Cookie", `${SESSION_COOKIE_NAME}=${bad}`)
+        .send({});
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({
+        error: { code: UNAUTHENTICATED_CODE, message: expect.any(String) },
+      });
+      expect(res.text).not.toMatch(/<html/i);
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+    }
+  });
+  it("loader receives the SHA-256 hex of the presented token", async () => {
+    let captured: string | undefined;
+    const { requireSession } = createAuthMiddleware({
+      loadSession: async (tokenHash) => {
+        captured = tokenHash;
+        return null;
+      },
+    });
+    const app = express();
+    app.get("/probe", requireSession, (_req, res) => res.status(200).json({ ok: true }));
+    const token = "probe-token-abc123";
+    const res = await request(app)
+      .get("/probe")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+    expect(res.status).toBe(401);
+    expect(captured).toBe(createHash("sha256").update(token, "utf8").digest("hex"));
+  });
+  it("error code constants match the wire codes", () => {
+    expect(ORIGIN_NOT_ALLOWED_CODE).toBe("ORIGIN_NOT_ALLOWED");
+    expect(UNAUTHENTICATED_CODE).toBe("UNAUTHENTICATED");
+    expect(PASSWORD_CHANGE_REQUIRED_CODE).toBe("PASSWORD_CHANGE_REQUIRED");
   });
 });
 

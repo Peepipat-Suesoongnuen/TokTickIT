@@ -28,6 +28,10 @@ export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
 export const ORIGIN_NOT_ALLOWED_MESSAGE = "Request origin is not allowed.";
 export const UNAUTHENTICATED_MESSAGE = "Authentication required.";
 
+export const ORIGIN_NOT_ALLOWED_CODE = "ORIGIN_NOT_ALLOWED";
+export const UNAUTHENTICATED_CODE = "UNAUTHENTICATED";
+export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
+
 // Parses APP_ORIGINS (comma-separated, trimmed, empties dropped). Falls back
 // to the documented local-dev default only when APP_ORIGINS is unset; a set
 // but empty value yields [] so all state-changing requests are denied.
@@ -117,7 +121,12 @@ function parseCookieToken(req: Request): string | undefined {
     if (idx < 0) continue;
     if (part.slice(0, idx).trim() === SESSION_COOKIE_NAME) {
       const value = part.slice(idx + 1).trim();
-      return value ? decodeURIComponent(value) : undefined;
+      if (!value) return undefined;
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return undefined;
+      }
     }
   }
   return undefined;
@@ -155,13 +164,13 @@ export function createAuthMiddleware(deps: AuthMiddlewareDeps = {}) {
   const now = deps.now ?? (() => new Date());
 
   function requireOrigin(req: Request, res: Response, next: NextFunction): void {
-    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    if (req.method === "GET" || req.method === "HEAD") {
       next();
       return;
     }
     const origin = req.headers.origin;
     if (!isOriginAllowed(origin, getAllowedOrigins())) {
-      sendError(res, 403, "ORIGIN_NOT_ALLOWED", ORIGIN_NOT_ALLOWED_MESSAGE);
+      sendError(res, 403, ORIGIN_NOT_ALLOWED_CODE, ORIGIN_NOT_ALLOWED_MESSAGE);
       return;
     }
     next();
@@ -170,13 +179,13 @@ export function createAuthMiddleware(deps: AuthMiddlewareDeps = {}) {
   function requireSession(req: Request, res: Response, next: NextFunction): void {
     const token = parseCookieToken(req);
     if (!token) {
-      sendError(res, 401, "UNAUTHENTICATED", UNAUTHENTICATED_MESSAGE);
+      sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
       return;
     }
     loadSession(hashToken(token)).then(
       (result) => {
         if (!result || isSessionExpired(result.session.expiresAt, now())) {
-          sendError(res, 401, "UNAUTHENTICATED", UNAUTHENTICATED_MESSAGE);
+          sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
           return;
         }
         (req as AuthRequest).session = result.session;
@@ -192,7 +201,7 @@ export function createAuthMiddleware(deps: AuthMiddlewareDeps = {}) {
   function requireActiveUser(req: Request, res: Response, next: NextFunction): void {
     const user = (req as AuthRequest).user;
     if (!user || !user.isActive) {
-      sendError(res, 401, "UNAUTHENTICATED", UNAUTHENTICATED_MESSAGE);
+      sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
       return;
     }
     next();
@@ -205,7 +214,7 @@ export function createAuthMiddleware(deps: AuthMiddlewareDeps = {}) {
       user.mustChangePassword &&
       !(PASSWORD_CHANGE_ALLOWLIST as readonly string[]).includes(req.path)
     ) {
-      sendError(res, 403, "PASSWORD_CHANGE_REQUIRED", PASSWORD_CHANGE_REQUIRED_MESSAGE);
+      sendError(res, 403, PASSWORD_CHANGE_REQUIRED_CODE, PASSWORD_CHANGE_REQUIRED_MESSAGE);
       return;
     }
     next();
