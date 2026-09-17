@@ -4,9 +4,12 @@
 // resolve, mirroring e2e/lab-02/global-setup.ts:
 //   node server/node_modules/tsx/dist/cli.mjs e2e/lab-03/e2e-user.ts <setup|cleanup> <email> [password] [name]
 //
-// Creates a run-unique mustChangePassword user (serial-friendly, no fixed
+// Creates or RESETS a dedicated e2e-owned user (serial-friendly, no fixed
 // state assumptions: the seed never resets passwords, so E2E owns its
-// fixtures). Cleanup deletes by email (sessions cascade per schema).
+// fixtures). Setup UPSERTS with a FRESH hashPassword(password) EVERY run
+// (deterministic pristine state regardless of prior runs — prior password
+// changes are wiped). Scoped to e2e-owned emails only; seed semantics
+// (BR-75) untouched. Cleanup deletes by email (sessions cascade per schema).
 import { getPrisma } from "../../server/src/prisma.js";
 import { hashPassword } from "../../server/src/lib/password-hash.js";
 
@@ -23,8 +26,18 @@ async function main(): Promise<void> {
         console.error("setup requires a password argument");
         process.exit(2);
       }
-      await prisma.user.create({
-        data: {
+      await prisma.user.upsert({
+        where: { email },
+        update: {
+          name: name || `E2E Auth ${email}`,
+          passwordHash: await hashPassword(password),
+          role: "REQUESTER",
+          isActive: true,
+          mustChangePassword: true,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+        create: {
           name: name || `E2E Auth ${email}`,
           email,
           passwordHash: await hashPassword(password),

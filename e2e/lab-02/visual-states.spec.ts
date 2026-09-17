@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import path from "node:path";
-import { LAB02_INITIAL_PASSWORD, loginAs } from "./auth-helper";
+import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, loginAs } from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 const STATE_DIR = path.join("artifacts", "lab-02", "screenshots", "states");
@@ -68,7 +68,7 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   const { categories, systems } = await getReferences(request, requester.id);
 
   // Authenticate-first (Issue #45): the login gate fronts the whole app.
-  await loginAs(page, requester.email, LAB02_INITIAL_PASSWORD);
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
 
   // Submission evidence: Requester Selection loading + safe API-failure states.
   await page.setViewportSize({ width: 1440, height: 900 });

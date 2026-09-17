@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import path from "node:path";
-import { LAB02_INITIAL_PASSWORD, loginAs } from "./auth-helper";
+import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, loginAs } from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 
@@ -97,7 +97,7 @@ test("E2E-01 select requester -> create -> search -> open detail", async ({ page
   const marker = `E2E01-${unique()}`;
   const summary = `Printer issue ${marker}`;
 
-  await loginAs(page, requester.email, LAB02_INITIAL_PASSWORD);
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requester);
   await page.getByRole("navigation").getByRole("link", { name: "Create Ticket" }).click();
   await page.getByLabel("Category").selectOption(String(categories[0].id));
@@ -127,7 +127,7 @@ test("E2E-02 requester B cannot open requester A ticket by direct URL", async ({
   const [requesterA, requesterB] = await getRequesters(request);
   const ticketA = await createTicketViaApi(request, requesterA, `A-owned-${unique()}`);
 
-  await loginAs(page, requesterB.email, LAB02_INITIAL_PASSWORD);
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requesterB);
   await page.goto(`/tickets/${ticketA.id}`);
   await expect(page.getByText("Ticket not found", { exact: true })).toBeVisible();
@@ -152,7 +152,7 @@ test("E2E-03 removal blocks blank reason then preserves removed metadata", async
   );
   expect(upload.status()).toBe(201);
 
-  await loginAs(page, requester.email, LAB02_INITIAL_PASSWORD);
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requester);
   await page.goto(`/tickets/${ticket.id}`);
   const attachmentRow = page.locator("li", { hasText: filename });
@@ -175,7 +175,7 @@ test("E2E-04 switching requester reloads owned tickets without cross-requester l
   await createTicketViaApi(request, requesterA, summaryA);
   await createTicketViaApi(request, requesterB, summaryB);
 
-  await loginAs(page, requesterA.email, LAB02_INITIAL_PASSWORD);
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requesterA);
   await page.getByRole("link", { name: "My Tickets" }).click();
   await expectVisibleExactText(page, summaryA);
@@ -194,7 +194,7 @@ test("E2E-05 captures responsive evidence at 1440 / 900 / 375 widths", async ({ 
   const summary = `Responsive-${unique()}`;
   const ticket = await createTicketViaApi(request, requester, summary);
 
-  await loginAs(page, requester.email, LAB02_INITIAL_PASSWORD);
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await page.goto("/");
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(page.getByLabel("Development Requester")).toBeVisible();

@@ -5,14 +5,20 @@
 // their original selector steps. Call loginAs(page, email, password) FIRST
 // in each spec; all original steps/assertions stay untouched.
 //
-// Seeded users start with mustChangePassword=true, so the first login lands
-// on the mandatory change-password gate, which this helper completes. The
-// seed is create-missing-only (never resets passwords), so later tests/runs
-// find the credential already changed: on "Invalid email or password" the
-// helper retries with the changed password below. The changed password is a
-// deterministic constant (NOT unique per run) for exactly this reason —
-// anything timestamp-unique would be unrecoverable after the first test.
+// Seeded users are NEVER used here: loginAs signs in ONLY as the dedicated
+// e2e-owned user below (upserted with a fresh initial hash by global-setup on
+// every run, so prior runs' password changes never leak). The first login of
+// a run lands on the mandatory change-password gate, which this helper
+// completes; later tests in the same run find the credential already changed,
+// so on "Invalid email or password" the helper retries with the changed
+// password below. The changed password is a deterministic constant (NOT
+// unique per run) for exactly this reason — anything timestamp-unique would
+// be unrecoverable after the first test.
 import { expect, type Page } from "@playwright/test";
+
+// Dedicated e2e-owned login identity (Issue #45 isolation fix). NEVER pass a
+// seeded email to loginAs — seeded rows must stay pristine for seed.test.ts.
+export const E2E_REQUESTER_EMAIL = "e2e-requester@example.com";
 
 // Test-only mirror of LOCAL_INITIAL_PASSWORD, whose single source of truth
 // is server/src/lib/migrated-credentials.ts (duplicated here because

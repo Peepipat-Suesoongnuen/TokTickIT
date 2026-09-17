@@ -7,9 +7,10 @@
 //   detail). Locked/inactive behavior stays at API level — this suite never
 //   burns 5-failure lockouts (slow + stateful).
 //
-// Fixtures are run-unique (no fixed state assumptions): the user is created
-// via e2e-user.ts before the suite and deleted afterwards. Serial-friendly:
-// no shared state between the two tests (fresh context per test).
+// Fixtures are DEDICATED fixed e2e-owned users (never seeded ones): setup
+// UPSERTS a fresh initial hash every run via e2e-user.ts, so prior runs'
+// password changes never leak into this run. Serial-friendly: no shared
+// state between the two tests (fresh context per test).
 import { expect, test } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -17,13 +18,13 @@ import { getTestDatabaseUrl } from "../lab-02/test-env";
 
 const API_URL = "http://127.0.0.1:3100";
 
-const unique = () => `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
-const RUN = unique();
-const E2E_NAME = `E2E Auth ${RUN}`;
-const E2E_EMAIL = `e2e-auth-${RUN}@example.com`;
+const E2E_NAME = "E2E Auth";
+const E2E_EMAIL = "e2e-auth@example.com";
 // Policy-shaped (upper + lower + special, 8-64 chars) and distinct from each other.
-const INITIAL_PASSWORD = `Init#${RUN}-Aa1!`;
-const NEW_PASSWORD = `New#${RUN}-Bb2!`;
+// Fixed (NOT run-unique): setup upserts a fresh INITIAL hash every run, so the
+// change-password mutation below never leaks across runs.
+const INITIAL_PASSWORD = "E2E-Auth#Init-Aa1!";
+const NEW_PASSWORD = "E2E-Auth#New-Bb2!";
 
 function runUserHelper(args: string[]): void {
   const tsxCli = path.resolve("server", "node_modules", "tsx", "dist", "cli.mjs");
@@ -94,8 +95,8 @@ test("E2E-AUTH-01 valid login -> change password -> shell identity -> logout -> 
 
 test("E2E-AUTH-02 invalid login shows generic message without account detail", async ({ page }) => {
   await page.goto("/");
-  await page.locator("#login-email").fill(`e2e-unknown-${RUN}@example.com`);
-  await page.locator("#login-password").fill(`Wrong#${RUN}-Cc3!`);
+  await page.locator("#login-email").fill("e2e-unknown@example.com");
+  await page.locator("#login-password").fill("Wrong#E2E-Cc3!");
   await page.getByRole("button", { name: "Sign In" }).click();
 
   const alert = page.getByRole("alert");

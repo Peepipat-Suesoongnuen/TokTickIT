@@ -51,6 +51,26 @@ function runBackfill(env: NodeJS.ProcessEnv) {
     );
   }
 }
+function runE2EUser(env: NodeJS.ProcessEnv) {
+  // Dedicated e2e-owned login user (Issue #45 isolation fix): UPSERT with a
+  // fresh initial hash EVERY run, so Lab-2 specs never touch seeded users.
+  // Password literal mirrors LAB02_INITIAL_PASSWORD in ./auth-helper.ts
+  // (duplicated because this setup file cannot import the Playwright-side
+  // helper's server-alias workaround pattern — same known limitation).
+  const tsxCli = path.resolve("server", "node_modules", "tsx", "dist", "cli.mjs");
+  const script = path.resolve("e2e", "lab-03", "e2e-user.ts");
+  const result = spawnSync(
+    process.execPath,
+    [tsxCli, script, "setup", "e2e-requester@example.com", "Requester#2026-local", "E2E Requester"],
+    { cwd: path.resolve("."), env, encoding: "utf8", stdio: "pipe" },
+  );
+
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `E2E user setup failed.\n${result.error?.message ?? ""}\n${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+    );
+  }
+}
 export default async function globalSetup() {
   const testDatabaseUrl = getTestDatabaseUrl();
   const env = {
@@ -65,4 +85,5 @@ export default async function globalSetup() {
   runPrisma(["migrate", "deploy"], env);
   runSeed(env);
   runBackfill(env);
+  runE2EUser(env);
 }

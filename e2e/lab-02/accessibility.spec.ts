@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
-import { LAB02_INITIAL_PASSWORD, loginAs } from "./auth-helper";
+import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, loginAs } from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 
@@ -148,7 +148,7 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   const requesters = await getRequesters(request);
 
   // Authenticate-first (Issue #45): the login gate fronts the whole app.
-  await loginAs(page, requesters[0].email, LAB02_INITIAL_PASSWORD);
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
 
   // Requester Selection: native select + Continue are labelled, keyboard reachable and operable.
   await page.goto("/");
