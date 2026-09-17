@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { getPrisma } from "../prisma.js";
 import { sendError } from "../lib/errors.js";
@@ -7,7 +8,13 @@ import {
   isOriginAllowed,
   ORIGIN_NOT_ALLOWED_CODE,
   ORIGIN_NOT_ALLOWED_MESSAGE,
+  requireActiveUser,
+  requireOrigin,
+  requireSession,
   SESSION_COOKIE_NAME,
+  UNAUTHENTICATED_CODE,
+  UNAUTHENTICATED_MESSAGE,
+  type AuthRequest,
 } from "../auth.js";
 import { canonicalizeEmail } from "../lib/identity.js";
 import { verifyPassword } from "../lib/password-hash.js";
@@ -50,6 +57,27 @@ export interface AuthRouterDeps {
 
 function invalidCredentials(res: Response): void {
   sendError(res, 401, INVALID_CREDENTIALS_CODE, INVALID_CREDENTIALS_MESSAGE);
+}
+
+// Extracts the raw session token from the request cookie header. Mirrors the
+// middleware's parsing so logout can revoke the exact server-side row.
+function parseSessionCookie(req: Request): string | undefined {
+  const header = req.headers.cookie;
+  if (!header) return undefined;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx < 0) continue;
+    if (part.slice(0, idx).trim() === SESSION_COOKIE_NAME) {
+      const value = part.slice(idx + 1).trim();
+      if (!value) return undefined;
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
@@ -156,6 +184,46 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
         maxAge: LOGIN_SESSION_TTL_MS,
       });
       res.status(200).json({ user: getSafeUser(updated) });
+    } catch {
+      sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+    }
+  });
+
+  // GET /api/auth/me (Issue #45, Lab 3 api-spec §3.2): returns the current
+  // safe user. Allowed while mustChangePassword=true, so requirePasswordChanged
+  // is deliberately NOT in this chain. requireSession loads the fresh user row
+  // and rejects invalid/expired sessions; requireActiveUser rejects deactivated
+  // users — both with the generic 401 UNAUTHENTICATED.
+  router.get("/me", requireSession, requireActiveUser, (req: Request, res: Response) => {
+    try {
+      const user = (req as AuthRequest).user;
+      if (!user) {
+        sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
+        return;
+      }
+      res.status(200).json({ user: getSafeUser(user) });
+    } catch {
+      sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+    }
+  });
+
+  // POST /api/auth/logout (Issue #45, Lab 3 api-spec §3.3): idempotent 204.
+  // Origin IS required (state-changing) via requireOrigin. No session gate —
+  // revokes the current row when the cookie maps to one, clears the cookie
+  // with the same name/Path attributes, and repeats harmlessly.
+  router.post("/logout", requireOrigin, async (req: Request, res: Response) => {
+    try {
+      const token = parseSessionCookie(req);
+      if (token) {
+        const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
+        await getPrisma().session.deleteMany({ where: { tokenHash } });
+      }
+      res.clearCookie(SESSION_COOKIE_NAME, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+      });
+      res.status(204).end();
     } catch {
       sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
     }
