@@ -26,7 +26,6 @@ export default function Login() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [formError, setFormError] = useState("");
@@ -55,9 +54,11 @@ export default function Login() {
 
   return (
     <main className="container py-4" style={{ maxWidth: 480 }}>
+      <h1 className="h4 mb-1">
+        TokTickIT <span className="text-success">IT Service Desk</span>
+      </h1>
+      <p>Sign in with your TokTickIT account to continue.</p>
       <div className="card p-4">
-        <h1 className="h4 mb-0">TokTickIT</h1>
-        <p className="text-secondary">IT Service Desk</p>
         <form onSubmit={onSubmit} noValidate>
           <div className="mb-3">
             <label htmlFor="login-email" className="form-label">
@@ -77,24 +78,14 @@ export default function Login() {
             <label htmlFor="login-password" className="form-label">
               Password
             </label>
-            <div className="input-group">
-              <input
-                id="login-password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                className="form-control"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                className="btn btn-outline-secondary"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                onClick={() => setShowPassword((s) => !s)}
-              >
-                <span aria-hidden="true">👁</span>
-              </button>
-            </div>
+            <input
+              id="login-password"
+              type="password"
+              autoComplete="current-password"
+              className="form-control"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
             {passwordError && <div className="invalid-feedback d-block">{passwordError}</div>}
           </div>
           {formError && (

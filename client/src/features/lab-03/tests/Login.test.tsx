@@ -49,19 +49,15 @@ beforeEach(() => {
 });
 
 describe("Login (Lab 3 Issue #45)", () => {
-  it("renders email/password fields with a show/hide eye control", async () => {
-    const user = userEvent.setup();
+  it("renders the mockup heading/note with a plain password field and no eye toggle", async () => {
     renderLogin();
 
-    expect(screen.getByLabelText("Email")).toBeInTheDocument();
-    const password = screen.getByLabelText("Password");
-    expect(password).toHaveAttribute("type", "password");
-
-    await user.click(screen.getByRole("button", { name: "Show password" }));
-    expect(password).toHaveAttribute("type", "text");
-
-    await user.click(screen.getByRole("button", { name: "Hide password" }));
-    expect(password).toHaveAttribute("type", "password");
+    expect(screen.getByRole("heading", { level: 1, name: "TokTickIT IT Service Desk" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Sign in with your TokTickIT account to continue."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
+    expect(screen.queryByRole("button", { name: /show password|hide password/i })).toBeNull();
   });
 
   it("empty submit shows validation and never calls the API", async () => {
@@ -174,8 +170,15 @@ describe("Shell identity (Lab 3 Issue #45)", () => {
     expect(screen.getByText(/Alice Example/)).toBeInTheDocument();
     expect(screen.getByText(/REQUESTER/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /user menu/i }));
+    // Mockup chip: one button holds person icon + name + role badge + chevron.
+    const chip = screen.getByRole("button", { name: /user menu/i });
+    expect(chip).toHaveTextContent(/Alice Example/);
+    expect(chip).toHaveTextContent(/REQUESTER/);
+    expect(chip.querySelector(".badge.rounded-pill.border")).not.toBeNull();
+
+    await user.click(chip);
     expect(screen.getByRole("menuitem", { name: "Change Password" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Logout" })).toHaveClass("text-danger");
 
     await user.click(screen.getByRole("menuitem", { name: "Logout" }));
     expect(logoutMock).toHaveBeenCalled();

@@ -38,17 +38,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
           {user && (
             <div className="d-flex align-items-center gap-2 lab3-user-menu position-relative">
-              <span className="text-white-50 small">
-                {user.name} · {user.role}
-              </span>
               <button
                 type="button"
-                className="btn btn-outline-light btn-sm"
+                className="btn btn-outline-light btn-sm d-flex align-items-center gap-2"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 aria-label="User menu"
                 onClick={() => setMenuOpen((open) => !open)}
               >
+                <span aria-hidden="true">👤</span>
+                <span>{user.name}</span>
+                <span className="badge rounded-pill border">{user.role}</span>
                 <span aria-hidden="true">▾</span>
               </button>
               {menuOpen && (
@@ -70,7 +70,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <button
                       type="button"
                       role="menuitem"
-                      className="dropdown-item"
+                      className="dropdown-item text-danger"
                       onClick={() => void onLogout()}
                     >
                       Logout

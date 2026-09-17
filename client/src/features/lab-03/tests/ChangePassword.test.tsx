@@ -47,7 +47,7 @@ beforeEach(() => {
 });
 
 describe("ChangePassword (Lab 3 Issue #45)", () => {
-  it("renders three password fields each with a show/hide eye control", async () => {
+  it("renders three password fields each with an SVG show/hide control", async () => {
     const user = userEvent.setup();
     renderChangePassword();
 
@@ -60,11 +60,66 @@ describe("ChangePassword (Lab 3 Issue #45)", () => {
       "Show confirm password",
     ] as const;
     for (const name of toggles) {
-      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveAttribute("aria-pressed", "false");
+      // Inline SVG eye icon, never emoji.
+      expect(button.querySelector("svg")).not.toBeNull();
+      expect(button).not.toHaveTextContent("👁");
     }
 
     await user.click(screen.getByRole("button", { name: "Show new password" }));
     expect(screen.getByLabelText("New Password")).toHaveAttribute("type", "text");
+    const hide = screen.getByRole("button", { name: "Hide new password" });
+    expect(hide).toHaveAttribute("aria-pressed", "true");
+    // Focus returns to the revealed input after toggling.
+    expect(screen.getByLabelText("New Password")).toHaveFocus();
+  });
+
+  it("renders the mockup brand heading, note, and exactly one h1", () => {
+    renderChangePassword();
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "TokTickIT IT Service Desk" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("You must change your initial password before entering the application."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Change Password" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  it("uses the exact mockup checklist copy and greens met items", async () => {
+    const user = userEvent.setup();
+    renderChangePassword();
+
+    for (const copy of [
+      "8–64 characters",
+      "At least one uppercase letter",
+      "At least one lowercase letter",
+      "At least one special character",
+      "Must differ from the current password",
+    ]) {
+      expect(screen.getByText(copy)).toBeInTheDocument();
+    }
+
+    await user.type(screen.getByLabelText("Current Password"), "Old!Pass1");
+    await user.type(screen.getByLabelText("New Password"), "New!Pass22");
+
+    for (const li of screen.getAllByRole("listitem")) {
+      expect(li).toHaveClass("text-success");
+    }
+  });
+
+  it("marks confirm aria-invalid on non-empty mismatch only", async () => {
+    const user = userEvent.setup();
+    renderChangePassword();
+
+    const confirm = screen.getByLabelText("Confirm New Password");
+    expect(confirm).toHaveAttribute("aria-invalid", "false");
+
+    await user.type(screen.getByLabelText("New Password"), "New!Pass22");
+    await user.type(confirm, "Different!9");
+    expect(confirm).toHaveAttribute("aria-invalid", "true");
   });
 
   it("checklist below Confirm starts as bullets and checks off as rules pass", async () => {

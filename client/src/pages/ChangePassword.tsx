@@ -10,10 +10,10 @@ import { useAuth } from "../contexts/AuthContext.js";
 // from current. No trim/normalization — spaces count, matching the server.
 const RULES = [
   { id: "length", text: "8–64 characters" },
-  { id: "upper", text: "at least one uppercase letter" },
-  { id: "lower", text: "at least one lowercase letter" },
-  { id: "special", text: "at least one special character" },
-  { id: "differs", text: "differs from the current password" },
+  { id: "upper", text: "At least one uppercase letter" },
+  { id: "lower", text: "At least one lowercase letter" },
+  { id: "special", text: "At least one special character" },
+  { id: "differs", text: "Must differ from the current password" },
 ] as const;
 
 function ruleMet(id: string, current: string, next: string): boolean {
@@ -33,6 +33,29 @@ function ruleMet(id: string, current: string, next: string): boolean {
     default:
       return false;
   }
+}
+
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z"></path>
+      <circle cx="12" cy="12" r="2.5"></circle>
+      {off && <path d="M4 4l16 16"></path>}
+    </svg>
+  );
+}
+
+function toggleWithFocus(inputId: string, toggle: () => void) {
+  toggle();
+  document.getElementById(inputId)?.focus();
 }
 
 export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeUser) => void }) {
@@ -94,8 +117,12 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
 
   return (
     <main className="container py-4" style={{ maxWidth: 480 }}>
+      <h1 className="h4 mb-1">
+        TokTickIT <span className="text-success">IT Service Desk</span>
+      </h1>
+      <p>You must change your initial password before entering the application.</p>
       <div className="card p-4">
-        <h1 className="h4">Change Password</h1>
+        <h2 className="h4">Change Password</h2>
         <form onSubmit={onSubmit} noValidate>
           <div className="mb-3">
             <label htmlFor="cp-current" className="form-label">
@@ -114,9 +141,10 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
                 type="button"
                 className="btn btn-outline-secondary"
                 aria-label={showCurrent ? "Hide current password" : "Show current password"}
-                onClick={() => setShowCurrent((s) => !s)}
+                aria-pressed={showCurrent}
+                onClick={() => toggleWithFocus("cp-current", () => setShowCurrent((s) => !s))}
               >
-                <span aria-hidden="true">👁</span>
+                <EyeIcon off={showCurrent} />
               </button>
             </div>
             {errors.currentPassword && (
@@ -140,9 +168,10 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
                 type="button"
                 className="btn btn-outline-secondary"
                 aria-label={showNew ? "Hide new password" : "Show new password"}
-                onClick={() => setShowNew((s) => !s)}
+                aria-pressed={showNew}
+                onClick={() => toggleWithFocus("cp-new", () => setShowNew((s) => !s))}
               >
-                <span aria-hidden="true">👁</span>
+                <EyeIcon off={showNew} />
               </button>
             </div>
             {errors.newPassword && <div className="invalid-feedback d-block">{errors.newPassword}</div>}
@@ -159,14 +188,16 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
                 className="form-control"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                aria-invalid={confirmPassword.length > 0 && confirmPassword !== newPassword}
               />
               <button
                 type="button"
                 className="btn btn-outline-secondary"
                 aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
-                onClick={() => setShowConfirm((s) => !s)}
+                aria-pressed={showConfirm}
+                onClick={() => toggleWithFocus("cp-confirm", () => setShowConfirm((s) => !s))}
               >
-                <span aria-hidden="true">👁</span>
+                <EyeIcon off={showConfirm} />
               </button>
             </div>
             {errors.confirmPassword && (
@@ -175,7 +206,7 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
             <p className="form-text mt-2 mb-1">Password requirements:</p>
             <ul aria-label="Password requirements" className="list-unstyled small">
               {RULES.map((r) => (
-                <li key={r.id}>
+                <li key={r.id} className={met[r.id] ? "text-success" : undefined}>
                   <span aria-hidden="true">{met[r.id] ? "✓" : "•"}</span> {r.text}
                 </li>
               ))}
