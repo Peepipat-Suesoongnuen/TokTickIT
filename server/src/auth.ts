@@ -113,7 +113,7 @@ export interface AuthRequest extends Request {
   user?: AuthUserRow;
 }
 
-function parseCookieToken(req: Request): string | undefined {
+export function parseCookieToken(req: Request): string | undefined {
   const header = req.headers.cookie;
   if (!header) return undefined;
   for (const part of header.split(";")) {
@@ -132,8 +132,38 @@ function parseCookieToken(req: Request): string | undefined {
   return undefined;
 }
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+// Shared session-cookie attributes so login's `res.cookie` and logout's
+// `res.clearCookie` stay in parity (httpOnly, sameSite lax, path, and
+// secure-if-https). Clearing variants swap maxAge for expired date / Max-Age 0.
+export function isSecureRequest(req: Request): boolean {
+  if (req.secure) return true;
+  const proto = req.headers["x-forwarded-proto"];
+  const value = Array.isArray(proto) ? proto[0] : proto;
+  return typeof value === "string" && value.split(",")[0]?.trim().toLowerCase() === "https";
+}
+
+export function getSessionCookieOptions(req: Request, maxAgeMs: number) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: maxAgeMs,
+    secure: isSecureRequest(req),
+  };
+}
+
+export function getClearSessionCookieOptions(req: Request) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 0,
+    secure: isSecureRequest(req),
+  };
 }
 
 const defaultLoadSession: SessionLoader = async (tokenHash) => {

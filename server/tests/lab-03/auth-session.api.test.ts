@@ -138,13 +138,15 @@ describe("GET /api/auth/me + POST /api/auth/logout (Lab 3 Issue #45)", () => {
       data: { isActive: false },
     });
 
-    const res = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(401);
-    expect(res.body.error.code).toBe("UNAUTHENTICATED");
-
-    await prisma.user.update({
-      where: { email: EMAILS.deactivated },
-      data: { isActive: true },
-    });
+    try {
+      const res = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(401);
+      expect(res.body.error.code).toBe("UNAUTHENTICATED");
+    } finally {
+      await prisma.user.update({
+        where: { email: EMAILS.deactivated },
+        data: { isActive: true },
+      });
+    }
   });
 
   it("me without a session returns 401", async () => {

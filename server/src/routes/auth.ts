@@ -1,13 +1,16 @@
-import { createHash } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { getPrisma } from "../prisma.js";
 import { sendError } from "../lib/errors.js";
 import {
   getApprovedOrigins,
+  getClearSessionCookieOptions,
   getSafeUser,
+  getSessionCookieOptions,
+  hashToken,
   isOriginAllowed,
   ORIGIN_NOT_ALLOWED_CODE,
   ORIGIN_NOT_ALLOWED_MESSAGE,
+  parseCookieToken,
   requireActiveUser,
   requireOrigin,
   requireSession,
@@ -57,27 +60,6 @@ export interface AuthRouterDeps {
 
 function invalidCredentials(res: Response): void {
   sendError(res, 401, INVALID_CREDENTIALS_CODE, INVALID_CREDENTIALS_MESSAGE);
-}
-
-// Extracts the raw session token from the request cookie header. Mirrors the
-// middleware's parsing so logout can revoke the exact server-side row.
-function parseSessionCookie(req: Request): string | undefined {
-  const header = req.headers.cookie;
-  if (!header) return undefined;
-  for (const part of header.split(";")) {
-    const idx = part.indexOf("=");
-    if (idx < 0) continue;
-    if (part.slice(0, idx).trim() === SESSION_COOKIE_NAME) {
-      const value = part.slice(idx + 1).trim();
-      if (!value) return undefined;
-      try {
-        return decodeURIComponent(value);
-      } catch {
-        return undefined;
-      }
-    }
-  }
-  return undefined;
 }
 
 export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
@@ -177,12 +159,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
         }),
       ]);
 
-      res.cookie(SESSION_COOKIE_NAME, token, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: LOGIN_SESSION_TTL_MS,
-      });
+      res.cookie(SESSION_COOKIE_NAME, token, getSessionCookieOptions(req, LOGIN_SESSION_TTL_MS));
       res.status(200).json({ user: getSafeUser(updated) });
     } catch {
       sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
@@ -213,16 +190,12 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
   // with the same name/Path attributes, and repeats harmlessly.
   router.post("/logout", requireOrigin, async (req: Request, res: Response) => {
     try {
-      const token = parseSessionCookie(req);
+      const token = parseCookieToken(req);
       if (token) {
-        const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
+        const tokenHash = hashToken(token);
         await getPrisma().session.deleteMany({ where: { tokenHash } });
       }
-      res.clearCookie(SESSION_COOKIE_NAME, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-      });
+      res.clearCookie(SESSION_COOKIE_NAME, getClearSessionCookieOptions(req));
       res.status(204).end();
     } catch {
       sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
