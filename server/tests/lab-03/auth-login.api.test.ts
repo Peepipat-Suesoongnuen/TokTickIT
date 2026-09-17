@@ -10,6 +10,7 @@ import { hashPassword } from "../../src/lib/password-hash.js";
 import {
   MAX_FAILED_LOGIN_ATTEMPTS,
   createLoginRateLimiter,
+  isAccountLocked,
 } from "../../src/lib/login-protection.js";
 
 // TDD Step 1 (Issue #45, Task 3): failing API tests for POST /api/auth/login.
@@ -178,7 +179,7 @@ describe("POST /api/auth/login (Lab 3 Issue #45)", () => {
     expect(reset?.lockedUntil).toBeNull();
   });
 
-  it("IP limiter unit: sliding window blocks only past-threshold attempts, then recovers", async () => {
+  it("IP limiter unit: blocks AT the threshold (N failures -> next request limited), then recovers", async () => {
     let nowMs = Date.now();
     const limiter = createLoginRateLimiter({
       windowMs: 1000,
@@ -188,9 +189,9 @@ describe("POST /api/auth/login (Lab 3 Issue #45)", () => {
 
     expect(limiter.isLimited("10.0.0.1")).toBe(false);
     limiter.record("10.0.0.1");
-    limiter.record("10.0.0.1");
     expect(limiter.isLimited("10.0.0.1")).toBe(false);
     limiter.record("10.0.0.1");
+    // Exact boundary: N=2 failures recorded -> the (N+1)-th request is rejected.
     expect(limiter.isLimited("10.0.0.1")).toBe(true);
     // Other IPs are unaffected.
     expect(limiter.isLimited("10.0.0.2")).toBe(false);
@@ -198,6 +199,14 @@ describe("POST /api/auth/login (Lab 3 Issue #45)", () => {
     // Sliding expiry: after the window passes, old attempts fall off.
     nowMs += 1001;
     expect(limiter.isLimited("10.0.0.1")).toBe(false);
+  });
+
+  it("isAccountLocked treats undefined as unlocked (defensive)", () => {
+    const now = new Date();
+    expect(isAccountLocked(undefined, now)).toBe(false);
+    expect(isAccountLocked(null, now)).toBe(false);
+    expect(isAccountLocked(new Date(now.getTime() + 60_000), now)).toBe(true);
+    expect(isAccountLocked(new Date(now.getTime() - 1000), now)).toBe(false);
   });
 
   it("normal logins pass under the default IP configuration (no 429)", async () => {
@@ -244,7 +253,7 @@ describe("POST /api/auth/login (Lab 3 Issue #45)", () => {
   it("unknown body fields are rejected per the strict contract", async () => {
     const res = await login({ email: EMAILS.valid, password: PASSWORD, requesterId: 1 }).expect(400);
     expect(res.body.error.code).toBe("VALIDATION_FAILED");
-    expect(res.body.fieldErrors.requesterId).toBeDefined();
+    expect(res.body.fieldErrors.requesterId).toBe("Unknown parameter.");
   });
 
   it("missing email/password are rejected as 400 field errors", async () => {

@@ -69,9 +69,13 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
         return;
       }
 
-      // 2. IP limiter (sliding window over failed attempts).
-      const ip = req.ip ?? "unknown";
-      if (limiter.isLimited(ip)) {
+      // 2. IP limiter (sliding window over failed attempts). When the IP is
+      // missing, skip limiter checking AND recording for this request
+      // (fail open per-request): collapsing all unknown-IP requests into a
+      // single "unknown" bucket would let one client throttle unrelated
+      // clients, so missing-IP requests never touch limiter state.
+      const ip: string | undefined = req.ip;
+      if (ip !== undefined && limiter.isLimited(ip)) {
         sendError(res, 429, TOO_MANY_ATTEMPTS_CODE, TOO_MANY_ATTEMPTS_MESSAGE);
         return;
       }
@@ -83,7 +87,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
       for (const key of Object.keys(body)) {
         if (!allowed.has(key)) {
           sendError(res, 400, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
-            [key]: "Unknown field.",
+            [key]: "Unknown parameter.",
           });
           return;
         }
@@ -105,7 +109,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
       const user = await getPrisma().user.findUnique({ where: { email: canonical } });
 
       if (!user || !user.isActive) {
-        limiter.record(ip);
+        if (ip !== undefined) limiter.record(ip);
         invalidCredentials(res);
         return;
       }
@@ -113,7 +117,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
       // Correct password while locked still fails generically; the lock is
       // left untouched (no extension, no disclosure).
       if (isAccountLocked(user.lockedUntil, now())) {
-        limiter.record(ip);
+        if (ip !== undefined) limiter.record(ip);
         invalidCredentials(res);
         return;
       }
@@ -126,7 +130,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
           where: { id: user.id },
           data: buildFailedLoginUpdate(user.failedLoginAttempts, now()),
         });
-        limiter.record(ip);
+        if (ip !== undefined) limiter.record(ip);
         invalidCredentials(res);
         return;
       }

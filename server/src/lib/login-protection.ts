@@ -21,8 +21,10 @@ export const DEFAULT_LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 20;
 
 // Locked iff a lock timestamp exists and now is still before it. Expired (or
 // absent) locks fail open automatically — no sweeper or disclosure needed.
-export function isAccountLocked(lockedUntil: Date | null, now: Date): boolean {
-  if (lockedUntil === null) return false;
+// `undefined` is treated as unlocked (defensive: callers with optional
+// fields must not lock users on missing data).
+export function isAccountLocked(lockedUntil: Date | null | undefined, now: Date): boolean {
+  if (lockedUntil === null || lockedUntil === undefined) return false;
   return now.getTime() < lockedUntil.getTime();
 }
 
@@ -84,9 +86,10 @@ export interface LoginRateLimiter {
   clear: () => void;
 }
 
-// Sliding-window limiter: an IP is limited once MORE than `maxAttempts`
-// attempts fall inside (now - windowMs, now]. Stale timestamps are pruned on
-// every access so memory stays bounded without a sweeper.
+// Sliding-window limiter: an IP is limited once `maxAttempts` attempts fall
+// inside (now - windowMs, now], i.e. the (N+1)-th request is rejected when
+// max is N. Stale timestamps are pruned on every access so memory stays
+// bounded without a sweeper.
 export function createLoginRateLimiter(
   options: LoginRateLimiterOptions = {}
 ): LoginRateLimiter {
@@ -108,7 +111,7 @@ export function createLoginRateLimiter(
 
   return {
     isLimited(ip: string): boolean {
-      return prune(ip, now().getTime()).length > maxAttempts;
+      return prune(ip, now().getTime()).length >= maxAttempts;
     },
     record(ip: string): void {
       const nowMs = now().getTime();
