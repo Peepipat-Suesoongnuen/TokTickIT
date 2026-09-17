@@ -239,7 +239,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
         }
         const { currentPassword, newPassword } = body;
         const fieldErrors: Record<string, string> = {};
-        if (typeof currentPassword !== "string" || currentPassword.length === 0) {
+        if (typeof currentPassword !== "string" || currentPassword.trim().length === 0) {
           fieldErrors.currentPassword = "Current password is required.";
         }
         if (typeof newPassword !== "string" || newPassword.length === 0) {
@@ -280,7 +280,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
         );
         if (policyErrors.length > 0) {
           sendError(res, 400, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
-            newPassword: "New password does not meet the password policy.",
+            newPassword: `New password does not meet the password policy: ${policyErrors.join(", ")}.`,
           });
           return;
         }

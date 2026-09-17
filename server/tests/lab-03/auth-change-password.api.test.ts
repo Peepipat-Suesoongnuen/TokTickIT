@@ -22,6 +22,7 @@ const EMAILS = {
   wrong: email("chg-wrong"),
   mustChange: email("chg-mustchange"),
   fields: email("chg-fields"),
+  blank: email("chg-blank"),
 };
 
 const prisma = getPrisma();
@@ -77,6 +78,7 @@ describe("POST /api/auth/change-password (Lab 3 Issue #45)", () => {
     await createUser(EMAILS.wrong);
     await createUser(EMAILS.mustChange, { mustChangePassword: true });
     await createUser(EMAILS.fields);
+    await createUser(EMAILS.blank);
   });
 
   afterAll(async () => {
@@ -130,6 +132,7 @@ describe("POST /api/auth/change-password (Lab 3 Issue #45)", () => {
       .expect(400);
     expect(tooShort.body.error.code).toBe("VALIDATION_FAILED");
     expect(tooShort.body.fieldErrors?.newPassword).toBeDefined();
+    expect(String(tooShort.body.fieldErrors?.newPassword)).toContain("TOO_SHORT");
 
     const sameAsCurrent = await request(app)
       .post("/api/auth/change-password")
@@ -139,6 +142,7 @@ describe("POST /api/auth/change-password (Lab 3 Issue #45)", () => {
       .expect(400);
     expect(sameAsCurrent.body.error.code).toBe("VALIDATION_FAILED");
     expect(sameAsCurrent.body.fieldErrors?.newPassword).toBeDefined();
+    expect(String(sameAsCurrent.body.fieldErrors?.newPassword)).toContain("SAME_AS_CURRENT");
 
     const after = await prisma.user.findUnique({ where: { email: EMAILS.policy } });
     expect(await verifyPassword(after!.passwordHash, CURRENT)).toBe(true);
@@ -225,5 +229,34 @@ describe("POST /api/auth/change-password (Lab 3 Issue #45)", () => {
       .set("Cookie", cookie)
       .send({ currentPassword: CURRENT, newPassword: SIMPLE_NEW, confirmPassword: SIMPLE_NEW })
       .expect(400);
+  });
+
+  it("whitespace-only currentPassword is rejected 400 VALIDATION_FAILED with zero state change", async () => {
+    const before = await prisma.user.findUnique({ where: { email: EMAILS.blank } });
+    const cookie = await loginAs(EMAILS.blank, CURRENT);
+    const sessionsBefore = await prisma.session.findMany({
+      where: { userId: before!.id },
+    });
+
+    const res = await request(app)
+      .post("/api/auth/change-password")
+      .set("Origin", ORIGIN)
+      .set("Cookie", cookie)
+      .send({ currentPassword: "   ", newPassword: SIMPLE_NEW })
+      .expect(400);
+    expect(res.body.error.code).toBe("VALIDATION_FAILED");
+    expect(res.body.fieldErrors?.currentPassword).toBeDefined();
+
+    const after = await prisma.user.findUnique({ where: { email: EMAILS.blank } });
+    expect(after!.passwordHash).toBe(before!.passwordHash);
+    expect(await verifyPassword(after!.passwordHash, CURRENT)).toBe(true);
+    expect(after!.mustChangePassword).toBe(before!.mustChangePassword);
+    const sessionsAfter = await prisma.session.findMany({
+      where: { userId: before!.id },
+    });
+    expect(sessionsAfter.map((s) => s.tokenHash).sort()).toEqual(
+      sessionsBefore.map((s) => s.tokenHash).sort()
+    );
+    await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
   });
 });
