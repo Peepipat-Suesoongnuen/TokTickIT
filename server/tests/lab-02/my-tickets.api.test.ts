@@ -10,6 +10,25 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   let category: { id: number };
   let relatedSystem: { id: number };
 
+  // Lab 3 healing: Ticket.requesterId now FKs User(id), while routes still
+  // validate against DevelopmentRequester — mirror each fixture as a same-id User.
+  async function mirrorUser(id: number, name: string, email: string, isActive = true) {
+    await prisma.user.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        name,
+        email,
+        passwordHash: "lab2-fixture-hash",
+        role: "REQUESTER",
+        isActive,
+        mustChangePassword: true,
+        failedLoginAttempts: 0,
+      },
+    });
+  }
+
   beforeAll(async () => {
     // Isolated fixture: clean only this suite's data (by unique ticketNumbers/emails)
     await prisma.ticket.deleteMany({ where: { ticketNumber: { in: ["2608-0001", "2608-0002", "2608-0003"] } } });
@@ -36,6 +55,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       create: { name: "Requester A", email: "requesterA@test.com", isActive: true },
     });
     requesterA = { id: reqA.id };
+    await mirrorUser(reqA.id, "Requester A", "requesterA@test.com");
 
     const reqB = await prisma.developmentRequester.upsert({
       where: { email: "requesterB@test.com" },
@@ -43,6 +63,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       create: { name: "Requester B", email: "requesterB@test.com", isActive: true },
     });
     requesterB = { id: reqB.id };
+    await mirrorUser(reqB.id, "Requester B", "requesterB@test.com");
 
     // Create test tickets
     await prisma.ticket.createMany({
@@ -55,6 +76,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
           summary: "Laptop battery drains quickly",
           description: "Battery drains within 2 hours of normal use",
           requestedPriority: "HIGH",
+          itPriority: "HIGH",
           currentStatus: "NEW",
           ticketDate: new Date("2026-08-20T10:00:00Z"),
           createdAt: new Date("2026-08-20T10:00:00Z"),
@@ -68,6 +90,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
           summary: "Cannot connect to VPN",
           description: "VPN connection fails with timeout error",
           requestedPriority: "CRITICAL",
+          itPriority: "CRITICAL",
           currentStatus: "NEW",
           ticketDate: new Date("2026-08-21T10:00:00Z"),
           createdAt: new Date("2026-08-21T10:00:00Z"),
@@ -81,6 +104,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
           summary: "Printer not working",
           description: "Printer shows paper jam error",
           requestedPriority: "MEDIUM",
+          itPriority: "MEDIUM",
           currentStatus: "NEW",
           ticketDate: new Date("2026-08-22T10:00:00Z"),
           createdAt: new Date("2026-08-22T10:00:00Z"),
@@ -93,6 +117,9 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   afterAll(async () => {
     await prisma.ticket.deleteMany({ where: { ticketNumber: { in: ["2608-0001", "2608-0002", "2608-0003"] } } });
     await prisma.developmentRequester.deleteMany({
+      where: { email: { in: ["requesterA@test.com", "requesterB@test.com", "inactive2@test.com"] } },
+    });
+    await prisma.user.deleteMany({
       where: { email: { in: ["requesterA@test.com", "requesterB@test.com", "inactive2@test.com"] } },
     });
   });
@@ -281,6 +308,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
               summary: `Tie ${ticketNumber}`,
               description: "Deterministic secondary ordering fixture",
               requestedPriority: "LOW",
+              itPriority: "LOW",
               currentStatus: "NEW",
               ticketDate: tiedAt,
               updatedAt: tiedAt,
@@ -311,6 +339,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
           summary: "Priority tie fixture",
           description: "Deterministic priority secondary ordering fixture",
           requestedPriority: "HIGH",
+          itPriority: "HIGH",
           currentStatus: "NEW",
         },
       });

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { ensureMirroredLegacyRequester } from "../legacy-fixture.js";
 
 describe("Create Ticket API (Lab 2 Issue 8A)", () => {
   const prisma = getPrisma();
@@ -19,14 +20,13 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
       await prisma.ticket.deleteMany({ where: { requesterId: existingRequester.id } });
     }
 
-    const req = await prisma.developmentRequester.upsert({
-      where: { email: requesterEmail },
-      update: { name: "Issue 27 Create Ticket Requester", isActive: true },
-      create: {
-        name: "Issue 27 Create Ticket Requester",
-        email: requesterEmail,
-        isActive: true,
-      },
+    // Allocated above both id maxes and mirrored as a same-id User (Lab 3:
+    // POST /api/tickets writes Ticket.requesterId → User(id) FK but validates
+    // against DevelopmentRequester, so the pair must share one collision-free id).
+    const req = await ensureMirroredLegacyRequester(prisma, {
+      name: "Issue 27 Create Ticket Requester",
+      email: requesterEmail,
+      isActive: true,
     });
     requester = { id: req.id };
 
@@ -57,6 +57,7 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
       await prisma.ticket.deleteMany({ where: { requesterId: requester.id } });
     }
     await prisma.developmentRequester.deleteMany({ where: { email: requesterEmail } });
+    await prisma.user.deleteMany({ where: { email: requesterEmail } });
   });
 
   function validPayload(overrides: Record<string, unknown> = {}) {

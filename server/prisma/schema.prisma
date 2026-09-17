@@ -19,6 +19,26 @@ enum RequestedPriority {
 
 enum TicketStatus {
   NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_REQUESTER
+  RESOLVED
+  REOPENED
+  CLOSED
+  CANCELLED
+}
+
+enum Role {
+  REQUESTER
+  IT_STAFF
+  ADMINISTRATOR
+}
+
+enum ItPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
 // ---------------------------------------------------------------------------
@@ -36,7 +56,9 @@ model Category {
 }
 
 // ---------------------------------------------------------------------------
-// Lab 2 — Development Requester (testing mechanism, not authentication)
+// Lab 2 — DevelopmentRequester: frozen legacy (scalar fields only, NO
+// tickets back-relation). Sunset at the #45/#46 auth cutover, which drops this
+// table together with the requester-selector routes.
 // ---------------------------------------------------------------------------
 model DevelopmentRequester {
   id        Int      @id @default(autoincrement())
@@ -44,8 +66,6 @@ model DevelopmentRequester {
   email     String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-
-  tickets Ticket[]
 
   @@index([isActive])
 }
@@ -73,23 +93,32 @@ model Ticket {
   requesterId       Int
   categoryId        Int
   relatedSystemId   Int
+  // Owner-eligibility enforcement deferred: #48 owner mutations + #50 admin
+  // safety via the shared BR-76 invariant — NOT claimed complete in #44.
+  ticketOwnerId     Int?
   summary           String
   description       String            @db.Text
   requestedPriority RequestedPriority
+  itPriority        ItPriority
   currentStatus     TicketStatus      @default(NEW)
+  requesterResolutionIndicatedAt DateTime?
   ticketDate        DateTime          @default(now())
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  requester     DevelopmentRequester @relation(fields: [requesterId], references: [id])
+  requester     User @relation("TicketRequester", fields: [requesterId], references: [id])
+  owner         User? @relation("TicketOwner", fields: [ticketOwnerId], references: [id])
   category      Category             @relation(fields: [categoryId], references: [id])
   relatedSystem RelatedSystem        @relation(fields: [relatedSystemId], references: [id])
 
   attachments Attachment[]
+  publicComments PublicComment[]
+  internalNotes InternalNote[]
 
   @@index([requesterId])
   @@index([categoryId])
   @@index([relatedSystemId])
+  @@index([ticketOwnerId])
   @@index([updatedAt])
 }
 
@@ -111,4 +140,66 @@ model Attachment {
 
   @@index([ticketId])
   @@index([removedAt])
+}
+
+model User {
+  id                  Int       @id @default(autoincrement())
+  name                String
+  email               String    @unique
+  passwordHash        String
+  role                Role
+  isActive            Boolean   @default(true)
+  mustChangePassword  Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  requestedTickets Ticket[]        @relation("TicketRequester")
+  ownedTickets     Ticket[]        @relation("TicketOwner")
+  sessions         Session[]
+  publicComments   PublicComment[]
+  internalNotes    InternalNote[]
+
+  @@index([isActive])
+  @@index([role])
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId])
+}
+
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId])
 }
