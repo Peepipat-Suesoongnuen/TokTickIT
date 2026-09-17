@@ -54,7 +54,8 @@ export default function Login() {
   }
 
   return (
-    <main className="container py-4" style={{ maxWidth: 480 }}>
+    <main className="container py-4 d-flex flex-column align-items-center">
+      <div className="w-100" style={{ maxWidth: 480 }}>
       <h1 className="h4 mb-1">
         TokTickIT <span className="text-success">IT Service Desk</span>
       </h1>
@@ -90,7 +91,7 @@ export default function Login() {
               />
               <button
                 type="button"
-                className="btn btn-outline-secondary"
+                className="btn btn-outline-secondary text-success"
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
                 onClick={() => {
@@ -98,7 +99,17 @@ export default function Login() {
                   document.getElementById("login-password")?.focus();
                 }}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z"></path>
                   <circle cx="12" cy="12" r="2.5"></circle>
                   {showPassword && <path d="M4 4l16 16"></path>}
@@ -116,6 +127,7 @@ export default function Login() {
             {busy ? "Signing in…" : "Sign In"}
           </button>
         </form>
+      </div>
       </div>
     </main>
   );

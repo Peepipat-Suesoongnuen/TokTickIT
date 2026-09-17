@@ -116,7 +116,8 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
   }
 
   return (
-    <main className="container py-4" style={{ maxWidth: 480 }}>
+    <main className="container py-4 d-flex flex-column align-items-center">
+      <div className="w-100" style={{ maxWidth: 480 }}>
       <h1 className="h4 mb-1">
         TokTickIT <span className="text-success">IT Service Desk</span>
       </h1>
@@ -139,7 +140,7 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
               />
               <button
                 type="button"
-                className="btn btn-outline-secondary"
+                className="btn btn-outline-secondary text-success"
                 aria-label={showCurrent ? "Hide current password" : "Show current password"}
                 aria-pressed={showCurrent}
                 onClick={() => toggleWithFocus("cp-current", () => setShowCurrent((s) => !s))}
@@ -166,7 +167,7 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
               />
               <button
                 type="button"
-                className="btn btn-outline-secondary"
+                className="btn btn-outline-secondary text-success"
                 aria-label={showNew ? "Hide new password" : "Show new password"}
                 aria-pressed={showNew}
                 onClick={() => toggleWithFocus("cp-new", () => setShowNew((s) => !s))}
@@ -192,7 +193,7 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
               />
               <button
                 type="button"
-                className="btn btn-outline-secondary"
+                className="btn btn-outline-secondary text-success"
                 aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
                 aria-pressed={showConfirm}
                 onClick={() => toggleWithFocus("cp-confirm", () => setShowConfirm((s) => !s))}
@@ -230,6 +231,7 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
             </div>
           </div>
         </form>
+      </div>
       </div>
     </main>
   );
