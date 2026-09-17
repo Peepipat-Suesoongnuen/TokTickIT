@@ -49,15 +49,20 @@ beforeEach(() => {
 });
 
 describe("Login (Lab 3 Issue #45)", () => {
-  it("renders the mockup heading/note with a plain password field and no eye toggle", async () => {
+  it("renders the mockup heading/note with a show/hide password toggle", async () => {
+    const user = userEvent.setup();
     renderLogin();
 
     expect(screen.getByRole("heading", { level: 1, name: "TokTickIT IT Service Desk" })).toBeInTheDocument();
     expect(
       screen.getByText("Sign in with your TokTickIT account to continue."),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
-    expect(screen.queryByRole("button", { name: /show password|hide password/i })).toBeNull();
+    const password = screen.getByLabelText("Password");
+    expect(password).toHaveAttribute("type", "password");
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    await user.click(toggle);
+    expect(password).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide password" })).toBeInTheDocument();
   });
 
   it("empty submit shows validation and never calls the API", async () => {
