@@ -14,6 +14,7 @@ import { v4 as uuid } from "uuid";
 import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
+import { getApprovedOrigins, isOriginAllowed } from "./auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -38,7 +39,21 @@ const upload = multer({
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Non-browser requests carry no Origin and must keep working
+      // (Supertest/curl); browsers must exactly match the allowlist.
+      // Rejected origins receive no credentialed CORS authorization.
+      if (!origin || isOriginAllowed(origin, getApprovedOrigins())) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+  })
+);          // strict allowlist (APP_ORIGINS) + credentials, never "*"
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
