@@ -220,6 +220,69 @@ export async function removeAttachment(attachmentId: number, requesterId: number
   return body;
 }
 
+// Issue #45 — authenticated identity (Lab 3 api-spec §3). Auth calls use
+// `credentials: "include"` so the session cookie flows; existing helpers
+// above are untouched.
+
+export interface SafeUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  mustChangePassword: boolean;
+}
+
+export interface AuthFailure {
+  status: number;
+  body: {
+    error?: { code?: string; message?: string };
+    fieldErrors?: Record<string, string>;
+  } | null;
+}
+
+async function authRequest(path: string, init?: RequestInit): Promise<{ user: SafeUser }> {
+  const res = await fetch(`${API_URL}${path}`, { ...init, credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies AuthFailure;
+  return body as { user: SafeUser };
+}
+
+export async function login(email: string, password: string): Promise<{ user: SafeUser }> {
+  return authRequest("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function getCurrentUser(): Promise<{ user: SafeUser }> {
+  return authRequest("/api/auth/me");
+}
+
+export async function logoutUser(): Promise<void> {
+  const res = await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw { status: res.status, body } satisfies AuthFailure;
+  }
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ user: SafeUser }> {
+  // Confirmation is UI-only and is never sent (api-spec §3.4).
+  return authRequest("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem(): Promise<SystemStatus> {
   // A thrown fetch (network error) or a non-ok HTTP response must surface as a

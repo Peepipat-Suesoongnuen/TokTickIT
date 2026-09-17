@@ -3,6 +3,9 @@ import { render, screen } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import App from "../../src/App.js";
 import { RequesterProvider } from "../../src/contexts/RequesterContext.js";
+import * as api from "../../src/api.js";
+
+vi.mock("../../src/api.js");
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -11,6 +14,18 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear();
+  // Lab 3 auth gate (Issue #45): App reaches the selection guard only for an
+  // authenticated user without the mandatory-change flag.
+  vi.mocked(api.getCurrentUser).mockResolvedValue({
+    user: {
+      id: 9,
+      name: "Test User",
+      email: "test@test.local",
+      role: "REQUESTER",
+      active: true,
+      mustChangePassword: false,
+    },
+  });
 });
 
 function renderApp() {
@@ -24,9 +39,9 @@ function renderApp() {
 }
 
 describe("App", () => {
-  it("renders the TokTickIT heading", () => {
+  it("renders the TokTickIT heading", async () => {
     renderApp();
-    expect(screen.getByText(/TokTickIT/i)).toBeInTheDocument();
+    expect(await screen.findByText(/TokTickIT/i)).toBeInTheDocument();
   });
 
   // Lab 1 Check System flow is now behind Requester guard; Lab 2 selection is the entry point.

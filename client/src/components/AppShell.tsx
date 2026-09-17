@@ -1,10 +1,23 @@
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { useContext, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useRequester } from "../contexts/RequesterContext.js";
+import { AuthContext } from "../contexts/AuthContext.js";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { requester, clearRequester } = useRequester();
+  // Tolerate absence of AuthProvider (legacy Lab 2 tests render the shell
+  // standalone): the identity menu is omitted, existing nav is untouched.
+  const auth = useContext(AuthContext);
+  const user = auth?.user ?? null;
+  const navigate = useNavigate();
   const [navOpen, setNavOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  async function onLogout() {
+    setMenuOpen(false);
+    await auth?.logout();
+    navigate("/my-tickets");
+  }
 
   return (
     <>
@@ -21,6 +34,50 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <button className="btn btn-outline-light btn-sm" onClick={clearRequester}>
                 Change Requester
               </button>
+            </div>
+          )}
+          {user && (
+            <div className="d-flex align-items-center gap-2 lab3-user-menu position-relative">
+              <span className="text-white-50 small">
+                {user.name} · {user.role}
+              </span>
+              <button
+                type="button"
+                className="btn btn-outline-light btn-sm"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label="User menu"
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <span aria-hidden="true">▾</span>
+              </button>
+              {menuOpen && (
+                <ul role="menu" className="dropdown-menu show position-absolute end-0 top-100">
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="dropdown-item"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        navigate("/change-password");
+                      }}
+                    >
+                      Change Password
+                    </button>
+                  </li>
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="dropdown-item"
+                      onClick={() => void onLogout()}
+                    >
+                      Logout
+                    </button>
+                  </li>
+                </ul>
+              )}
             </div>
           )}
         </div>

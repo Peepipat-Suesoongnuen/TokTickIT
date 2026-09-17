@@ -1,0 +1,112 @@
+import { useState } from "react";
+import type { FormEvent } from "react";
+import { useAuth } from "../contexts/AuthContext.js";
+
+// All account-specific failures share one safe generic message so unknown
+// email, wrong password, inactive, and locked accounts stay
+// indistinguishable (api-spec §3.1). Inactive users authenticate through the
+// same generic 401 path — no separate account-state copy exists.
+function loginErrorMessage(err: unknown): string {
+  const e = err as {
+    status?: number;
+    body?: { error?: { code?: string; message?: string } } | null;
+  };
+  const status = e?.status;
+  const code = e?.body?.error?.code;
+  if (status === 401 || code === "INVALID_CREDENTIALS") {
+    return "Invalid email or password.";
+  }
+  if (status === 429 || code === "TOO_MANY_ATTEMPTS") {
+    return "Too many login attempts. Please try again later.";
+  }
+  return "Unable to sign in. Please try again.";
+}
+
+export default function Login() {
+  const { login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    const emailRequired = email.trim().length === 0;
+    const passwordRequired = password.length === 0;
+    setEmailError(emailRequired ? "Email is required." : "");
+    setPasswordError(passwordRequired ? "Password is required." : "");
+    setFormError("");
+    if (emailRequired || passwordRequired) {
+      document.getElementById(emailRequired ? "login-email" : "login-password")?.focus();
+      return;
+    }
+    setBusy(true);
+    try {
+      await login(email.trim(), password);
+    } catch (err) {
+      setFormError(loginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="container py-4" style={{ maxWidth: 480 }}>
+      <div className="card p-4">
+        <h1 className="h4 mb-0">TokTickIT</h1>
+        <p className="text-secondary">IT Service Desk</p>
+        <form onSubmit={onSubmit} noValidate>
+          <div className="mb-3">
+            <label htmlFor="login-email" className="form-label">
+              Email
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              autoComplete="email"
+              className="form-control"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            {emailError && <div className="invalid-feedback d-block">{emailError}</div>}
+          </div>
+          <div className="mb-3">
+            <label htmlFor="login-password" className="form-label">
+              Password
+            </label>
+            <div className="input-group">
+              <input
+                id="login-password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                className="form-control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((s) => !s)}
+              >
+                <span aria-hidden="true">👁</span>
+              </button>
+            </div>
+            {passwordError && <div className="invalid-feedback d-block">{passwordError}</div>}
+          </div>
+          {formError && (
+            <div role="alert" className="alert alert-danger">
+              {formError}
+            </div>
+          )}
+          <button type="submit" className="btn btn-success w-100" disabled={busy}>
+            {busy ? "Signing in…" : "Sign In"}
+          </button>
+        </form>
+      </div>
+    </main>
+  );
+}
