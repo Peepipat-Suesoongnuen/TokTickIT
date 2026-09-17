@@ -94,6 +94,26 @@ describe("Login (Lab 3 Issue #45)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("inactive-account login shows the same generic message", async () => {
+    const user = userEvent.setup();
+    // Server answers inactive-account logins with the generic 401 shape
+    // (auth.ts: unknown / wrong / inactive / locked are indistinguishable).
+    const loginMock = vi.fn().mockRejectedValue({
+      status: 401,
+      body: { error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password." } },
+    });
+    renderLogin(loginMock);
+
+    await user.type(screen.getByLabelText("Email"), "inactive@example.com");
+    await user.type(screen.getByLabelText("Password"), "some-password");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    expect(await screen.findByText("Invalid email or password.")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/inactive|locked|disabled|not found|does not exist/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("busy state disables duplicate submission while signing in", async () => {
     const user = userEvent.setup();
     const loginMock = vi.fn().mockImplementation(() => new Promise(() => {}));
