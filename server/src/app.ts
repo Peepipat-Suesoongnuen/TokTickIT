@@ -15,6 +15,7 @@ import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
 import { getApprovedOrigins, isOriginAllowed } from "./auth.js";
+import authRouter from "./routes/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -64,6 +65,11 @@ app.use(express.json());
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
 });
+
+// Issue #45 (Lab 3) — authentication routes (login + logout/change-password
+// follow in later tasks). Mounted at /api/auth; the router owns its Origin
+// gate so login is protected before any credential processing.
+app.use("/api/auth", authRouter);
 
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list (evolved in Lab 2)
