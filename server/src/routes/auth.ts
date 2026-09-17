@@ -20,7 +20,8 @@ import {
   type AuthRequest,
 } from "../auth.js";
 import { canonicalizeEmail } from "../lib/identity.js";
-import { verifyPassword } from "../lib/password-hash.js";
+import { hashPassword, verifyPassword } from "../lib/password-hash.js";
+import { validateNewPassword } from "../lib/password-policy.js";
 import { createSessionToken } from "../lib/session.js";
 import {
   buildFailedLoginUpdate,
@@ -46,6 +47,8 @@ export const INVALID_CREDENTIALS_MESSAGE = "Invalid email or password.";
 export const TOO_MANY_ATTEMPTS_CODE = "TOO_MANY_ATTEMPTS";
 export const TOO_MANY_ATTEMPTS_MESSAGE =
   "Too many login attempts. Please try again later.";
+export const CURRENT_PASSWORD_INVALID_CODE = "CURRENT_PASSWORD_INVALID";
+export const CURRENT_PASSWORD_INVALID_MESSAGE = "Current password is incorrect.";
 
 const VALIDATION_MESSAGE = "One or more fields are invalid.";
 
@@ -201,6 +204,111 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
       sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
     }
   });
+
+  // POST /api/auth/change-password (Issue #45, Lab 3 api-spec §3.4):
+  // authenticated (session+active), allowed while mustChangePassword=true,
+  // so requirePasswordChanged is deliberately NOT in this chain. Body is
+  // exactly { currentPassword, newPassword } — confirmation is UI-only.
+  // Success rotates the credential atomically: new hash + flag false +
+  // invalidate ALL sessions + ONE fresh session (cookie set).
+  // Any validation/verify failure returns before touching the DB, leaving
+  // credential/session/mandatory state unchanged (api-spec §3.4).
+  router.post(
+    "/change-password",
+    requireOrigin,
+    requireSession,
+    requireActiveUser,
+    async (req: Request, res: Response) => {
+      try {
+        const authUser = (req as AuthRequest).user;
+        if (!authUser) {
+          sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
+          return;
+        }
+
+        // Strict contract (§1.6): exactly { currentPassword, newPassword }.
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const allowed = new Set(["currentPassword", "newPassword"]);
+        for (const key of Object.keys(body)) {
+          if (!allowed.has(key)) {
+            sendError(res, 400, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
+              [key]: "Unknown parameter.",
+            });
+            return;
+          }
+        }
+        const { currentPassword, newPassword } = body;
+        const fieldErrors: Record<string, string> = {};
+        if (typeof currentPassword !== "string" || currentPassword.length === 0) {
+          fieldErrors.currentPassword = "Current password is required.";
+        }
+        if (typeof newPassword !== "string" || newPassword.length === 0) {
+          fieldErrors.newPassword = "New password is required.";
+        }
+        if (Object.keys(fieldErrors).length > 0) {
+          sendError(res, 400, "VALIDATION_FAILED", VALIDATION_MESSAGE, fieldErrors);
+          return;
+        }
+
+        // 1. Verify current (Argon2id) against the stored hash. No DB write.
+        const stored = await getPrisma().user.findUnique({
+          where: { id: authUser.id },
+        });
+        if (!stored) {
+          sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
+          return;
+        }
+        const ok = await verifyPassword(
+          stored.passwordHash,
+          currentPassword as string
+        );
+        if (!ok) {
+          sendError(
+            res,
+            400,
+            CURRENT_PASSWORD_INVALID_CODE,
+            CURRENT_PASSWORD_INVALID_MESSAGE
+          );
+          return;
+        }
+
+        // 2. Validate new password against policy (no trim/normalization;
+        // blank whitespace-only input fails policy here). No DB write.
+        const policyErrors = validateNewPassword(
+          newPassword as string,
+          currentPassword as string
+        );
+        if (policyErrors.length > 0) {
+          sendError(res, 400, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
+            newPassword: "New password does not meet the password policy.",
+          });
+          return;
+        }
+
+        // 3. Single transaction: new hash + flag false + drop ALL sessions +
+        // establish ONE fresh session.
+        const newHash = await hashPassword(newPassword as string);
+        const { token, tokenHash } = createSessionToken();
+        const current = now();
+        const expiresAt = new Date(current.getTime() + LOGIN_SESSION_TTL_MS);
+        const [updated] = await getPrisma().$transaction([
+          getPrisma().user.update({
+            where: { id: authUser.id },
+            data: { passwordHash: newHash, mustChangePassword: false },
+          }),
+          getPrisma().session.deleteMany({ where: { userId: authUser.id } }),
+          getPrisma().session.create({
+            data: { userId: authUser.id, tokenHash, expiresAt },
+          }),
+        ]);
+
+        res.cookie(SESSION_COOKIE_NAME, token, getSessionCookieOptions(req, LOGIN_SESSION_TTL_MS));
+        res.status(200).json({ user: getSafeUser(updated) });
+      } catch {
+        sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+      }
+    }
+  );
 
   return router;
 }
