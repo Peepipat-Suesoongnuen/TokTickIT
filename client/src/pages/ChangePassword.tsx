@@ -68,6 +68,7 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const met = useMemo(
     () =>
@@ -77,6 +78,15 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
       >,
     [currentPassword, newPassword],
   );
+
+  async function onLogout() {
+    setLogoutError(null);
+    try {
+      await logout();
+    } catch {
+      setLogoutError("Logout failed. Please try again.");
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -218,6 +228,11 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
               {errors.form}
             </div>
           )}
+          {logoutError && (
+            <div role="alert" className="alert alert-danger">
+              {logoutError}
+            </div>
+          )}
           <div className="row g-2">
             <div className="col-6">
               <button type="submit" className="btn btn-success w-100" disabled={busy}>
@@ -225,7 +240,7 @@ export default function ChangePassword({ onChanged }: { onChanged?: (user: SafeU
               </button>
             </div>
             <div className="col-6">
-              <button type="button" className="btn btn-outline-secondary w-100" onClick={() => void logout()}>
+              <button type="button" className="btn btn-outline-secondary w-100" onClick={() => void onLogout()}>
                 Logout
               </button>
             </div>

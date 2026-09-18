@@ -12,10 +12,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [navOpen, setNavOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   async function onLogout() {
+    setLogoutError(null);
+    try {
+      await auth?.logout();
+    } catch {
+      setLogoutError("Logout failed. Please try again.");
+      return;
+    }
     setMenuOpen(false);
-    await auth?.logout();
     navigate("/my-tickets");
   }
 
@@ -76,6 +83,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       Logout
                     </button>
                   </li>
+                  {logoutError && (
+                    <li role="none" className="px-3 pb-2">
+                      <div role="alert" className="alert alert-danger mb-0 py-1 px-2 small">
+                        {logoutError}
+                      </div>
+                    </li>
+                  )}
                 </ul>
               )}
             </div>
