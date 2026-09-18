@@ -6,7 +6,6 @@ import App from "../../../App.js";
 import Login from "../../../pages/Login.js";
 import AppShell from "../../../components/AppShell.js";
 import { AuthProvider, AuthContext } from "../../../contexts/AuthContext.js";
-import { RequesterProvider } from "../../../contexts/RequesterContext.js";
 import * as api from "../../../api.js";
 
 vi.mock("../../../api.js");
@@ -36,9 +35,7 @@ function renderLogin(loginMock = vi.fn()) {
 function renderApp(path = "/my-tickets") {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <RequesterProvider>
-        <App />
-      </RequesterProvider>
+      <App />
     </MemoryRouter>,
   );
 }
@@ -137,14 +134,25 @@ describe("Login (Lab 3 Issue #45)", () => {
     expect(screen.queryByRole("link", { name: "My Tickets" })).not.toBeInTheDocument();
   });
 
-  it("authenticated user without the flag reaches the intact requester gate", async () => {
+  it("authenticated user without the flag reaches the app directly (no selector)", async () => {
     vi.mocked(api.getCurrentUser).mockResolvedValue({ user: activeUser });
-    vi.mocked(api.fetchRequesters).mockResolvedValue([
-      { id: 7, name: "Rita Requester", email: "rita@test.local" },
-    ]);
+    vi.mocked(api.fetchCategories).mockResolvedValue([]);
+    vi.mocked(api.listTickets).mockResolvedValue({
+      data: [],
+      meta: {
+        page: 1,
+        pageSize: 10,
+        totalCount: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
     renderApp();
 
-    expect(await screen.findByLabelText(/Development Requester/i)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "My Tickets" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Development Requester/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change Requester" })).not.toBeInTheDocument();
   });
 });
 
@@ -154,21 +162,19 @@ describe("Shell identity (Lab 3 Issue #45)", () => {
     const logoutMock = vi.fn().mockResolvedValue(undefined);
     render(
       <MemoryRouter>
-        <RequesterProvider>
-          <AuthContext.Provider
-            value={{
-              user: activeUser,
-              loading: false,
-              login: vi.fn(),
-              logout: logoutMock,
-              refresh: vi.fn(),
-            }}
-          >
-            <AppShell>
-              <p>child content</p>
-            </AppShell>
-          </AuthContext.Provider>
-        </RequesterProvider>
+        <AuthContext.Provider
+          value={{
+            user: activeUser,
+            loading: false,
+            login: vi.fn(),
+            logout: logoutMock,
+            refresh: vi.fn(),
+          }}
+        >
+          <AppShell>
+            <p>child content</p>
+          </AppShell>
+        </AuthContext.Provider>
       </MemoryRouter>,
     );
 

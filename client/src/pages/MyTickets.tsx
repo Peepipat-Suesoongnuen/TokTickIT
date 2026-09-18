@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listTickets, fetchCategories, Category, TicketListItem, TicketListMeta } from "../api";
-import { useRequester } from "../contexts/RequesterContext";
 
 export function formatBangkok(dateStr: string): string {
   const date = new Date(dateStr);
@@ -33,7 +32,6 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 export default function MyTickets() {
-  const { requester } = useRequester();
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
@@ -112,20 +110,18 @@ export default function MyTickets() {
     setData([]);
     setMeta(null);
     setError("");
-    if (requester) void loadCategories();
+    void loadCategories();
     return () => {
       categoryRequestSequence.current += 1;
     };
-  }, [requester?.id]);
+  }, []);
 
   const load = async () => {
-    if (!requester) return;
     const requestSequence = ++ticketRequestSequence.current;
     setLoading(true);
     setError("");
     try {
       const res = await listTickets({
-        requesterId: requester.id,
         search: debouncedSearch || undefined,
         categoryId: categoryId ? Number(categoryId) : undefined,
         requestedPriority: priority || undefined,
@@ -156,9 +152,7 @@ export default function MyTickets() {
     return () => {
       ticketRequestSequence.current += 1;
     };
-  }, [requester?.id, debouncedSearch, categoryId, priority, currentStatus, sort, order, page, pageSize]);
-
-  if (!requester) return null;
+  }, [debouncedSearch, categoryId, priority, currentStatus, sort, order, page, pageSize]);
 
   const clearFilters = () => {
     setSearch("");

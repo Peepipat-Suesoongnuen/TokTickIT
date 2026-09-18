@@ -1,10 +1,10 @@
 import { useContext, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useRequester } from "../contexts/RequesterContext.js";
 import { AuthContext } from "../contexts/AuthContext.js";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { requester, clearRequester } = useRequester();
+  // Issue #46 — identity comes from auth context only; the Lab 2
+  // requester chip + Change Requester button are removed.
   // Tolerate absence of AuthProvider (legacy Lab 2 tests render the shell
   // standalone): the identity menu is omitted, existing nav is untouched.
   const auth = useContext(AuthContext);
@@ -33,16 +33,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <span className="fw-bold">
             TokTickIT <span className="fw-normal small">IT Service Desk</span>
           </span>
-          {requester && (
-            <div className="d-flex align-items-center gap-2 lab2-requester-actions">
-              <span className="badge rounded-pill zen-selected lab2-requester-chip">
-                <span aria-hidden="true">👤</span> {requester.name}
-              </span>
-              <button className="btn btn-outline-light btn-sm" onClick={clearRequester}>
-                Change Requester
-              </button>
-            </div>
-          )}
           {user && (
             <div className="d-flex align-items-center gap-2 lab3-user-menu position-relative">
               <button

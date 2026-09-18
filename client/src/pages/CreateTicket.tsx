@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchCategories, fetchRelatedSystems, createTicket, uploadAttachment, Category, RelatedSystem } from "../api";
-import { useRequester } from "../contexts/RequesterContext";
+import { useAuth } from "../contexts/AuthContext";
 import { trimValue, isSummaryValid, isDescriptionValid, ALLOWED_PRIORITIES } from "../lib/validation";
 
 export default function CreateTicket() {
-  const { requester } = useRequester();
+  // Issue #46 — identity comes from auth context only.
+  const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [systems, setSystems] = useState<RelatedSystem[]>([]);
   const [refLoading, setRefLoading] = useState(true);
@@ -25,7 +26,6 @@ export default function CreateTicket() {
   const [uploadResults, setUploadResults] = useState<Array<{ name: string; status: "success" | "failed"; reason?: string }>>([]);
 
   const loadRef = async () => {
-    if (!requester) return;
     setRefLoading(true);
     setRefError("");
     try {
@@ -41,7 +41,7 @@ export default function CreateTicket() {
 
   useEffect(() => {
     loadRef();
-  }, [requester?.id]);
+  }, []);
 
   const validate = (): boolean => {
     const fe: Record<string, string> = {};
@@ -95,11 +95,10 @@ export default function CreateTicket() {
     setSubmitError("");
     setSuccess(null);
     setUploadResults([]);
-    if (!validate() || !requester) return;
+    if (!validate()) return;
     setSubmitting(true);
     try {
       const res = await createTicket({
-        requesterId: requester.id,
         categoryId: Number(categoryId),
         relatedSystemId: Number(relatedSystemId),
         summary: trimValue(summary),
@@ -110,7 +109,7 @@ export default function CreateTicket() {
       const results: Array<{ name: string; status: "success" | "failed"; reason?: string }> = [];
       for (const pf of pendingFiles.filter((p) => p.status === "valid")) {
         try {
-          await uploadAttachment(res.id, requester.id, pf.file);
+          await uploadAttachment(res.id, pf.file);
           results.push({ name: pf.file.name, status: "success" });
         } catch (err: unknown) {
           const e = err as { body?: { error?: { message?: string } } };
@@ -128,8 +127,6 @@ export default function CreateTicket() {
       setSubmitting(false);
     }
   };
-
-  if (!requester) return null;
 
   if (success) {
     return (
@@ -185,7 +182,7 @@ export default function CreateTicket() {
           </div>
           <div className="col-md-6 col-lg-4">
             <label className="form-label fw-semibold small">Requester</label>
-            <input className="form-control form-readonly" value={requester.name} readOnly aria-label="Requester" />
+            <input className="form-control form-readonly" value={user?.name ?? ""} readOnly aria-label="Requester" />
           </div>
         </div>
       </div>
