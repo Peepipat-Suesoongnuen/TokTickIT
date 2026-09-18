@@ -86,8 +86,8 @@ function authed(scenario: ChainScenario) {
 }
 
 describe("origin helpers (pure, no DB)", () => {
-  it("getApprovedOrigins falls back to the local-dev default when unset", () => {
-    expect(getApprovedOrigins({})).toEqual(["http://localhost:5174"]);
+  it("getApprovedOrigins falls back to the local-dev defaults when unset", () => {
+    expect(getApprovedOrigins({})).toEqual(["http://localhost:5173", "http://localhost:5174"]);
   });
   it("getApprovedOrigins parses comma-separated values, trims, drops empties", () => {
     expect(

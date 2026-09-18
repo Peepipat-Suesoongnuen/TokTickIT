@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import path from "node:path";
-import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, loginAs } from "./auth-helper";
+import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, ensureApiAuth, loginAs } from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 const STATE_DIR = path.join("artifacts", "lab-02", "screenshots", "states");
@@ -15,6 +15,8 @@ async function getRequesters(request: APIRequestContext): Promise<Requester[]> {
 }
 
 async function getReferences(request: APIRequestContext, requesterId: number) {
+  // Reviewer fix 2 (Issue #45): reference-data routes are session-gated.
+  await ensureApiAuth(request, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   const [categoriesResponse, systemsResponse] = await Promise.all([
     request.get(`${API_URL}/api/categories?requesterId=${requesterId}`),
     request.get(`${API_URL}/api/related-systems?requesterId=${requesterId}`),

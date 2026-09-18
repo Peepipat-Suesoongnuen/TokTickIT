@@ -36,7 +36,11 @@ export interface RelatedSystem {
 }
 
 export async function fetchCategories(requesterId: number): Promise<Category[]> {
-  const res = await fetch(`${API_URL}/api/categories?requesterId=${requesterId}`);
+  // Reviewer fix 2 (Issue #45): GET /api/categories is session-gated, so the
+  // session cookie must flow (cross-origin 5174 -> API).
+  const res = await fetch(`${API_URL}/api/categories?requesterId=${requesterId}`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
@@ -46,7 +50,11 @@ export async function fetchCategories(requesterId: number): Promise<Category[]> 
 }
 
 export async function fetchRelatedSystems(requesterId: number): Promise<RelatedSystem[]> {
-  const res = await fetch(`${API_URL}/api/related-systems?requesterId=${requesterId}`);
+  // Reviewer fix 2 (Issue #45): GET /api/related-systems is session-gated,
+  // so the session cookie must flow (cross-origin 5174 -> API).
+  const res = await fetch(`${API_URL}/api/related-systems?requesterId=${requesterId}`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";

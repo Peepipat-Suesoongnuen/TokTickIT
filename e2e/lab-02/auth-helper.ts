@@ -14,7 +14,7 @@
 // password below. The changed password is a deterministic constant (NOT
 // unique per run) for exactly this reason — anything timestamp-unique would
 // be unrecoverable after the first test.
-import { expect, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 // Dedicated e2e-owned login identity (Issue #45 isolation fix). NEVER pass a
 // seeded email to loginAs — seeded rows must stay pristine for seed.test.ts.
@@ -27,7 +27,47 @@ export const LAB02_INITIAL_PASSWORD = "Requester#2026-local";
 
 // Policy-shaped (8-64 chars, upper + lower + special) and differs from the
 // initial password above, per the server policy (password-policy.ts).
-const LAB02_CHANGED_PASSWORD = "Lab02#E2E-changed-Aa1!";
+export const LAB02_CHANGED_PASSWORD = "Lab02#E2E-changed-Aa1!";
+
+const E2E_API_URL = "http://127.0.0.1:3100";
+// Must stay inside the e2e server's APP_ORIGINS allowlist
+// (playwright.config.ts); the API request context is not a browser, so the
+// Origin header is set explicitly.
+const E2E_API_ORIGIN = "http://localhost:5174";
+
+// Reviewer fix 2 (Issue #45, test-only): the reference-data routes are
+// session-gated, so specs that fetch them via Playwright's `request` context
+// (a separate cookie jar per test) must sign that context in first. Mirrors
+// loginAs: initial password first, changed-password fallback, then complete
+// the mandatory change gate via API when present so later GETs are not 403.
+// Safe to call repeatedly (later calls are plain logins).
+export async function ensureApiAuth(
+  request: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<void> {
+  let currentPassword = password;
+  let login = await request.post(`${E2E_API_URL}/api/auth/login`, {
+    headers: { Origin: E2E_API_ORIGIN },
+    data: { email, password: currentPassword },
+  });
+  if (login.status() === 401) {
+    currentPassword = LAB02_CHANGED_PASSWORD;
+    login = await request.post(`${E2E_API_URL}/api/auth/login`, {
+      headers: { Origin: E2E_API_ORIGIN },
+      data: { email, password: currentPassword },
+    });
+  }
+  expect(login.ok()).toBeTruthy();
+  const body = (await login.json()) as { user?: { mustChangePassword?: boolean } };
+  if (body?.user?.mustChangePassword === true) {
+    const change = await request.post(`${E2E_API_URL}/api/auth/change-password`, {
+      headers: { Origin: E2E_API_ORIGIN },
+      data: { currentPassword, newPassword: LAB02_CHANGED_PASSWORD },
+    });
+    expect(change.ok()).toBeTruthy();
+  }
+}
 
 async function submitLogin(page: Page, email: string, password: string): Promise<void> {
   await page.goto("/");

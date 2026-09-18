@@ -297,21 +297,45 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
         }
 
         // 3. Single transaction: new hash + flag false + drop ALL sessions +
-        // establish ONE fresh session.
+        // establish ONE fresh session. The credential update is conditional
+        // on the VERIFIED old hash, so two concurrent valid changes cannot
+        // both succeed: the loser sees 0 rows affected and gets a truthful
+        // 400 CURRENT_PASSWORD_INVALID with no session changes.
         const newHash = await hashPassword(newPassword as string);
         const { token, tokenHash } = createSessionToken();
         const current = now();
         const expiresAt = new Date(current.getTime() + LOGIN_SESSION_TTL_MS);
-        const [updated] = await getPrisma().$transaction([
-          getPrisma().user.update({
-            where: { id: authUser.id },
-            data: { passwordHash: newHash, mustChangePassword: false },
-          }),
-          getPrisma().session.deleteMany({ where: { userId: authUser.id } }),
-          getPrisma().session.create({
-            data: { userId: authUser.id, tokenHash, expiresAt },
-          }),
-        ]);
+        const verifiedHash = stored.passwordHash;
+        let updated;
+        try {
+          updated = await getPrisma().$transaction(async (tx) => {
+            const rotated = await tx.user.updateMany({
+              where: { id: authUser.id, passwordHash: verifiedHash },
+              data: { passwordHash: newHash, mustChangePassword: false },
+            });
+            if (rotated.count === 0) throw new Error("PASSWORD_RACE_LOST");
+            await tx.session.deleteMany({ where: { userId: authUser.id } });
+            await tx.session.create({
+              data: { userId: authUser.id, tokenHash, expiresAt },
+            });
+            return tx.user.findUnique({ where: { id: authUser.id } });
+          });
+        } catch (txErr) {
+          if (txErr instanceof Error && txErr.message === "PASSWORD_RACE_LOST") {
+            sendError(
+              res,
+              400,
+              CURRENT_PASSWORD_INVALID_CODE,
+              CURRENT_PASSWORD_INVALID_MESSAGE
+            );
+            return;
+          }
+          throw txErr;
+        }
+        if (!updated) {
+          sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+          return;
+        }
 
         res.cookie(SESSION_COOKIE_NAME, token, getSessionCookieOptions(req, LOGIN_SESSION_TTL_MS));
         res.status(200).json({ user: getSafeUser(updated) });

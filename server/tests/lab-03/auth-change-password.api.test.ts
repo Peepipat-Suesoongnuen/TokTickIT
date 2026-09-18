@@ -259,4 +259,69 @@ describe("POST /api/auth/change-password (Lab 3 Issue #45)", () => {
     );
     await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
   });
+
+  it("concurrent valid changes: exactly ONE 200, never two successes, winner session works", async () => {
+    // Race regression (reviewer fix 2, Fix 3): two sessions fire valid
+    // changes concurrently (Promise.all, no sleep). The conditional
+    // credential update + full session rotation guarantee exactly one
+    // success — the old verify-then-update could return 200 twice with the
+    // loser's fresh cookie dead on arrival.
+    //
+    // The loser's status is timing-dependent but always truthful, so the
+    // deterministic assertions are: exactly one 200, no loser cookie, final
+    // hash matches the winner only, winner cookie works, old sessions dead.
+    // - 400 CURRENT_PASSWORD_INVALID: loser reached the handler after the
+    //   winner's conditional rotation (verified hash no longer current).
+    // - 401 UNAUTHENTICATED: the winner's rotation locked+deleted the
+    //   loser's session row before the loser's own session lookup resolved
+    //   (Postgres READ COMMITTED lock-wait -> row dead -> null). Observed
+    //   both outcomes across repeated runs, so both are accepted here.
+    const raceEmail = email("chg-race");
+    await createUser(raceEmail);
+    try {
+      const cookieA = await loginAs(raceEmail, CURRENT);
+      const cookieB = await loginAs(raceEmail, CURRENT);
+      const newA = "Race-Winner-A-1!";
+      const newB = "Race-Winner-B-2@";
+
+      const [resA, resB] = await Promise.all([
+        request(app)
+          .post("/api/auth/change-password")
+          .set("Origin", ORIGIN)
+          .set("Cookie", cookieA)
+          .send({ currentPassword: CURRENT, newPassword: newA }),
+        request(app)
+          .post("/api/auth/change-password")
+          .set("Origin", ORIGIN)
+          .set("Cookie", cookieB)
+          .send({ currentPassword: CURRENT, newPassword: newB }),
+      ]);
+
+      expect([resA.status, resB.status].filter((s) => s === 200)).toHaveLength(1);
+      const winner = resA.status === 200 ? { res: resA, pw: newA } : { res: resB, pw: newB };
+      const loser = resA.status === 200 ? resB : resA;
+      expect([400, 401]).toContain(loser.status);
+      if (loser.status === 400) {
+        expect(loser.body.error.code).toBe("CURRENT_PASSWORD_INVALID");
+      } else {
+        expect(loser.body.error.code).toBe("UNAUTHENTICATED");
+      }
+      // Loser made no session changes (no fresh cookie issued).
+      expect(sessionCookieValue(loser.headers["set-cookie"])).toBeUndefined();
+
+      const saved = await prisma.user.findUnique({ where: { email: raceEmail } });
+      const loserPw = winner.pw === newA ? newB : newA;
+      expect(await verifyPassword(saved!.passwordHash, winner.pw)).toBe(true);
+      expect(await verifyPassword(saved!.passwordHash, loserPw)).toBe(false);
+      expect(await verifyPassword(saved!.passwordHash, CURRENT)).toBe(false);
+
+      const fresh = sessionCookieValue(winner.res.headers["set-cookie"]);
+      expect(fresh).toBeDefined();
+      await request(app).get("/api/auth/me").set("Cookie", fresh!).expect(200);
+      await request(app).get("/api/auth/me").set("Cookie", cookieA).expect(401);
+      await request(app).get("/api/auth/me").set("Cookie", cookieB).expect(401);
+    } finally {
+      await prisma.user.deleteMany({ where: { email: raceEmail } });
+    }
+  });
 });

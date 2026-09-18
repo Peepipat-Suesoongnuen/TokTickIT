@@ -14,7 +14,7 @@ import { v4 as uuid } from "uuid";
 import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
-import { getApprovedOrigins, isOriginAllowed } from "./auth.js";
+import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePasswordChanged, requireSession } from "./auth.js";
 import authRouter from "./routes/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
@@ -77,7 +77,10 @@ app.use("/api/auth", authRouter);
 // active requester (400 if invalid). Always returns active-only ordered by name ASC.
 // Keeps backward compat for Lab 1 tests (no requesterId → still 200).
 // ---------------------------------------------------------------------------
-app.get("/api/categories", async (req: Request, res: Response) => {
+// Issue #45 (reviewer fix 2) — reference-data routes require an authenticated
+// session for an active user who has completed the mandatory password change.
+// Ticket/attachment routes are deliberately untouched (identity cutover is #46).
+app.get("/api/categories", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
     const requesterIdRaw = req.query.requesterId as string | undefined;
     if (requesterIdRaw !== undefined) {
@@ -107,7 +110,7 @@ app.get("/api/categories", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/api/related-systems", async (req: Request, res: Response) => {
+app.get("/api/related-systems", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
     const requesterIdRaw = req.query.requesterId as string | undefined;
     if (requesterIdRaw !== undefined) {

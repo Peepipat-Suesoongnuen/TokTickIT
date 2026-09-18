@@ -15,7 +15,13 @@ import { sendError } from "./lib/errors.js";
 
 export const SESSION_COOKIE_NAME = "toktickit_session";
 
-export const DEFAULT_DEV_ORIGIN = "http://localhost:5174";
+export const DEFAULT_DEV_ORIGINS: readonly string[] = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+];
+
+// Legacy single-origin alias (kept for compat; prefer DEFAULT_DEV_ORIGINS).
+export const DEFAULT_DEV_ORIGIN = DEFAULT_DEV_ORIGINS[1];
 
 export const PASSWORD_CHANGE_ALLOWLIST = [
   "/api/auth/me",
@@ -33,13 +39,14 @@ export const UNAUTHENTICATED_CODE = "UNAUTHENTICATED";
 export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
 
 // Parses APP_ORIGINS (comma-separated, trimmed, empties dropped). Falls back
-// to the documented local-dev default only when APP_ORIGINS is unset; a set
-// but empty value yields [] so all state-changing requests are denied.
+// to the documented local-dev defaults (Vite dev port 5173 + README/e2e port
+// 5174) only when APP_ORIGINS is unset; a set but empty value yields [] so
+// all state-changing requests are denied.
 export function getApprovedOrigins(
   env: Record<string, string | undefined> = process.env
 ): string[] {
   const raw = env.APP_ORIGINS;
-  if (raw === undefined) return [DEFAULT_DEV_ORIGIN];
+  if (raw === undefined) return [...DEFAULT_DEV_ORIGINS];
   return raw
     .split(",")
     .map((v) => v.trim())
