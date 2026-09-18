@@ -317,11 +317,6 @@ textarea:focus-visible {
     gap: 0.5rem;
   }
 
-  .lab2-requester-actions {
-    max-width: 100%;
-    flex-wrap: wrap;
-  }
-
   .lab2-pagination {
     flex-direction: column;
     align-items: stretch !important;
@@ -347,12 +342,5 @@ textarea:focus-visible {
     flex-direction: column;
     align-items: stretch !important;
     gap: 0.5rem;
-  }
-
-  .lab2-requester-chip {
-    max-width: min(100%, 16rem);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }
