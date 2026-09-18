@@ -2,33 +2,36 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
-import { ensureMirroredLegacyRequester } from "../legacy-fixture.js";
+import { hashPassword } from "../../src/lib/password-hash.js";
+import { loginAs } from "../helpers/auth-test.js";
 
 describe("Create Ticket API (Lab 2 Issue 8A)", () => {
   const prisma = getPrisma();
 
-  const requesterEmail = "issue27-create-ticket@test.local";
+  // Issue #46 (Lab 3): session-derived ownership — fixture is a real loginable
+  // User; every request carries the session cookie, no requesterId is sent.
+  const requesterEmail = "lab2-create-ticket@example.com";
+  const requesterPassword = "Lab2-Heal-Valid-9!";
   let requester: { id: number };
+  let cookie: string;
   let activeCategory: { id: number; name: string };
   let activeSystem: { id: number; name: string };
 
   beforeAll(async () => {
-    const existingRequester = await prisma.developmentRequester.findUnique({
-      where: { email: requesterEmail },
-    });
-    if (existingRequester) {
-      await prisma.ticket.deleteMany({ where: { requesterId: existingRequester.id } });
-    }
-
-    // Allocated above both id maxes and mirrored as a same-id User (Lab 3:
-    // POST /api/tickets writes Ticket.requesterId → User(id) FK but validates
-    // against DevelopmentRequester, so the pair must share one collision-free id).
-    const req = await ensureMirroredLegacyRequester(prisma, {
-      name: "Issue 27 Create Ticket Requester",
-      email: requesterEmail,
-      isActive: true,
+    const passwordHash = await hashPassword(requesterPassword);
+    await prisma.user.deleteMany({ where: { email: requesterEmail } });
+    const req = await prisma.user.create({
+      data: {
+        name: "Issue 27 Create Ticket Requester",
+        email: requesterEmail,
+        passwordHash,
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
     });
     requester = { id: req.id };
+    cookie = await loginAs(requesterEmail, requesterPassword);
 
     const category = await prisma.category.findFirst({
       where: { isActive: true },
@@ -56,13 +59,11 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
     if (requester) {
       await prisma.ticket.deleteMany({ where: { requesterId: requester.id } });
     }
-    await prisma.developmentRequester.deleteMany({ where: { email: requesterEmail } });
     await prisma.user.deleteMany({ where: { email: requesterEmail } });
   });
 
   function validPayload(overrides: Record<string, unknown> = {}) {
     return {
-      requesterId: requester.id,
       categoryId: activeCategory.id,
       relatedSystemId: activeSystem.id,
       summary: "  Laptop battery drains quickly  ",
@@ -73,7 +74,7 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
   }
 
   it("API-04 / AC-01 creates one ticket with backend-generated number, NEW status, and saved DB values", async () => {
-    const res = await request(app).post("/api/tickets").send(validPayload()).expect(201);
+    const res = await request(app).post("/api/tickets").set("Cookie", cookie).send(validPayload()).expect(201);
 
     expect(res.body.id).toEqual(expect.any(Number));
     expect(res.body.ticketNumber).toMatch(/^\d{4}-\d{4}$/);
@@ -105,7 +106,7 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
     ["description above maximum", { description: "x".repeat(2001) }, "description", "Description must contain 20–2,000 characters."],
   ])("API-05 rejects %s with the documented 400 field error", async (_name, override, field, message) => {
     const before = await prisma.ticket.count({ where: { requesterId: requester.id } });
-    const res = await request(app).post("/api/tickets").send(validPayload(override)).expect(400);
+    const res = await request(app).post("/api/tickets").set("Cookie", cookie).send(validPayload(override)).expect(400);
 
     expect(res.body.error).toEqual({
       code: "VALIDATION_FAILED",
@@ -122,6 +123,7 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
   ])("API-06 rejects %s with 400", async (_name, makeOverride, field, message) => {
     const res = await request(app)
       .post("/api/tickets")
+      .set("Cookie", cookie)
       .send(validPayload(makeOverride()))
       .expect(400);
 
@@ -129,9 +131,10 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
     expect(res.body.fieldErrors[field]).toBe(message);
   });
 
-  it("API-07 / BR-08 binds the created ticket to the submitted requesterId", async () => {
+  it("API-07 / BR-08 binds the created ticket to the authenticated user (session-derived owner)", async () => {
     const res = await request(app)
       .post("/api/tickets")
+      .set("Cookie", cookie)
       .send(validPayload({ summary: "Requester binding proof" }))
       .expect(201);
 
@@ -142,11 +145,11 @@ describe("Create Ticket API (Lab 2 Issue 8A)", () => {
 
   it("API-23 returns the safe generic 500 envelope when a Prisma dependency fails", async () => {
     const fault = vi
-      .spyOn(prisma.developmentRequester, "findFirst")
+      .spyOn(prisma.category, "findFirst")
       .mockRejectedValueOnce(new Error("forced internal database detail"));
 
     try {
-      const res = await request(app).post("/api/tickets").send(validPayload()).expect(500);
+      const res = await request(app).post("/api/tickets").set("Cookie", cookie).send(validPayload()).expect(500);
 
       expect(res.body).toEqual({
         error: {

@@ -2,11 +2,20 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { hashPassword } from "../../src/lib/password-hash.js";
+import { loginAs } from "../helpers/auth-test.js";
 
 describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
   const prisma = getPrisma();
+  // Issue #46 (Lab 3): session-derived ownership — fixtures are real loginable
+  // Users; every request carries the session cookie, no requesterId is sent.
+  const emailA = "lab2-detail-a@example.com";
+  const emailB = "lab2-detail-b@example.com";
+  const password = "Lab2-Heal-Valid-9!";
   let requesterA: { id: number };
   let requesterB: { id: number };
+  let cookieA: string;
+  let cookieB: string;
   let category: { id: number };
   let relatedSystem: { id: number };
   let ticketA: { id: number; ticketNumber: string };
@@ -15,25 +24,7 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
   // Isolated fixtures: targeted ticketNumbers, deterministic emails
   const TICKET_A_NUM = "2608-1101";
   const TICKET_B_NUM = "2608-1102";
-
-  // Lab 3 healing: Ticket.requesterId now FKs User(id), while routes still
-  // validate against DevelopmentRequester — mirror each fixture as a same-id User.
-  async function mirrorUser(id: number, name: string, email: string, isActive = true) {
-    await prisma.user.upsert({
-      where: { id },
-      update: {},
-      create: {
-        id,
-        name,
-        email,
-        passwordHash: "lab2-fixture-hash",
-        role: "REQUESTER",
-        isActive,
-        mustChangePassword: true,
-        failedLoginAttempts: 0,
-      },
-    });
-  }
+  const INACTIVE_EMAIL = "lab2-inactive-detail@example.com";
 
   beforeAll(async () => {
     await prisma.ticket.deleteMany({
@@ -54,21 +45,30 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
     });
     relatedSystem = sys;
 
-    const reqA = await prisma.developmentRequester.upsert({
-      where: { email: "requesterA-detail@test.com" },
-      update: {},
-      create: { name: "Requester A Detail", email: "requesterA-detail@test.com", isActive: true },
-    });
-    requesterA = { id: reqA.id };
-    await mirrorUser(reqA.id, "Requester A Detail", "requesterA-detail@test.com");
-
-    const reqB = await prisma.developmentRequester.upsert({
-      where: { email: "requesterB-detail@test.com" },
-      update: {},
-      create: { name: "Requester B Detail", email: "requesterB-detail@test.com", isActive: true },
-    });
-    requesterB = { id: reqB.id };
-    await mirrorUser(reqB.id, "Requester B Detail", "requesterB-detail@test.com");
+    const passwordHash = await hashPassword(password);
+    await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB] } } });
+    const [userA, userB] = await Promise.all(
+      [
+        { name: "Requester A Detail", email: emailA },
+        { name: "Requester B Detail", email: emailB },
+      ].map((u) =>
+        prisma.user.create({
+          data: {
+            name: u.name,
+            email: u.email,
+            passwordHash,
+            role: "REQUESTER",
+            isActive: true,
+            mustChangePassword: false,
+          },
+          select: { id: true },
+        })
+      )
+    );
+    requesterA = { id: userA.id };
+    requesterB = { id: userB.id };
+    cookieA = await loginAs(emailA, password);
+    cookieB = await loginAs(emailB, password);
 
     const tA = await prisma.ticket.create({
       data: {
@@ -127,18 +127,16 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
     await prisma.ticket.deleteMany({
       where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM] } },
     });
-    await prisma.developmentRequester.deleteMany({
-      where: { email: { in: ["requesterA-detail@test.com", "requesterB-detail@test.com", "inactive-detail@test.com"] } },
-    });
     await prisma.user.deleteMany({
-      where: { email: { in: ["requesterA-detail@test.com", "requesterB-detail@test.com", "inactive-detail@test.com"] } },
+      where: { email: { in: [emailA, emailB, INACTIVE_EMAIL] } },
     });
   });
 
   describe("Ownership enforcement (AC-10, BR-09)", () => {
     it("should return 404 when B requests A's ticket (safe envelope)", async () => {
       const res = await request(app)
-        .get(`/api/tickets/${ticketA.id}?requesterId=${requesterB.id}`)
+        .get(`/api/tickets/${ticketA.id}`)
+        .set("Cookie", cookieB)
         .expect(404);
       expect(res.body.error.code).toBe("NOT_FOUND");
       expect(res.body.error.message).toBe("Resource not found.");
@@ -146,14 +144,16 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
 
     it("should return 404 when A requests B's ticket", async () => {
       const res = await request(app)
-        .get(`/api/tickets/${ticketB.id}?requesterId=${requesterA.id}`)
+        .get(`/api/tickets/${ticketB.id}`)
+        .set("Cookie", cookieA)
         .expect(404);
       expect(res.body.error.code).toBe("NOT_FOUND");
     });
 
     it("should return 404 for missing ticket id (not found)", async () => {
       const res = await request(app)
-        .get(`/api/tickets/999999?requesterId=${requesterA.id}`)
+        .get(`/api/tickets/999999`)
+        .set("Cookie", cookieA)
         .expect(404);
       expect(res.body.error.code).toBe("NOT_FOUND");
     });
@@ -162,7 +162,8 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
   describe("Success — owned detail with attachments (FR-08, BR-17)", () => {
     it("should return 200 with full detail and attachments including removed", async () => {
       const res = await request(app)
-        .get(`/api/tickets/${ticketA.id}?requesterId=${requesterA.id}`)
+        .get(`/api/tickets/${ticketA.id}`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.id).toBe(ticketA.id);
@@ -192,7 +193,8 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
 
     it("should return 200 for owned ticket B when requested by B", async () => {
       const res = await request(app)
-        .get(`/api/tickets/${ticketB.id}?requesterId=${requesterB.id}`)
+        .get(`/api/tickets/${ticketB.id}`)
+        .set("Cookie", cookieB)
         .expect(200);
       expect(res.body.id).toBe(ticketB.id);
       expect(res.body.requester.id).toBe(requesterB.id);
@@ -200,69 +202,80 @@ describe("GET /api/tickets/:id — Ticket Detail (Lab 2 Issue 10)", () => {
   });
 
   describe("Validation — requesterId and id (400)", () => {
-    it("should return 400 for missing requesterId", async () => {
-      const res = await request(app).get(`/api/tickets/${ticketA.id}`).expect(400);
-      expect(res.body.error.code).toBe("VALIDATION_FAILED");
-      expect(res.body.fieldErrors.requesterId).toBeDefined();
+    it("should return 200 without requesterId (session-derived owner)", async () => {
+      const res = await request(app).get(`/api/tickets/${ticketA.id}`).set("Cookie", cookieA).expect(200);
+      expect(res.body.id).toBe(ticketA.id);
+      expect(res.body.ticketNumber).toBe(TICKET_A_NUM);
+      expect(res.body.requester.id).toBe(requesterA.id);
     });
 
     it("should return 400 for invalid requesterId (non-integer)", async () => {
-      const res = await request(app).get(`/api/tickets/${ticketA.id}?requesterId=abc`).expect(400);
+      const res = await request(app).get(`/api/tickets/${ticketA.id}?requesterId=abc`).set("Cookie", cookieA).expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
       expect(res.body.fieldErrors.requesterId).toBeDefined();
     });
 
     it("should return 400 for invalid requesterId (zero)", async () => {
-      const res = await request(app).get(`/api/tickets/${ticketA.id}?requesterId=0`).expect(400);
+      const res = await request(app).get(`/api/tickets/${ticketA.id}?requesterId=0`).set("Cookie", cookieA).expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
       expect(res.body.fieldErrors.requesterId).toBeDefined();
     });
 
     it("should return 400 for inactive requesterId", async () => {
-      const inactive = await prisma.developmentRequester.upsert({
-        where: { email: "inactive-detail@test.com" },
-        update: { isActive: false },
-        create: { name: "Inactive Detail", email: "inactive-detail@test.com", isActive: false },
+      const passwordHash = await hashPassword(password);
+      await prisma.user.deleteMany({ where: { email: INACTIVE_EMAIL } });
+      const inactive = await prisma.user.create({
+        data: {
+          name: "Inactive Detail",
+          email: INACTIVE_EMAIL,
+          passwordHash,
+          role: "REQUESTER",
+          isActive: false,
+          mustChangePassword: false,
+        },
       });
       try {
         const res = await request(app)
           .get(`/api/tickets/${ticketA.id}?requesterId=${inactive.id}`)
+          .set("Cookie", cookieA)
           .expect(400);
         expect(res.body.error.code).toBe("VALIDATION_FAILED");
         expect(res.body.fieldErrors.requesterId).toBeDefined();
       } finally {
-        await prisma.developmentRequester.delete({ where: { id: inactive.id } });
+        await prisma.user.delete({ where: { id: inactive.id } });
       }
     });
 
     it("should return 400 for duplicate requesterId query param", async () => {
       const res = await request(app)
         .get(`/api/tickets/${ticketA.id}?requesterId=${requesterA.id}&requesterId=${requesterB.id}`)
+        .set("Cookie", cookieA)
         .expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
     });
 
     it("should return 400 for invalid ticket id (non-integer string)", async () => {
-      const res = await request(app).get(`/api/tickets/abc?requesterId=${requesterA.id}`).expect(400);
+      const res = await request(app).get(`/api/tickets/abc`).set("Cookie", cookieA).expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
       expect(res.body.fieldErrors.id).toBeDefined();
     });
 
     it("should return 400 for invalid ticket id (negative)", async () => {
-      const res = await request(app).get(`/api/tickets/-5?requesterId=${requesterA.id}`).expect(400);
+      const res = await request(app).get(`/api/tickets/-5`).set("Cookie", cookieA).expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
       expect(res.body.fieldErrors.id).toBeDefined();
     });
 
     it("should return 400 for invalid ticket id (zero)", async () => {
-      const res = await request(app).get(`/api/tickets/0?requesterId=${requesterA.id}`).expect(400);
+      const res = await request(app).get(`/api/tickets/0`).set("Cookie", cookieA).expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
       expect(res.body.fieldErrors.id).toBeDefined();
     });
 
     it("should return 400 for unsafe integer ticket id", async () => {
       const res = await request(app)
-        .get(`/api/tickets/9007199254740992?requesterId=${requesterA.id}`)
+        .get(`/api/tickets/9007199254740992`)
+        .set("Cookie", cookieA)
         .expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
       expect(res.body.fieldErrors.id).toBeDefined();
