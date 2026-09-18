@@ -59,6 +59,24 @@ async function selectRequester(page: Page, requester: Requester) {
   await expect(page.locator(".lab2-requester-chip")).toContainText(requester.name);
 }
 
+// Select-then-verify with one retry: on slow runners the option selection can
+// desync from React state (proven by CI toHaveValue "" after a completed
+// selectOption). Retrying the pair self-heals transient desyncs; a persistent
+// mismatch still fails loudly with Expected/Received instead of a late
+// timeout at submit.
+async function selectAndVerify(page: Page, label: string, value: string): Promise<void> {
+  const field = page.getByLabel(label);
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    await field.selectOption(value);
+    try {
+      await expect(field).toHaveValue(value, { timeout: 5000 });
+      return;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
+}
+
 async function assertNoHorizontalPageScroll(page: Page) {
   const dimensions = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
@@ -102,12 +120,9 @@ test("E2E-01 select requester -> create -> search -> open detail", async ({ page
   await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requester);
   await page.getByRole("navigation").getByRole("link", { name: "Create Ticket" }).click();
-  await page.getByLabel("Category").selectOption(String(categories[0].id));
-  await expect(page.getByLabel("Category")).toHaveValue(String(categories[0].id));
-  await page.getByLabel("Related System").selectOption(String(systems[0].id));
-  await expect(page.getByLabel("Related System")).toHaveValue(String(systems[0].id));
-  await page.getByLabel("Requested Priority").selectOption("HIGH");
-  await expect(page.getByLabel("Requested Priority")).toHaveValue("HIGH");
+  await selectAndVerify(page, "Category", String(categories[0].id));
+  await selectAndVerify(page, "Related System", String(systems[0].id));
+  await selectAndVerify(page, "Requested Priority", "HIGH");
   await page.getByLabel("Summary").fill(summary);
   await page.getByLabel("Description").fill(`The printer cannot complete a job for marker ${marker}.`);
   await page.getByRole("button", { name: "Submit Ticket" }).click();
