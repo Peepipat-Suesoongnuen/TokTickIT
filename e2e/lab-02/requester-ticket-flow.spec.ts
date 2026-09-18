@@ -103,8 +103,11 @@ test("E2E-01 select requester -> create -> search -> open detail", async ({ page
   await selectRequester(page, requester);
   await page.getByRole("navigation").getByRole("link", { name: "Create Ticket" }).click();
   await page.getByLabel("Category").selectOption(String(categories[0].id));
+  await expect(page.getByLabel("Category")).toHaveValue(String(categories[0].id));
   await page.getByLabel("Related System").selectOption(String(systems[0].id));
+  await expect(page.getByLabel("Related System")).toHaveValue(String(systems[0].id));
   await page.getByLabel("Requested Priority").selectOption("HIGH");
+  await expect(page.getByLabel("Requested Priority")).toHaveValue("HIGH");
   await page.getByLabel("Summary").fill(summary);
   await page.getByLabel("Description").fill(`The printer cannot complete a job for marker ${marker}.`);
   await page.getByRole("button", { name: "Submit Ticket" }).click();
