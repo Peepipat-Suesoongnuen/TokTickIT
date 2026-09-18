@@ -109,6 +109,12 @@ describe("MyTickets", () => {
       });
 
       // Apply a filter to trigger isFiltered = true
+      // Wait for the option itself: user-event (unlike Playwright) does not
+      // retry selectOptions, so selecting before async options resolve throws
+      // "Value not found in options" on loaded runners.
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: "Hardware" })).toBeInTheDocument();
+      });
       const categorySelect = screen.getByRole("combobox", { name: /category/i });
       await userEvent.selectOptions(categorySelect, "1");
 
@@ -154,6 +160,10 @@ describe("MyTickets", () => {
         expect(categorySelect).toBeInTheDocument();
       });
 
+      // Wait for the option itself: user-event does not retry selectOptions.
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: "Hardware" })).toBeInTheDocument();
+      });
       const categorySelect = screen.getByRole("combobox", { name: /category/i });
       await userEvent.selectOptions(categorySelect, "1");
 
@@ -200,6 +210,10 @@ describe("MyTickets", () => {
       await userEvent.type(searchInput, "test");
 
       const categorySelect = screen.getByRole("combobox", { name: /category/i });
+      // Wait for the option itself: user-event does not retry selectOptions.
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: "Hardware" })).toBeInTheDocument();
+      });
       await userEvent.selectOptions(categorySelect, "1");
       const statusSelect = screen.getByRole("combobox", { name: "Current Status" });
       await userEvent.selectOptions(statusSelect, "NEW");
