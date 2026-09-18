@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import express from "express";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import {
   SESSION_COOKIE_NAME,
   getApprovedOrigins,
 } from "../../src/auth.js";
-import { hashPassword } from "../../src/lib/password-hash.js";
+import { createAuthRouter } from "../../src/routes/auth.js";
+import { hashPassword, verifyPassword } from "../../src/lib/password-hash.js";
 import {
   MAX_FAILED_LOGIN_ATTEMPTS,
   createLoginRateLimiter,
@@ -68,6 +70,29 @@ function login(body: Record<string, unknown>, origin: string | null = ORIGIN) {
   const req = request(app).post("/api/auth/login").send(body);
   if (origin !== null) req.set("Origin", origin);
   return req;
+}
+
+// Isolated login app for injected-dep tests (Fix 2 spies, Fix 3 limiter):
+// a fresh router + fresh limiter per app, so these tests never touch the
+// shared process limiter or env globals.
+function isolatedLoginApp(deps: Parameters<typeof createAuthRouter>[0] = {}) {
+  const e = express();
+  e.use(express.json());
+  e.use(
+    "/api/auth",
+    createAuthRouter({
+      limiter: createLoginRateLimiter({ windowMs: 60000, maxAttempts: 1000 }),
+      ...deps,
+    })
+  );
+  return e;
+}
+
+function isolatedLogin(
+  target: ReturnType<typeof isolatedLoginApp>,
+  body: Record<string, unknown>
+) {
+  return request(target).post("/api/auth/login").set("Origin", ORIGIN).send(body);
 }
 
 describe("POST /api/auth/login (Lab 3 Issue #45)", () => {
@@ -263,5 +288,139 @@ describe("POST /api/auth/login (Lab 3 Issue #45)", () => {
     const noPassword = await login({ email: EMAILS.valid }).expect(400);
     expect(noPassword.body.error.code).toBe("VALIDATION_FAILED");
     expect(noPassword.body.fieldErrors.password).toBeDefined();
+  });
+
+  it("5 CONCURRENT wrong passwords still lock the account (atomic threshold, Issue #45)", async () => {
+    // Race regression: from counter=0, five concurrent failures must leave
+    // failedLoginAttempts === 5 AND lockedUntil set (~now+15min). The old
+    // read-decide-update computed the lock from a stale read, so all five
+    // saw counter=0 and the lock was bypassed (lockedUntil NULL).
+    const concurrentEmail = email("login-concurrent");
+    await createUser(concurrentEmail);
+    try {
+      await Promise.all(
+        Array.from({ length: MAX_FAILED_LOGIN_ATTEMPTS }, () =>
+          login({ email: concurrentEmail, password: WRONG_PASSWORD }).expect(401)
+        )
+      );
+      const saved = await prisma.user.findUnique({ where: { email: concurrentEmail } });
+      expect(saved?.failedLoginAttempts).toBe(MAX_FAILED_LOGIN_ATTEMPTS);
+      expect(saved?.lockedUntil).not.toBeNull();
+      const lockMs = saved!.lockedUntil!.getTime() - Date.now();
+      expect(lockMs).toBeGreaterThan(14 * 60 * 1000);
+      expect(lockMs).toBeLessThanOrEqual(15 * 60 * 1000);
+    } finally {
+      await prisma.user.deleteMany({ where: { email: concurrentEmail } });
+    }
+  });
+
+  it("timing normalization: unknown email runs exactly one password verification (Issue #45)", async () => {
+    let calls = 0;
+    const target = isolatedLoginApp({
+      verifyPasswordFn: async (hash: string, pw: string) => {
+        calls += 1;
+        return verifyPassword(hash, pw);
+      },
+    });
+    const res = await isolatedLogin(target, {
+      email: email("login-spy-unknown"),
+      password: PASSWORD,
+    }).expect(401);
+    expect(res.body).toEqual({
+      error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password." },
+    });
+    expect(calls).toBe(1);
+  });
+
+  it("timing normalization: inactive user runs exactly one password verification (Issue #45)", async () => {
+    let calls = 0;
+    const target = isolatedLoginApp({
+      verifyPasswordFn: async (hash: string, pw: string) => {
+        calls += 1;
+        return verifyPassword(hash, pw);
+      },
+    });
+    const res = await isolatedLogin(target, {
+      email: EMAILS.inactive,
+      password: PASSWORD,
+    }).expect(401);
+    expect(res.body).toEqual({
+      error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password." },
+    });
+    expect(calls).toBe(1);
+  });
+
+  it("timing normalization: locked user runs exactly one password verification (Issue #45)", async () => {
+    const spyLockedEmail = email("login-spy-locked");
+    await createUser(spyLockedEmail, {
+      lockedUntil: new Date(Date.now() + 15 * 60 * 1000),
+    });
+    try {
+      let calls = 0;
+      const target = isolatedLoginApp({
+        verifyPasswordFn: async (hash: string, pw: string) => {
+          calls += 1;
+          return verifyPassword(hash, pw);
+        },
+      });
+      const res = await isolatedLogin(target, {
+        email: spyLockedEmail,
+        password: PASSWORD,
+      }).expect(401);
+      expect(res.body).toEqual({
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password." },
+      });
+      expect(calls).toBe(1);
+      // The decoy verification leaves lock state untouched.
+      const saved = await prisma.user.findUnique({ where: { email: spyLockedEmail } });
+      expect(saved?.lockedUntil).not.toBeNull();
+      expect(saved?.failedLoginAttempts).toBe(0);
+    } finally {
+      await prisma.user.deleteMany({ where: { email: spyLockedEmail } });
+    }
+  });
+
+  it("timing normalization: wrong password runs exactly one password verification (Issue #45)", async () => {
+    const spyWrongEmail = email("login-spy-wrongpw");
+    await createUser(spyWrongEmail);
+    try {
+      let calls = 0;
+      const target = isolatedLoginApp({
+        verifyPasswordFn: async (hash: string, pw: string) => {
+          calls += 1;
+          return verifyPassword(hash, pw);
+        },
+      });
+      const res = await isolatedLogin(target, {
+        email: spyWrongEmail,
+        password: WRONG_PASSWORD,
+      }).expect(401);
+      expect(res.body).toEqual({
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password." },
+      });
+      expect(calls).toBe(1);
+    } finally {
+      await prisma.user.deleteMany({ where: { email: spyWrongEmail } });
+    }
+  });
+
+  it("route-level 429: tiny injected limiter rejects the (N+1)-th rapid failure (Issue #45)", async () => {
+    const target = isolatedLoginApp({
+      limiter: createLoginRateLimiter({ windowMs: 60000, maxAttempts: 2 }),
+    });
+    const unknownEmail = email("login-429");
+    await isolatedLogin(target, { email: unknownEmail, password: PASSWORD }).expect(401);
+    await isolatedLogin(target, { email: unknownEmail, password: PASSWORD }).expect(401);
+    // Boundary semantics (>=): with max N=2, the 3rd request is limited.
+    const limited = await isolatedLogin(target, {
+      email: unknownEmail,
+      password: PASSWORD,
+    }).expect(429);
+    expect(limited.body).toEqual({
+      error: {
+        code: "TOO_MANY_ATTEMPTS",
+        message: "Too many login attempts. Please try again later.",
+      },
+    });
   });
 });

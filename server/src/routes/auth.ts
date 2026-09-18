@@ -24,9 +24,9 @@ import { hashPassword, verifyPassword } from "../lib/password-hash.js";
 import { validateNewPassword } from "../lib/password-policy.js";
 import { createSessionToken } from "../lib/session.js";
 import {
-  buildFailedLoginUpdate,
   getLoginRateLimiter,
   isAccountLocked,
+  recordFailedLoginAttempt,
   type LoginRateLimiter,
 } from "../lib/login-protection.js";
 
@@ -59,7 +59,15 @@ export interface AuthRouterDeps {
   now?: () => Date;
   limiter?: LoginRateLimiter;
   getAllowedOrigins?: () => string[];
+  verifyPasswordFn?: (hash: string, plaintext: string) => Promise<boolean>;
 }
+
+// NOT a real credential — timing-normalization decoy only; never matches any
+// login. Awaited on the unknown-email / inactive-user / locked-account fast
+// paths so every 401 pays ~one Argon2 verification, just like the
+// wrong-password path, and response timing reveals no account state.
+const DUMMY_PASSWORD_HASH =
+  "$argon2id$v=19$m=19456,t=2,p=1$pxmBatfJNgok6kBopeiYcw$j3Clc2gSZwPYX/2kJDKagYbH5pXmCztgatdjojVqbfg";
 
 function invalidCredentials(res: Response): void {
   sendError(res, 401, INVALID_CREDENTIALS_CODE, INVALID_CREDENTIALS_MESSAGE);
@@ -69,6 +77,7 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
   const now = deps.now ?? (() => new Date());
   const limiter = deps.limiter ?? getLoginRateLimiter();
   const getAllowedOrigins = deps.getAllowedOrigins ?? (() => getApprovedOrigins());
+  const verifyFn = deps.verifyPasswordFn ?? verifyPassword;
 
   const router = Router();
 
@@ -122,6 +131,9 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
       const user = await getPrisma().user.findUnique({ where: { email: canonical } });
 
       if (!user || !user.isActive) {
+        // Timing normalization: unknown email and inactive user cost one
+        // Argon2 verification, like a wrong password (result discarded).
+        await verifyFn(DUMMY_PASSWORD_HASH, password as string);
         if (ip !== undefined) limiter.record(ip);
         invalidCredentials(res);
         return;
@@ -130,19 +142,18 @@ export function createAuthRouter(deps: AuthRouterDeps = {}): Router {
       // Correct password while locked still fails generically; the lock is
       // left untouched (no extension, no disclosure).
       if (isAccountLocked(user.lockedUntil, now())) {
+        // Timing normalization: same decoy verification as above.
+        await verifyFn(DUMMY_PASSWORD_HASH, password as string);
         if (ip !== undefined) limiter.record(ip);
         invalidCredentials(res);
         return;
       }
 
-      const ok = await verifyPassword(user.passwordHash, password as string);
+      const ok = await verifyFn(user.passwordHash, password as string);
       if (!ok) {
-        // ONE atomic update: counter increment (+ lock timestamp exactly at
-        // the 5th consecutive failure). No read-then-write.
-        await getPrisma().user.update({
-          where: { id: user.id },
-          data: buildFailedLoginUpdate(user.failedLoginAttempts, now()),
-        });
+        // ONE atomic statement: counter increment + lock threshold decided
+        // inside the UPDATE itself. No read-then-write on stale state.
+        await recordFailedLoginAttempt(getPrisma(), user.id, now());
         if (ip !== undefined) limiter.record(ip);
         invalidCredentials(res);
         return;
