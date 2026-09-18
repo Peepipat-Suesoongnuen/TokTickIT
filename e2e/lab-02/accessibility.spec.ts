@@ -1,19 +1,18 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
-import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, ensureApiAuth, loginAs } from "./auth-helper";
+import {
+  E2E_REQUESTER_EMAIL,
+  E2E_REQUESTER_NAME,
+  LAB02_INITIAL_PASSWORD,
+  ensureApiAuth,
+  loginAs,
+} from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 
-type Requester = { id: number; name: string; email: string };
 type Reference = { id: number; name: string };
 type Ticket = { id: number; ticketNumber: string };
 
 const unique = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-
-async function getRequesters(request: APIRequestContext): Promise<Requester[]> {
-  const response = await request.get(`${API_URL}/api/requesters`);
-  expect(response.ok()).toBeTruthy();
-  return response.json();
-}
 
 async function getReferences(request: APIRequestContext) {
   // Issue #45 (PR #58 review): reference-data routes are session-only —
@@ -31,11 +30,11 @@ async function getReferences(request: APIRequestContext) {
   };
 }
 
-async function createTicketViaApi(request: APIRequestContext, requester: Requester): Promise<Ticket> {
+async function createTicketViaApi(request: APIRequestContext): Promise<Ticket> {
+  // Issue #46: session-derived owner — no requesterId in the body.
   const { categories, systems } = await getReferences(request);
   const response = await request.post(`${API_URL}/api/tickets`, {
     data: {
-      requesterId: requester.id,
       categoryId: categories[0].id,
       relatedSystemId: systems[0].id,
       summary: `A11Y ticket ${unique()}`,
@@ -47,20 +46,18 @@ async function createTicketViaApi(request: APIRequestContext, requester: Request
   return response.json();
 }
 
-async function uploadAttachment(request: APIRequestContext, requesterId: number, ticketId: number) {
+async function uploadAttachment(request: APIRequestContext, ticketId: number) {
+  // Issue #46: session-derived owner — no requesterId query parameter.
   const filename = `a11y-${unique()}.pdf`;
-  const response = await request.post(
-    `${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`,
-    {
-      multipart: {
-        file: {
-          name: filename,
-          mimeType: "application/pdf",
-          buffer: Buffer.from("%PDF-1.4\nIssue 12 accessibility fixture\n%%EOF"),
-        },
+  const response = await request.post(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    multipart: {
+      file: {
+        name: filename,
+        mimeType: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4\nIssue 12 accessibility fixture\n%%EOF"),
       },
     },
-  );
+  });
   expect(response.status()).toBe(201);
   return filename;
 }
@@ -148,30 +145,25 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   page,
   request,
 }) => {
-  const requesters = await getRequesters(request);
-
   // Authenticate-first (Issue #45): the login gate fronts the whole app.
   await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
 
-  // Requester Selection: native select + Continue are labelled, keyboard reachable and operable.
+  // Issue #46: the requester selector is deleted — the authenticated entry
+  // point is My Tickets with the identity user menu. Keyboard evidence starts
+  // here: nav links are labelled, reachable, and operable.
   await page.goto("/");
-  const requesterSelect = page.getByLabel("Development Requester");
-  const continueButton = page.getByRole("button", { name: "Continue" });
-  await expect(requesterSelect).toHaveAttribute("aria-required", "true");
+  await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
+  await expect(page.locator(".lab3-user-menu")).toContainText(E2E_REQUESTER_NAME);
   await resetKeyboardFocus(page);
-  await tabTo(page, requesterSelect);
-  await page.keyboard.press("ArrowDown");
-  const selectedId = Number(await requesterSelect.inputValue());
-  const requester = requesters.find((candidate) => candidate.id === selectedId);
-  expect(requester).toBeTruthy();
-  await page.keyboard.press("Tab");
-  await expectVisibleFocus(continueButton);
-  await expect(continueButton).toBeEnabled();
+  const myTicketsNav = page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "My Tickets" });
+  await tabTo(page, myTicketsNav);
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/my-tickets$/);
 
-  const ticket = await createTicketViaApi(request, requester!);
-  const filename = await uploadAttachment(request, requester!.id, ticket.id);
+  const ticket = await createTicketViaApi(request);
+  const filename = await uploadAttachment(request, ticket.id);
 
   // My Tickets: every visible enabled interactive control participates in the keyboard tab order.
   await page.goto("/my-tickets");
@@ -235,7 +227,8 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   await page.goto(`/tickets/${ticket.id}`);
   await expect(page.getByLabel("Ticket Number")).toHaveValue(ticket.ticketNumber);
   await expect(page.getByLabel("Ticket Date")).toBeVisible();
-  await expect(page.getByLabel("Requester")).toHaveValue(requester!.name);
+  // Issue #46: Requester is the session identity (dedicated e2e owner).
+  await expect(page.getByLabel("Requester")).toHaveValue(E2E_REQUESTER_NAME);
   await expect(page.getByLabel("Category")).toBeVisible();
   await expect(page.getByLabel("Related System")).toBeVisible();
   await expect(page.getByLabel("Summary")).toBeVisible();

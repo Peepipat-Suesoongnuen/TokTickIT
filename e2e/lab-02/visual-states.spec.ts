@@ -5,14 +5,7 @@ import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, ensureApiAuth, loginAs } f
 const API_URL = "http://127.0.0.1:3100";
 const STATE_DIR = path.join("artifacts", "lab-02", "screenshots", "states");
 
-type Requester = { id: number; name: string; email: string };
 type Reference = { id: number; name: string };
-
-async function getRequesters(request: APIRequestContext): Promise<Requester[]> {
-  const response = await request.get(`${API_URL}/api/requesters`);
-  expect(response.ok()).toBeTruthy();
-  return response.json();
-}
 
 async function getReferences(request: APIRequestContext) {
   // Issue #45 (PR #58 review): reference-data routes are session-only —
@@ -28,13 +21,6 @@ async function getReferences(request: APIRequestContext) {
     categories: (await categoriesResponse.json()) as Reference[],
     systems: (await systemsResponse.json()) as Reference[],
   };
-}
-
-async function selectRequester(page: Page, requester: Requester) {
-  await page.goto("/");
-  await page.getByLabel("Development Requester").selectOption(String(requester.id));
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.locator(".lab2-requester-chip")).toContainText(requester.name);
 }
 
 async function assertNoHorizontalPageScroll(page: Page) {
@@ -67,40 +53,18 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   page,
   request,
 }) => {
-  const [requester] = await getRequesters(request);
   const { categories, systems } = await getReferences(request);
 
   // Authenticate-first (Issue #45): the login gate fronts the whole app.
+  // Issue #46: the requester selector is deleted — the requester-loading and
+  // requester-failure states no longer exist (the app shell renders My Tickets
+  // directly after login). Submission evidence below covers the retained
+  // loading + safe API-failure states.
   await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
 
-  // Submission evidence: Requester Selection loading + safe API-failure states.
-  await page.setViewportSize({ width: 1440, height: 900 });
-  let releaseRequesters!: () => void;
-  const requesterGate = new Promise<void>((resolve) => {
-    releaseRequesters = resolve;
-  });
-  await page.route("**/api/requesters", async (route) => {
-    await requesterGate;
-    await route.fulfill({
-      status: 500,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: { code: "INTERNAL_ERROR", message: "Unable to load requesters. Please try again." },
-      }),
-    });
-  });
-  await page.goto("/");
-  await expect(page.getByRole("paragraph").filter({ hasText: "Loading requesters…" })).toBeVisible();
-  await captureState(page, "requester-loading");
-  releaseRequesters();
-  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
-  await captureState(page, "requester-failure");
-  await page.unroute("**/api/requesters");
-  await page.getByRole("button", { name: "Retry" }).click();
-  await expect(page.getByLabel("Development Requester")).toBeVisible();
-
   await page.setViewportSize({ width: 375, height: 812 });
-  await selectRequester(page, requester);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
 
   const navToggle = page.getByRole("button", { name: "Toggle navigation" });
   const toggleBox = await navToggle.boundingBox();
@@ -127,8 +91,9 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   const categoryGate = new Promise<void>((resolve) => {
     releaseCategories = resolve;
   });
-  const categoryPredicate = (url: URL) =>
-    url.pathname === "/api/categories" && url.searchParams.has("requesterId");
+  // Issue #46: reference-data requests are session-only (no requesterId
+  // query parameter), so the gate matches the bare categories path.
+  const categoryPredicate = (url: URL) => url.pathname === "/api/categories";
   await page.route(categoryPredicate, async (route) => {
     await categoryGate;
     await route.continue();
@@ -212,11 +177,11 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   await captureState(page, "failure");
   await page.unroute("**/api/tickets");
 
-  const listPredicate = (url: URL) =>
-    url.pathname === "/api/tickets" && url.searchParams.has("requesterId");
+  // Issue #46: ticket list requests are session-only (no requesterId query
+  // parameter), so the empty/no-results mocks match the bare tickets path.
+  const listPredicate = (url: URL) => url.pathname === "/api/tickets" && !url.searchParams.has("search");
+  const searchPredicate = (url: URL) => url.pathname === "/api/tickets" && url.searchParams.has("search");
   await page.route(listPredicate, async (route) => {
-    const url = new URL(route.request().url());
-    const isFiltered = Boolean(url.searchParams.get("search"));
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -225,8 +190,25 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
         meta: {
           page: 1,
           pageSize: 10,
-          totalCount: isFiltered ? 1 : 0,
-          totalPages: isFiltered ? 1 : 0,
+          totalCount: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      }),
+    });
+  });
+  await page.route(searchPredicate, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [],
+        meta: {
+          page: 1,
+          pageSize: 10,
+          totalCount: 1,
+          totalPages: 1,
           hasNextPage: false,
           hasPreviousPage: false,
         },
@@ -242,10 +224,12 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   await expect(page.getByText("No tickets match your search or filters")).toBeVisible();
   await captureState(page, "no-results");
   await page.unroute(listPredicate);
+  await page.unroute(searchPredicate);
 
+  // Issue #46: ticket + upload are owned by the dedicated e2e session
+  // (no requesterId in body or query).
   const createResponse = await request.post(`${API_URL}/api/tickets`, {
     data: {
-      requesterId: requester.id,
       categoryId: categories[0].id,
       relatedSystemId: systems[0].id,
       summary: `Removed visual ${Date.now()}`,
@@ -256,18 +240,15 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   expect(createResponse.status()).toBe(201);
   const ticket = (await createResponse.json()) as { id: number };
   const filename = `visual-removed-${Date.now()}.pdf`;
-  const uploadResponse = await request.post(
-    `${API_URL}/api/tickets/${ticket.id}/attachments?requesterId=${requester.id}`,
-    {
-      multipart: {
-        file: {
-          name: filename,
-          mimeType: "application/pdf",
-          buffer: Buffer.from("%PDF-1.4\nIssue 12 visual fixture\n%%EOF"),
-        },
+  const uploadResponse = await request.post(`${API_URL}/api/tickets/${ticket.id}/attachments`, {
+    multipart: {
+      file: {
+        name: filename,
+        mimeType: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4\nIssue 12 visual fixture\n%%EOF"),
       },
     },
-  );
+  });
   expect(uploadResponse.status()).toBe(201);
 
   await page.goto(`/tickets/${ticket.id}`);
