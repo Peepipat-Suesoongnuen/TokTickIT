@@ -15,7 +15,8 @@ import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
 import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePasswordChanged, requireSession } from "./auth.js";
-import type { AuthRequest } from "./auth.js";
+import { UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE } from "./auth.js";
+import type { AuthRequest, AuthUserRow } from "./auth.js";
 import authRouter from "./routes/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
@@ -24,8 +25,15 @@ import authRouter from "./routes/auth.js";
 // derive the owner id from the authenticated session user; a client-supplied
 // `requesterId` is rejected (query → "Unknown parameter.", body →
 // "Unknown parameter.") via the existing VALIDATION_FAILED envelope.
-function getAuthUserId(req: Request): number {
-  return (req as AuthRequest).user!.id;
+// 401-safe: sends 401 UNAUTHENTICATED and returns null when the middleware
+// chain did not attach a user (misordered chain / missing session), so
+// callers never throw on `!`. Callers must `if (rid === null) return;`.
+export function getAuthUserId(user: AuthUserRow | undefined, res: Response): number | null {
+  if (!user) {
+    sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
+    return null;
+  }
+  return user.id;
 }
 
 const UPLOAD_DIR = path.resolve("uploads");
@@ -171,7 +179,8 @@ app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChange
     const fieldErrors: Record<string, string> = {};
 
     // Issue #46 — owner comes from the session, never the query string.
-    const rid = getAuthUserId(req);
+    const rid = getAuthUserId((req as AuthRequest).user, res);
+    if (rid === null) return;
 
     // search
     let searchTrim: string | undefined;
@@ -312,7 +321,8 @@ app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordCh
     if (req.query.requesterId !== undefined) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
     }
-    const rid = getAuthUserId(req);
+    const rid = getAuthUserId((req as AuthRequest).user, res);
+    if (rid === null) return;
     const rawId = req.params.id;
     const id = Number(rawId);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
@@ -363,7 +373,11 @@ app.post("/api/tickets/:id/attachments", requireSession, requireActiveUser, requ
       if (req.query.requesterId !== undefined) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
       }
-      const rid = getAuthUserId(req);
+      if ((req.body as Record<string, unknown> | undefined)?.requesterId !== undefined) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
+      }
+      const rid = getAuthUserId((req as AuthRequest).user, res);
+      if (rid === null) return;
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
@@ -425,7 +439,8 @@ app.post("/api/tickets/:id/attachments", requireSession, requireActiveUser, requ
 app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
-    const rid = getAuthUserId(req);
+    const rid = getAuthUserId((req as AuthRequest).user, res);
+    if (rid === null) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
@@ -438,7 +453,8 @@ app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswo
 app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
-    const rid = getAuthUserId(req);
+    const rid = getAuthUserId((req as AuthRequest).user, res);
+    if (rid === null) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
@@ -457,7 +473,9 @@ app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requ
 app.post("/api/attachments/:id/remove", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
-    const rid = getAuthUserId(req);
+    if (req.body?.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
+    const rid = getAuthUserId((req as AuthRequest).user, res);
+    if (rid === null) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
@@ -478,6 +496,11 @@ app.post("/api/attachments/:id/remove", requireSession, requireActiveUser, requi
 // ---------------------------------------------------------------------------
 app.post("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
+    if (req.query.requesterId !== undefined) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
+        requesterId: "Unknown parameter.",
+      });
+    }
     const { categoryId, relatedSystemId, summary, description, requestedPriority } = req.body ?? {};
 
     const fieldErrors: Record<string, string> = {};
@@ -486,7 +509,8 @@ app.post("/api/tickets", requireSession, requireActiveUser, requirePasswordChang
     if (req.body?.requesterId !== undefined) {
       fieldErrors.requesterId = "Unknown parameter.";
     }
-    const rid = getAuthUserId(req);
+    const rid = getAuthUserId((req as AuthRequest).user, res);
+    if (rid === null) return;
 
     // categoryId
     const cid = Number(categoryId);

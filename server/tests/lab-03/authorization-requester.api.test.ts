@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
-import { app } from "../../src/app.js";
+import { app, getAuthUserId } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth.js";
 import { hashPassword } from "../../src/lib/password-hash.js";
@@ -175,6 +175,40 @@ describe("session-derived ownership cutover (Issue #46)", () => {
     expect(removeSpoof.body.fieldErrors?.requesterId).toBe("Unknown parameter.");
   });
 
+  it("API-12 fix: POST /api/tickets?requesterId rejected (query gap)", async () => {
+    const res = await request(app)
+      .post(`/api/tickets?requesterId=${userB.id}`)
+      .set("Cookie", cookieA)
+      .set("Origin", ORIGIN)
+      .send(validTicketBody())
+      .expect(400);
+    expect(res.body.error.code).toBe("VALIDATION_FAILED");
+    expect(res.body.fieldErrors?.requesterId).toBe("Unknown parameter.");
+  });
+
+  it("API-12 fix: multipart form requesterId field rejected on upload", async () => {
+    const res = await request(app)
+      .post(`/api/tickets/${ticketAId}/attachments`)
+      .set("Cookie", cookieA)
+      .set("Origin", ORIGIN)
+      .field("requesterId", String(userB.id))
+      .attach("file", pngBuffer(1024), { filename: "spoof.png", contentType: "image/png" })
+      .expect(400);
+    expect(res.body.error.code).toBe("VALIDATION_FAILED");
+    expect(res.body.fieldErrors?.requesterId).toBe("Unknown parameter.");
+  });
+
+  it("API-12 fix: JSON body requesterId rejected on attachment remove", async () => {
+    const res = await request(app)
+      .post("/api/attachments/1/remove")
+      .set("Cookie", cookieA)
+      .set("Origin", ORIGIN)
+      .send({ reason: "spoof", requesterId: userB.id })
+      .expect(400);
+    expect(res.body.error.code).toBe("VALIDATION_FAILED");
+    expect(res.body.fieldErrors?.requesterId).toBe("Unknown parameter.");
+  });
+
   it("API-13/SEC-02: B cannot list or open A's tickets (safe 404, no leak)", async () => {
     const list = await request(app).get("/api/tickets").set("Cookie", cookieB).expect(200);
     const ids = (list.body.data as Array<{ id: number }>).map((t) => t.id);
@@ -259,5 +293,43 @@ describe("session-derived ownership cutover (Issue #46)", () => {
       .send({ reason: "no longer needed" })
       .expect(200);
     expect(ownRemove.body.id).toBe(attachmentId);
+  });
+});
+
+describe("getAuthUserId 401-safe helper (Issue #46 fix)", () => {
+  function mockRes() {
+    const res: Record<string, unknown> & { statusCode: number; body: unknown } = {
+      statusCode: 0,
+      body: undefined,
+    } as unknown as Record<string, unknown> & { statusCode: number; body: unknown };
+    (res as unknown as { status: (c: number) => unknown }).status = (c: number) => {
+      res.statusCode = c;
+      return res;
+    };
+    (res as unknown as { json: (b: unknown) => unknown }).json = (b: unknown) => {
+      res.body = b;
+      return res;
+    };
+    return res as unknown as import("express").Response & { statusCode: number; body: unknown };
+  }
+
+  it("sends 401 UNAUTHENTICATED and returns null when user is missing", () => {
+    const res = mockRes();
+    const out = getAuthUserId(undefined, res);
+    expect(out).toBeNull();
+    expect(res.statusCode).toBe(401);
+    expect((res.body as { error: { code: string } }).error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("returns the user id without touching res when user is present", () => {
+    const res = mockRes();
+    const statusSpy = vi.spyOn(res, "status");
+    const out = getAuthUserId(
+      { id: 7, name: "x", email: "x@t.local", role: "REQUESTER", isActive: true, mustChangePassword: false },
+      res
+    );
+    expect(out).toBe(7);
+    expect(statusSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(0);
   });
 });
