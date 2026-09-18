@@ -15,9 +15,18 @@ import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
 import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePasswordChanged, requireSession } from "./auth.js";
+import type { AuthRequest } from "./auth.js";
 import authRouter from "./routes/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
+
+// Issue #46 (Lab 3) — session-derived ownership: ticket/attachment routes
+// derive the owner id from the authenticated session user; a client-supplied
+// `requesterId` is rejected (query → "Unknown parameter.", body →
+// "Unknown field.") via the existing VALIDATION_FAILED envelope.
+function getAuthUserId(req: Request): number {
+  return (req as AuthRequest).user!.id;
+}
 
 const UPLOAD_DIR = path.resolve("uploads");
 try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -136,12 +145,12 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// Lab 2 Issue 9 — My Tickets (owned list)
-// GET /api/tickets?requesterId=&search=&categoryId=&requestedPriority=&currentStatus=&sort=&order=&page=&pageSize=
+// Lab 2 Issue 9 — My Tickets (owned list, Issue #46: session-derived owner)
+// GET /api/tickets?search=&categoryId=&requestedPriority=&currentStatus=&sort=&order=&page=&pageSize=
 // ---------------------------------------------------------------------------
-app.get("/api/tickets", async (req: Request, res: Response) => {
+app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const allowed = new Set(["requesterId", "search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"]);
+    const allowed = new Set(["search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"]);
     for (const k of Object.keys(req.query)) {
       if (!allowed.has(k)) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [k]: "Unknown parameter." });
@@ -149,7 +158,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     }
 
     // Guard: duplicate/malformed query values arrive as string[] -> 400 (BR-20 strict contract)
-    const rawParams = ["requesterId", "search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"] as const;
+    const rawParams = ["search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"] as const;
     for (const p of rawParams) {
       const v = (req.query as Record<string, unknown>)[p];
       if (v !== undefined && typeof v !== "string") {
@@ -157,19 +166,12 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       }
     }
 
-    const { requesterId, search, categoryId, requestedPriority, currentStatus, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
+    const { search, categoryId, requestedPriority, currentStatus, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
 
     const fieldErrors: Record<string, string> = {};
 
-    // requesterId required
-    const rid = Number(requesterId);
-    if (requesterId === undefined || !Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
-      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
-    }
-    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
-    if (!reqExists) {
-      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
-    }
+    // Issue #46 — owner comes from the session, never the query string.
+    const rid = getAuthUserId(req);
 
     // search
     let searchTrim: string | undefined;
@@ -304,24 +306,13 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
 // Lab 2 Issue 10 — Ticket Detail + Attachment lifecycle
 // ---------------------------------------------------------------------------
 
-// GET /api/tickets/:id — owned detail (FR-08, AC-10)
-app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+// GET /api/tickets/:id — owned detail (FR-08, AC-10; Issue #46: session-derived owner)
+app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const rawRid = req.query.requesterId as string | undefined;
-    if (rawRid === undefined) {
-      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
+    if (req.query.requesterId !== undefined) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
     }
-    if (typeof rawRid !== "string") {
-      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a single value." });
-    }
-    const rid = Number(rawRid);
-    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
-      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
-    }
-    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
-    if (!reqExists) {
-      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
-    }
+    const rid = getAuthUserId(req);
     const rawId = req.params.id;
     const id = Number(rawId);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
@@ -359,8 +350,8 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/tickets/:id/attachments — upload (FR-09) — memoryStorage → validate → transaction count+create → write (no orphan, race-safe)
-app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
+// POST /api/tickets/:id/attachments — upload (FR-09; Issue #46: session-derived owner) — memoryStorage → validate → transaction count+create → write (no orphan, race-safe)
+app.post("/api/tickets/:id/attachments", requireSession, requireActiveUser, requirePasswordChanged, (req: Request, res: Response) => {
   upload.single("file")(req, res, async (err: unknown) => {
     try {
       if (err) {
@@ -369,18 +360,10 @@ app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
         if ((err as { code?: string }).code === "LIMIT_FILE_SIZE") return sendError(res, 413, "PAYLOAD_TOO_LARGE", "File too large. Max 5 MB.");
         return sendError(res, 400, "VALIDATION_FAILED", "Invalid file.", { file: "Invalid file." });
       }
-      const rawRid = req.query.requesterId as string | undefined;
-      if (rawRid === undefined || typeof rawRid !== "string") {
-        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
+      if (req.query.requesterId !== undefined) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
       }
-      const rid = Number(rawRid);
-      if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) {
-        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
-      }
-      const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
-      if (!reqExists) {
-        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
-      }
+      const rid = getAuthUserId(req);
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
@@ -438,15 +421,11 @@ app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
   });
 });
 
-// GET /api/attachments/:id — metadata (FR-10)
-app.get("/api/attachments/:id", async (req: Request, res: Response) => {
+// GET /api/attachments/:id — metadata (FR-10; Issue #46: session-derived owner)
+app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const rawRid = req.query.requesterId as string | undefined;
-    if (rawRid === undefined || typeof rawRid !== "string") return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
-    const rid = Number(rawRid);
-    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
-    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
-    if (!reqExists) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
+    const rid = getAuthUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
@@ -455,15 +434,11 @@ app.get("/api/attachments/:id", async (req: Request, res: Response) => {
   } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
 });
 
-// GET /api/attachments/:id/download — binary (FR-10, BR-17)
-app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+// GET /api/attachments/:id/download — binary (FR-10, BR-17; Issue #46: session-derived owner)
+app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const rawRid = req.query.requesterId as string | undefined;
-    if (rawRid === undefined || typeof rawRid !== "string") return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
-    const rid = Number(rawRid);
-    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
-    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
-    if (!reqExists) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
+    const rid = getAuthUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
@@ -478,15 +453,11 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
   } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
 });
 
-// POST /api/attachments/:id/remove — soft-remove (FR-10, BR-15/16)
-app.post("/api/attachments/:id/remove", async (req: Request, res: Response) => {
+// POST /api/attachments/:id/remove — soft-remove (FR-10, BR-15/16; Issue #46: session-derived owner)
+app.post("/api/attachments/:id/remove", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const rawRid = req.query.requesterId as string | undefined;
-    if (rawRid === undefined || typeof rawRid !== "string") return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId is required." });
-    const rid = Number(rawRid);
-    if (!Number.isInteger(rid) || rid <= 0 || !Number.isSafeInteger(rid)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must be a positive integer." });
-    const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
-    if (!reqExists) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "requesterId must reference an active requester." });
+    if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
+    const rid = getAuthUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
@@ -502,23 +473,20 @@ app.post("/api/attachments/:id/remove", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// Lab 2 Issue 8 — Create Ticket
+// Lab 2 Issue 8 — Create Ticket (Issue #46: session-derived owner)
 // POST /api/tickets — validates, generates ticketNumber, persists with status NEW
 // ---------------------------------------------------------------------------
-app.post("/api/tickets", async (req: Request, res: Response) => {
+app.post("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const { requesterId, categoryId, relatedSystemId, summary, description, requestedPriority } = req.body ?? {};
+    const { categoryId, relatedSystemId, summary, description, requestedPriority } = req.body ?? {};
 
     const fieldErrors: Record<string, string> = {};
 
-    // requesterId — must be existing active
-    const rid = Number(requesterId);
-    if (requesterId === undefined || requesterId === null || !Number.isInteger(rid) || rid <= 0) {
-      fieldErrors.requesterId = "requesterId must be a positive integer.";
-    } else {
-      const reqExists = await getPrisma().developmentRequester.findFirst({ where: { id: rid, isActive: true } });
-      if (!reqExists) fieldErrors.requesterId = "requesterId must reference an active requester.";
+    // Issue #46 — client must not supply requesterId; the owner is the session user.
+    if (req.body?.requesterId !== undefined) {
+      fieldErrors.requesterId = "Unknown field.";
     }
+    const rid = getAuthUserId(req);
 
     // categoryId
     const cid = Number(categoryId);
