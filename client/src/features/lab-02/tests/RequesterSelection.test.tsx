@@ -43,6 +43,18 @@ function renderApp(path = "/my-tickets") {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  // Lab 3 auth gate (Issue #45): App renders the requester flow only for an
+  // authenticated user without the mandatory-change flag.
+  vi.mocked(api.getCurrentUser).mockResolvedValue({
+    user: {
+      id: 9,
+      name: "Test User",
+      email: "test@test.local",
+      role: "REQUESTER",
+      active: true,
+      mustChangePassword: false,
+    },
+  });
 });
 
 describe("Requester Selection release coverage", () => {

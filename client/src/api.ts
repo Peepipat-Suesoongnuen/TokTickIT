@@ -35,8 +35,12 @@ export interface RelatedSystem {
   name: string;
 }
 
-export async function fetchCategories(requesterId: number): Promise<Category[]> {
-  const res = await fetch(`${API_URL}/api/categories?requesterId=${requesterId}`);
+export async function fetchCategories(): Promise<Category[]> {
+  // Issue #45 (PR #58 review): GET /api/categories is session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  const res = await fetch(`${API_URL}/api/categories`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
@@ -45,8 +49,12 @@ export async function fetchCategories(requesterId: number): Promise<Category[]> 
   return res.json();
 }
 
-export async function fetchRelatedSystems(requesterId: number): Promise<RelatedSystem[]> {
-  const res = await fetch(`${API_URL}/api/related-systems?requesterId=${requesterId}`);
+export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
+  // Issue #45 (PR #58 review): GET /api/related-systems is session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  const res = await fetch(`${API_URL}/api/related-systems`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
@@ -218,6 +226,69 @@ export async function removeAttachment(attachmentId: number, requesterId: number
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to remove attachment" };
   return body;
+}
+
+// Issue #45 — authenticated identity (Lab 3 api-spec §3). Auth calls use
+// `credentials: "include"` so the session cookie flows; existing helpers
+// above are untouched.
+
+export interface SafeUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  mustChangePassword: boolean;
+}
+
+export interface AuthFailure {
+  status: number;
+  body: {
+    error?: { code?: string; message?: string };
+    fieldErrors?: Record<string, string>;
+  } | null;
+}
+
+async function authRequest(path: string, init?: RequestInit): Promise<{ user: SafeUser }> {
+  const res = await fetch(`${API_URL}${path}`, { ...init, credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies AuthFailure;
+  return body as { user: SafeUser };
+}
+
+export async function login(email: string, password: string): Promise<{ user: SafeUser }> {
+  return authRequest("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function getCurrentUser(): Promise<{ user: SafeUser }> {
+  return authRequest("/api/auth/me");
+}
+
+export async function logoutUser(): Promise<void> {
+  const res = await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw { status: res.status, body } satisfies AuthFailure;
+  }
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ user: SafeUser }> {
+  // Confirmation is UI-only and is never sent (api-spec §3.4).
+  return authRequest("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
 }
 
 // Throwing on failure lets the UI show a single Offline/error state.

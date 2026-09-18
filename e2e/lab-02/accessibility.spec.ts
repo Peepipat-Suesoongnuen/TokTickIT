@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, ensureApiAuth, loginAs } from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 
@@ -14,10 +15,13 @@ async function getRequesters(request: APIRequestContext): Promise<Requester[]> {
   return response.json();
 }
 
-async function getReferences(request: APIRequestContext, requesterId: number) {
+async function getReferences(request: APIRequestContext) {
+  // Issue #45 (PR #58 review): reference-data routes are session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  await ensureApiAuth(request, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   const [categoriesResponse, systemsResponse] = await Promise.all([
-    request.get(`${API_URL}/api/categories?requesterId=${requesterId}`),
-    request.get(`${API_URL}/api/related-systems?requesterId=${requesterId}`),
+    request.get(`${API_URL}/api/categories`),
+    request.get(`${API_URL}/api/related-systems`),
   ]);
   expect(categoriesResponse.ok()).toBeTruthy();
   expect(systemsResponse.ok()).toBeTruthy();
@@ -28,7 +32,7 @@ async function getReferences(request: APIRequestContext, requesterId: number) {
 }
 
 async function createTicketViaApi(request: APIRequestContext, requester: Requester): Promise<Ticket> {
-  const { categories, systems } = await getReferences(request, requester.id);
+  const { categories, systems } = await getReferences(request);
   const response = await request.post(`${API_URL}/api/tickets`, {
     data: {
       requesterId: requester.id,
@@ -145,6 +149,9 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   request,
 }) => {
   const requesters = await getRequesters(request);
+
+  // Authenticate-first (Issue #45): the login gate fronts the whole app.
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
 
   // Requester Selection: native select + Continue are labelled, keyboard reachable and operable.
   await page.goto("/");

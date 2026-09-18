@@ -14,6 +14,8 @@ import { v4 as uuid } from "uuid";
 import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
+import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePasswordChanged, requireSession } from "./auth.js";
+import authRouter from "./routes/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -38,7 +40,21 @@ const upload = multer({
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Non-browser requests carry no Origin and must keep working
+      // (Supertest/curl); browsers must exactly match the allowlist.
+      // Rejected origins receive no credentialed CORS authorization.
+      if (!origin || isOriginAllowed(origin, getApprovedOrigins())) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+  })
+);          // strict allowlist (APP_ORIGINS) + credentials, never "*"
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
@@ -50,30 +66,27 @@ app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
 });
 
+// Issue #45 (Lab 3) — authentication routes (login + logout/change-password
+// follow in later tasks). Mounted at /api/auth; the router owns its Origin
+// gate so login is protected before any credential processing.
+app.use("/api/auth", authRouter);
+
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list (evolved in Lab 2)
-// GET /api/categories?requesterId= — when requesterId is supplied, validates
-// active requester (400 if invalid). Always returns active-only ordered by name ASC.
-// Keeps backward compat for Lab 1 tests (no requesterId → still 200).
+// GET /api/categories — session-only reference data (Issue #45, PR #58
+// review): `requesterId` is not accepted (api-spec §4 + §1.6 strict
+// contract — unknown query parameter → 400). Always returns active-only
+// ordered by name ASC.
 // ---------------------------------------------------------------------------
-app.get("/api/categories", async (req: Request, res: Response) => {
+// Issue #45 (reviewer fix 2) — reference-data routes require an authenticated
+// session for an active user who has completed the mandatory password change.
+// Ticket/attachment routes are deliberately untouched (identity cutover is #46).
+app.get("/api/categories", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const requesterIdRaw = req.query.requesterId as string | undefined;
-    if (requesterIdRaw !== undefined) {
-      const rid = Number(requesterIdRaw);
-      if (!Number.isInteger(rid) || rid <= 0) {
-        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
-          requesterId: "requesterId must be a positive integer.",
-        });
-      }
-      const reqExists = await getPrisma().developmentRequester.findFirst({
-        where: { id: rid, isActive: true },
+    if (req.query.requesterId !== undefined) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
+        requesterId: "Unknown parameter.",
       });
-      if (!reqExists) {
-        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
-          requesterId: "requesterId must reference an active requester.",
-        });
-      }
     }
     const categories = await getPrisma().category.findMany({
       where: { isActive: true },
@@ -86,24 +99,12 @@ app.get("/api/categories", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/api/related-systems", async (req: Request, res: Response) => {
+app.get("/api/related-systems", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
-    const requesterIdRaw = req.query.requesterId as string | undefined;
-    if (requesterIdRaw !== undefined) {
-      const rid = Number(requesterIdRaw);
-      if (!Number.isInteger(rid) || rid <= 0) {
-        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
-          requesterId: "requesterId must be a positive integer.",
-        });
-      }
-      const reqExists = await getPrisma().developmentRequester.findFirst({
-        where: { id: rid, isActive: true },
+    if (req.query.requesterId !== undefined) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
+        requesterId: "Unknown parameter.",
       });
-      if (!reqExists) {
-        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {
-          requesterId: "requesterId must reference an active requester.",
-        });
-      }
     }
     const systems = await getPrisma().relatedSystem.findMany({
       where: { isActive: true },

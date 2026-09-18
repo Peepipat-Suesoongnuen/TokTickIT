@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import path from "node:path";
+import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, ensureApiAuth, loginAs } from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 
@@ -15,10 +16,13 @@ async function getRequesters(request: APIRequestContext): Promise<Requester[]> {
   return response.json();
 }
 
-async function getReferences(request: APIRequestContext, requesterId: number) {
+async function getReferences(request: APIRequestContext) {
+  // Issue #45 (PR #58 review): reference-data routes are session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  await ensureApiAuth(request, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   const [categoriesResponse, systemsResponse] = await Promise.all([
-    request.get(`${API_URL}/api/categories?requesterId=${requesterId}`),
-    request.get(`${API_URL}/api/related-systems?requesterId=${requesterId}`),
+    request.get(`${API_URL}/api/categories`),
+    request.get(`${API_URL}/api/related-systems`),
   ]);
   expect(categoriesResponse.ok()).toBeTruthy();
   expect(systemsResponse.ok()).toBeTruthy();
@@ -33,7 +37,7 @@ async function createTicketViaApi(
   requester: Requester,
   summary: string,
 ): Promise<Ticket> {
-  const { categories, systems } = await getReferences(request, requester.id);
+  const { categories, systems } = await getReferences(request);
   const response = await request.post(`${API_URL}/api/tickets`, {
     data: {
       requesterId: requester.id,
@@ -54,6 +58,24 @@ async function selectRequester(page: Page, requester: Requester) {
   await page.getByLabel("Development Requester").selectOption(String(requester.id));
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator(".lab2-requester-chip")).toContainText(requester.name);
+}
+
+// Select-then-verify with one retry: on slow runners the option selection can
+// desync from React state (proven by CI toHaveValue "" after a completed
+// selectOption). Retrying the pair self-heals transient desyncs; a persistent
+// mismatch still fails loudly with Expected/Received instead of a late
+// timeout at submit.
+async function selectAndVerify(page: Page, label: string, value: string): Promise<void> {
+  const field = page.getByLabel(label);
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    await field.selectOption(value);
+    try {
+      await expect(field).toHaveValue(value, { timeout: 5000 });
+      return;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
 }
 
 async function assertNoHorizontalPageScroll(page: Page) {
@@ -92,15 +114,16 @@ function readOnlyField(page: Page, label: string) {
 
 test("E2E-01 select requester -> create -> search -> open detail", async ({ page, request }) => {
   const [requester] = await getRequesters(request);
-  const { categories, systems } = await getReferences(request, requester.id);
+  const { categories, systems } = await getReferences(request);
   const marker = `E2E01-${unique()}`;
   const summary = `Printer issue ${marker}`;
 
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requester);
   await page.getByRole("navigation").getByRole("link", { name: "Create Ticket" }).click();
-  await page.getByLabel("Category").selectOption(String(categories[0].id));
-  await page.getByLabel("Related System").selectOption(String(systems[0].id));
-  await page.getByLabel("Requested Priority").selectOption("HIGH");
+  await selectAndVerify(page, "Category", String(categories[0].id));
+  await selectAndVerify(page, "Related System", String(systems[0].id));
+  await selectAndVerify(page, "Requested Priority", "HIGH");
   await page.getByLabel("Summary").fill(summary);
   await page.getByLabel("Description").fill(`The printer cannot complete a job for marker ${marker}.`);
   await page.getByRole("button", { name: "Submit Ticket" }).click();
@@ -125,6 +148,7 @@ test("E2E-02 requester B cannot open requester A ticket by direct URL", async ({
   const [requesterA, requesterB] = await getRequesters(request);
   const ticketA = await createTicketViaApi(request, requesterA, `A-owned-${unique()}`);
 
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requesterB);
   await page.goto(`/tickets/${ticketA.id}`);
   await expect(page.getByText("Ticket not found", { exact: true })).toBeVisible();
@@ -149,6 +173,7 @@ test("E2E-03 removal blocks blank reason then preserves removed metadata", async
   );
   expect(upload.status()).toBe(201);
 
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requester);
   await page.goto(`/tickets/${ticket.id}`);
   const attachmentRow = page.locator("li", { hasText: filename });
@@ -171,6 +196,7 @@ test("E2E-04 switching requester reloads owned tickets without cross-requester l
   await createTicketViaApi(request, requesterA, summaryA);
   await createTicketViaApi(request, requesterB, summaryB);
 
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await selectRequester(page, requesterA);
   await page.getByRole("link", { name: "My Tickets" }).click();
   await expectVisibleExactText(page, summaryA);
@@ -189,6 +215,7 @@ test("E2E-05 captures responsive evidence at 1440 / 900 / 375 widths", async ({ 
   const summary = `Responsive-${unique()}`;
   const ticket = await createTicketViaApi(request, requester, summary);
 
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await page.goto("/");
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(page.getByLabel("Development Requester")).toBeVisible();

@@ -29,7 +29,7 @@ export default function CreateTicket() {
     setRefLoading(true);
     setRefError("");
     try {
-      const [cats, sys] = await Promise.all([fetchCategories(requester.id), fetchRelatedSystems(requester.id)]);
+      const [cats, sys] = await Promise.all([fetchCategories(), fetchRelatedSystems()]);
       setCategories(cats);
       setSystems(sys);
     } catch (err) {

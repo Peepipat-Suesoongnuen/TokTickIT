@@ -1,10 +1,30 @@
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { useContext, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useRequester } from "../contexts/RequesterContext.js";
+import { AuthContext } from "../contexts/AuthContext.js";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { requester, clearRequester } = useRequester();
+  // Tolerate absence of AuthProvider (legacy Lab 2 tests render the shell
+  // standalone): the identity menu is omitted, existing nav is untouched.
+  const auth = useContext(AuthContext);
+  const user = auth?.user ?? null;
+  const navigate = useNavigate();
   const [navOpen, setNavOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  async function onLogout() {
+    setLogoutError(null);
+    try {
+      await auth?.logout();
+    } catch {
+      setLogoutError("Logout failed. Please try again.");
+      return;
+    }
+    setMenuOpen(false);
+    navigate("/my-tickets");
+  }
 
   return (
     <>
@@ -21,6 +41,57 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <button className="btn btn-outline-light btn-sm" onClick={clearRequester}>
                 Change Requester
               </button>
+            </div>
+          )}
+          {user && (
+            <div className="d-flex align-items-center gap-2 lab3-user-menu position-relative">
+              <button
+                type="button"
+                className="btn btn-outline-light btn-sm d-flex align-items-center gap-2"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label="User menu"
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <span aria-hidden="true">👤</span>
+                <span>{user.name}</span>
+                <span className="badge rounded-pill border">{user.role}</span>
+                <span aria-hidden="true">▾</span>
+              </button>
+              {menuOpen && (
+                <ul role="menu" className="dropdown-menu show position-absolute end-0 top-100">
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="dropdown-item"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        navigate("/change-password");
+                      }}
+                    >
+                      Change Password
+                    </button>
+                  </li>
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="dropdown-item text-danger"
+                      onClick={() => void onLogout()}
+                    >
+                      Logout
+                    </button>
+                  </li>
+                  {logoutError && (
+                    <li role="none" className="px-3 pb-2">
+                      <div role="alert" className="alert alert-danger mb-0 py-1 px-2 small">
+                        {logoutError}
+                      </div>
+                    </li>
+                  )}
+                </ul>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import path from "node:path";
+import { E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD, ensureApiAuth, loginAs } from "./auth-helper";
 
 const API_URL = "http://127.0.0.1:3100";
 const STATE_DIR = path.join("artifacts", "lab-02", "screenshots", "states");
@@ -13,10 +14,13 @@ async function getRequesters(request: APIRequestContext): Promise<Requester[]> {
   return response.json();
 }
 
-async function getReferences(request: APIRequestContext, requesterId: number) {
+async function getReferences(request: APIRequestContext) {
+  // Issue #45 (PR #58 review): reference-data routes are session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  await ensureApiAuth(request, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   const [categoriesResponse, systemsResponse] = await Promise.all([
-    request.get(`${API_URL}/api/categories?requesterId=${requesterId}`),
-    request.get(`${API_URL}/api/related-systems?requesterId=${requesterId}`),
+    request.get(`${API_URL}/api/categories`),
+    request.get(`${API_URL}/api/related-systems`),
   ]);
   expect(categoriesResponse.ok()).toBeTruthy();
   expect(systemsResponse.ok()).toBeTruthy();
@@ -64,7 +68,10 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   request,
 }) => {
   const [requester] = await getRequesters(request);
-  const { categories, systems } = await getReferences(request, requester.id);
+  const { categories, systems } = await getReferences(request);
+
+  // Authenticate-first (Issue #45): the login gate fronts the whole app.
+  await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
 
   // Submission evidence: Requester Selection loading + safe API-failure states.
   await page.setViewportSize({ width: 1440, height: 900 });

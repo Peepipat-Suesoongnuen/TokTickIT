@@ -2,6 +2,15 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { SESSION_COOKIE_NAME, getApprovedOrigins } from "../../src/auth.js";
+import { hashPassword } from "../../src/lib/password-hash.js";
+
+// Reviewer fix 2 (Issue #45): GET /api/categories + /api/related-systems are
+// now gated (requireSession -> requireActiveUser -> requirePasswordChanged),
+// so these tests log in first. /api/requesters stays public (not gated).
+
+const ORIGIN = getApprovedOrigins()[0] ?? "http://localhost:5173";
+const PASSWORD = "RefData-Valid-9!";
 
 describe.sequential("Reference data API (API-01 / API-02 / API-03)", () => {
   const prisma = getPrisma();
@@ -9,8 +18,41 @@ describe.sequential("Reference data API (API-01 / API-02 / API-03)", () => {
   const inactiveRequesterEmail = `${marker}-inactive@test.local`;
   const inactiveCategoryName = `${marker} Inactive Category`;
   const inactiveSystemName = `${marker} Inactive System`;
+  const userEmail = `${marker}-refdata@test.local`;
+
+  function sessionCookieValue(setCookie: unknown): string | undefined {
+    const cookies: string[] = Array.isArray(setCookie)
+      ? (setCookie as string[])
+      : setCookie
+        ? [setCookie as string]
+        : [];
+    const found = cookies.find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`));
+    if (!found) return undefined;
+    return found.split(";")[0];
+  }
+
+  async function loginAs(): Promise<string> {
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("Origin", ORIGIN)
+      .send({ email: userEmail, password: PASSWORD })
+      .expect(200);
+    const cookie = sessionCookieValue(res.headers["set-cookie"]);
+    expect(cookie).toBeDefined();
+    return cookie as string;
+  }
 
   beforeAll(async () => {
+    await prisma.user.create({
+      data: {
+        name: `${marker} Reference Data User`,
+        email: userEmail,
+        passwordHash: await hashPassword(PASSWORD),
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
     await prisma.developmentRequester.create({
       data: { name: `${marker} Inactive Requester`, email: inactiveRequesterEmail, isActive: false },
     });
@@ -23,6 +65,7 @@ describe.sequential("Reference data API (API-01 / API-02 / API-03)", () => {
   });
 
   afterAll(async () => {
+    await prisma.user.deleteMany({ where: { email: userEmail } });
     await prisma.developmentRequester.deleteMany({ where: { email: inactiveRequesterEmail } });
     await prisma.category.deleteMany({ where: { name: inactiveCategoryName } });
     await prisma.relatedSystem.deleteMany({ where: { name: inactiveSystemName } });
@@ -49,9 +92,10 @@ describe.sequential("Reference data API (API-01 / API-02 / API-03)", () => {
   });
 
   it("API-03 returns active-only categories and related systems ordered by name", async () => {
+    const cookie = await loginAs();
     const [categoriesRes, systemsRes] = await Promise.all([
-      request(app).get("/api/categories").expect(200),
-      request(app).get("/api/related-systems").expect(200),
+      request(app).get("/api/categories").set("Cookie", cookie).expect(200),
+      request(app).get("/api/related-systems").set("Cookie", cookie).expect(200),
     ]);
 
     const categoryNames = categoriesRes.body.map((item: { name: string }) => item.name);
