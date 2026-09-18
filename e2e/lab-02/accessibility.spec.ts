@@ -15,12 +15,13 @@ async function getRequesters(request: APIRequestContext): Promise<Requester[]> {
   return response.json();
 }
 
-async function getReferences(request: APIRequestContext, requesterId: number) {
-  // Reviewer fix 2 (Issue #45): reference-data routes are session-gated.
+async function getReferences(request: APIRequestContext) {
+  // Issue #45 (PR #58 review): reference-data routes are session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
   await ensureApiAuth(request, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   const [categoriesResponse, systemsResponse] = await Promise.all([
-    request.get(`${API_URL}/api/categories?requesterId=${requesterId}`),
-    request.get(`${API_URL}/api/related-systems?requesterId=${requesterId}`),
+    request.get(`${API_URL}/api/categories`),
+    request.get(`${API_URL}/api/related-systems`),
   ]);
   expect(categoriesResponse.ok()).toBeTruthy();
   expect(systemsResponse.ok()).toBeTruthy();
@@ -31,7 +32,7 @@ async function getReferences(request: APIRequestContext, requesterId: number) {
 }
 
 async function createTicketViaApi(request: APIRequestContext, requester: Requester): Promise<Ticket> {
-  const { categories, systems } = await getReferences(request, requester.id);
+  const { categories, systems } = await getReferences(request);
   const response = await request.post(`${API_URL}/api/tickets`, {
     data: {
       requesterId: requester.id,

@@ -76,12 +76,12 @@ export default function MyTickets() {
     setPage(1);
   }, [debouncedSearch, categoryId, priority, currentStatus, sort, order, pageSize]);
 
-  const loadCategories = async (requesterId: number) => {
+  const loadCategories = async () => {
     const requestSequence = ++categoryRequestSequence.current;
     setCategoryLoading(true);
     setCategoryError("");
     try {
-      const nextCategories = await fetchCategories(requesterId);
+      const nextCategories = await fetchCategories();
       if (requestSequence === categoryRequestSequence.current) {
         setCategories(nextCategories);
       }
@@ -112,7 +112,7 @@ export default function MyTickets() {
     setData([]);
     setMeta(null);
     setError("");
-    if (requester) void loadCategories(requester.id);
+    if (requester) void loadCategories();
     return () => {
       categoryRequestSequence.current += 1;
     };
@@ -261,7 +261,7 @@ export default function MyTickets() {
       {categoryError && (
         <div className="alert alert-warning d-flex justify-content-between align-items-center" role="alert" aria-live="polite">
           <span>{categoryError}</span>
-          <button className="btn btn-outline-success btn-sm" aria-label="Retry categories" onClick={() => void loadCategories(requester.id)}>
+          <button className="btn btn-outline-success btn-sm" aria-label="Retry categories" onClick={() => void loadCategories()}>
             Retry
           </button>
         </div>

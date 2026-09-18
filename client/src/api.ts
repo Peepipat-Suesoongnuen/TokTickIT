@@ -35,10 +35,10 @@ export interface RelatedSystem {
   name: string;
 }
 
-export async function fetchCategories(requesterId: number): Promise<Category[]> {
-  // Reviewer fix 2 (Issue #45): GET /api/categories is session-gated, so the
-  // session cookie must flow (cross-origin 5174 -> API).
-  const res = await fetch(`${API_URL}/api/categories?requesterId=${requesterId}`, {
+export async function fetchCategories(): Promise<Category[]> {
+  // Issue #45 (PR #58 review): GET /api/categories is session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  const res = await fetch(`${API_URL}/api/categories`, {
     credentials: "include",
   });
   if (!res.ok) {
@@ -49,10 +49,10 @@ export async function fetchCategories(requesterId: number): Promise<Category[]> 
   return res.json();
 }
 
-export async function fetchRelatedSystems(requesterId: number): Promise<RelatedSystem[]> {
-  // Reviewer fix 2 (Issue #45): GET /api/related-systems is session-gated,
-  // so the session cookie must flow (cross-origin 5174 -> API).
-  const res = await fetch(`${API_URL}/api/related-systems?requesterId=${requesterId}`, {
+export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
+  // Issue #45 (PR #58 review): GET /api/related-systems is session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  const res = await fetch(`${API_URL}/api/related-systems`, {
     credentials: "include",
   });
   if (!res.ok) {
