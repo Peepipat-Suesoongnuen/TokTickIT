@@ -143,7 +143,7 @@ describe("session-derived ownership cutover (Issue #46)", () => {
       .send({ ...validTicketBody(), requesterId: userB.id })
       .expect(400);
     expect(spoof.body.error.code).toBe("VALIDATION_FAILED");
-    expect(spoof.body.fieldErrors?.requesterId).toBe("Unknown field.");
+    expect(spoof.body.fieldErrors?.requesterId).toBe("Unknown parameter.");
     // Nothing persisted for the spoofed owner.
     const leaked = await prisma.ticket.findFirst({
       where: { requesterId: userB.id, summary: "Cutover probe" },

@@ -23,7 +23,7 @@ import authRouter from "./routes/auth.js";
 // Issue #46 (Lab 3) — session-derived ownership: ticket/attachment routes
 // derive the owner id from the authenticated session user; a client-supplied
 // `requesterId` is rejected (query → "Unknown parameter.", body →
-// "Unknown field.") via the existing VALIDATION_FAILED envelope.
+// "Unknown parameter.") via the existing VALIDATION_FAILED envelope.
 function getAuthUserId(req: Request): number {
   return (req as AuthRequest).user!.id;
 }
@@ -484,7 +484,7 @@ app.post("/api/tickets", requireSession, requireActiveUser, requirePasswordChang
 
     // Issue #46 — client must not supply requesterId; the owner is the session user.
     if (req.body?.requesterId !== undefined) {
-      fieldErrors.requesterId = "Unknown field.";
+      fieldErrors.requesterId = "Unknown parameter.";
     }
     const rid = getAuthUserId(req);
 
