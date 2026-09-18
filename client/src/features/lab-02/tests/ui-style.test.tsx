@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
 import AppShell from "../../../components/AppShell";
 import AttachmentSection, { Attachment } from "../../../components/AttachmentSection";
+import { PriorityBadge, StatusBadge } from "../../../components/Badges.js";
 import CreateTicket from "../../../pages/CreateTicket";
 import MyTickets from "../../../pages/MyTickets";
 import { AuthContext } from "../../../contexts/AuthContext";
@@ -79,6 +80,32 @@ describe("Lab 2 UI style contract", () => {
     const status = await screen.findAllByText("NEW", { selector: ".badge" });
     expect(priority[0]).toHaveClass("badge-priority-critical");
     expect(status[0]).toHaveClass("badge-status-new");
+  });
+
+  it("STYLE-02/03: every Lab 3 status maps to its themed badge class", async () => {
+    const cases: Array<[string, string]> = [
+      ["NEW", "badge-status-new"],
+      ["OPEN", "badge-status-open"],
+      ["IN_PROGRESS", "badge-status-in-progress"],
+      ["WAITING_FOR_REQUESTER", "badge-status-waiting"],
+      ["RESOLVED", "badge-status-resolved"],
+      ["REOPENED", "badge-status-reopened"],
+      ["CLOSED", "badge-status-closed"],
+      ["CANCELLED", "badge-status-cancelled"],
+    ];
+    const { unmount } = render(
+      <>
+        {cases.map(([value]) => (
+          <StatusBadge key={value} value={value} />
+        ))}
+        <PriorityBadge value="LOW" />
+      </>,
+    );
+    for (const [value, cls] of cases) {
+      expect(screen.getByText(value)).toHaveClass(cls);
+    }
+    expect(screen.getByText("LOW")).toHaveClass("badge-priority-low");
+    unmount();
   });
 
   it("STYLE-04/05: required markers and read-only fields are explicitly distinguishable", async () => {

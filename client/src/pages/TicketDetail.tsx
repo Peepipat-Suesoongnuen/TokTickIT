@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getTicketDetail, downloadAttachment, removeAttachment, uploadAttachment } from "../api";
 import AttachmentSection, { Attachment, formatBangkok } from "../components/AttachmentSection";
+import { PriorityBadge, StatusBadge } from "../components/Badges.js";
 
 interface TicketDetailData {
   id: number;
@@ -137,8 +138,10 @@ export default function TicketDetail() {
               <textarea className="form-control form-readonly" value={ticket.description} readOnly rows={4} aria-label="Description" />
             </div>
             <div className="col-md-6">
-              <span className={`badge badge-priority-${ticket.requestedPriority.toLowerCase()}`}>{ticket.requestedPriority}</span>
-              <span className={`badge ms-2 ${ticket.currentStatus === "NEW" ? "badge-status-new" : ""}`}>{ticket.currentStatus}</span>
+              <PriorityBadge value={ticket.requestedPriority} />
+              <span className="ms-2">
+                <StatusBadge value={ticket.currentStatus} />
+              </span>
             </div>
           </div>
         </div>

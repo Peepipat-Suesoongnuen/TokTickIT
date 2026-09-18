@@ -22,14 +22,7 @@ export function formatBangkok(dateStr: string): string {
   return `${value("year")}-${value("month")}-${value("day")} ${value("hour")}:${value("minute")}:${value("second")}`;
 }
 
-function PriorityBadge({ value }: { value: string }) {
-  const token = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(value) ? value.toLowerCase() : "low";
-  return <span className={`badge badge-priority-${token}`}>{value}</span>;
-}
-
-function StatusBadge({ value }: { value: string }) {
-  return <span className={`badge ${value === "NEW" ? "badge-status-new" : ""}`}>{value}</span>;
-}
+import { PriorityBadge, StatusBadge } from "../components/Badges.js";
 
 export default function MyTickets() {
   const navigate = useNavigate();
