@@ -7,7 +7,8 @@ import { sendError } from "./lib/errors.js";
 // Auth middleware chain (Issue #45, Lab 3 api-spec §§1.2/1.7–1.9, 2).
 //
 // Order for protected requests: requireOrigin -> requireSession ->
-// requireActiveUser -> requirePasswordChanged. requireOrigin also guards
+// requireActiveUser -> requirePasswordChanged (-> requireRole(...roles) on
+// role-gated routes, Issue #46). requireOrigin also guards
 // unauthenticated state-changing routes (e.g. login) when mounted there.
 //
 // Nothing here ever logs or returns raw session tokens, token hashes,
@@ -33,10 +34,12 @@ export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
   "You must change your password before continuing.";
 export const ORIGIN_NOT_ALLOWED_MESSAGE = "Request origin is not allowed.";
 export const UNAUTHENTICATED_MESSAGE = "Authentication required.";
+export const FORBIDDEN_MESSAGE = "You do not have permission to access this function.";
 
 export const ORIGIN_NOT_ALLOWED_CODE = "ORIGIN_NOT_ALLOWED";
 export const UNAUTHENTICATED_CODE = "UNAUTHENTICATED";
 export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
+export const FORBIDDEN_CODE = "FORBIDDEN";
 
 // Parses APP_ORIGINS (comma-separated, trimmed, empties dropped). Falls back
 // to the documented local-dev defaults (Vite dev port 5173 + README/e2e port
@@ -257,7 +260,28 @@ export function createAuthMiddleware(deps: AuthMiddlewareDeps = {}) {
     next();
   }
 
-  return { requireOrigin, requireSession, requireActiveUser, requirePasswordChanged };
+  // Issue #46 (BR-19, api-spec §1.5/§1.7 step 4): explicit role gate for
+  // cutover routes. Runs AFTER requireSession/requireActiveUser in chain
+  // order — it reads the attached auth user; a missing user is a defensive
+  // 401 UNAUTHENTICATED. A role mismatch is 403 FORBIDDEN before any
+  // resource processing (staff-route precedent: wrong role → 403 before
+  // resource-specific data is exposed).
+  function requireRole(...roles: string[]) {
+    return function requireRoleGuard(req: Request, res: Response, next: NextFunction): void {
+      const user = (req as AuthRequest).user;
+      if (!user) {
+        sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
+        return;
+      }
+      if (!roles.includes(user.role)) {
+        sendError(res, 403, FORBIDDEN_CODE, FORBIDDEN_MESSAGE);
+        return;
+      }
+      next();
+    };
+  }
+
+  return { requireOrigin, requireSession, requireActiveUser, requirePasswordChanged, requireRole };
 }
 
 const defaultMiddleware = createAuthMiddleware();
@@ -266,3 +290,4 @@ export const requireOrigin = defaultMiddleware.requireOrigin;
 export const requireSession = defaultMiddleware.requireSession;
 export const requireActiveUser = defaultMiddleware.requireActiveUser;
 export const requirePasswordChanged = defaultMiddleware.requirePasswordChanged;
+export const requireRole = defaultMiddleware.requireRole;

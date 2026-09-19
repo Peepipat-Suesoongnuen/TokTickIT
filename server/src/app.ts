@@ -14,7 +14,7 @@ import { v4 as uuid } from "uuid";
 import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
-import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePasswordChanged, requireSession } from "./auth.js";
+import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePasswordChanged, requireRole, requireSession } from "./auth.js";
 import { UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE } from "./auth.js";
 import type { AuthRequest, AuthUserRow } from "./auth.js";
 import authRouter from "./routes/auth.js";
@@ -156,7 +156,7 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 // Lab 2 Issue 9 — My Tickets (owned list, Issue #46: session-derived owner)
 // GET /api/tickets?search=&categoryId=&requestedPriority=&currentStatus=&sort=&order=&page=&pageSize=
 // ---------------------------------------------------------------------------
-app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     const allowed = new Set(["search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"]);
     for (const k of Object.keys(req.query)) {
@@ -316,7 +316,7 @@ app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChange
 // ---------------------------------------------------------------------------
 
 // GET /api/tickets/:id — owned detail (FR-08, AC-10; Issue #46: session-derived owner)
-app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
@@ -361,7 +361,7 @@ app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordCh
 });
 
 // POST /api/tickets/:id/attachments — upload (FR-09; Issue #46: session-derived owner) — memoryStorage → validate → transaction count+create → write (no orphan, race-safe)
-app.post("/api/tickets/:id/attachments", requireSession, requireActiveUser, requirePasswordChanged, (req: Request, res: Response) => {
+app.post("/api/tickets/:id/attachments", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), (req: Request, res: Response) => {
   upload.single("file")(req, res, async (err: unknown) => {
     try {
       if (err) {
@@ -436,7 +436,7 @@ app.post("/api/tickets/:id/attachments", requireSession, requireActiveUser, requ
 });
 
 // GET /api/attachments/:id — metadata (FR-10; Issue #46: session-derived owner)
-app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
     const rid = getAuthUserId((req as AuthRequest).user, res);
@@ -450,7 +450,7 @@ app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswo
 });
 
 // GET /api/attachments/:id/download — binary (FR-10, BR-17; Issue #46: session-derived owner)
-app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
     const rid = getAuthUserId((req as AuthRequest).user, res);
@@ -470,7 +470,7 @@ app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requ
 });
 
 // POST /api/attachments/:id/remove — soft-remove (FR-10, BR-15/16; Issue #46: session-derived owner)
-app.post("/api/attachments/:id/remove", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+app.post("/api/attachments/:id/remove", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
     if (req.body?.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
@@ -494,7 +494,7 @@ app.post("/api/attachments/:id/remove", requireSession, requireActiveUser, requi
 // Lab 2 Issue 8 — Create Ticket (Issue #46: session-derived owner)
 // POST /api/tickets — validates, generates ticketNumber, persists with status NEW
 // ---------------------------------------------------------------------------
-app.post("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+app.post("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", {

@@ -296,6 +296,171 @@ describe("session-derived ownership cutover (Issue #46)", () => {
   });
 });
 
+describe("REQUESTER role guard on cutover routes (Issue #46, BR-19)", () => {
+  const RUN_RG = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6)}rg`;
+  const EMAIL_OWNER = `roleguard-owner-${RUN_RG}@test.local`;
+  const EMAIL_STAFF = `roleguard-staff-${RUN_RG}@test.local`;
+  const EMAIL_ADMIN = `roleguard-admin-${RUN_RG}@test.local`;
+
+  let ownerId: number;
+  let staffId: number;
+  let adminId: number;
+  let rgCategoryId: number;
+  let rgSystemId: number;
+  let rgTicketId: number;
+  let rgAttachmentId: number;
+  let cookieStaff: string;
+  let cookieAdmin: string;
+  let cookieOwner: string;
+
+  beforeAll(async () => {
+    const passwordHash = await hashPassword(PASSWORD);
+    const [owner, staff, admin] = await Promise.all(
+      (
+        [
+          { email: EMAIL_OWNER, role: "REQUESTER" },
+          { email: EMAIL_STAFF, role: "IT_STAFF" },
+          { email: EMAIL_ADMIN, role: "ADMINISTRATOR" },
+        ] as { email: string; role: "REQUESTER" | "IT_STAFF" | "ADMINISTRATOR" }[]
+      ).map((u) =>
+        prisma.user.create({
+          data: {
+            name: `Role Guard ${u.role}`,
+            email: u.email,
+            passwordHash,
+            role: u.role,
+            isActive: true,
+            mustChangePassword: false,
+          },
+          select: { id: true },
+        })
+      )
+    );
+    ownerId = owner.id;
+    staffId = staff.id;
+    adminId = admin.id;
+
+    const category = await prisma.category.findFirst({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+    });
+    const system = await prisma.relatedSystem.findFirst({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+    });
+    if (!category || !system) throw new Error("Role-guard test requires seeded active Category/RelatedSystem");
+    rgCategoryId = category.id;
+    rgSystemId = system.id;
+
+    const ticket = await prisma.ticket.create({
+      data: {
+        ticketNumber: `RG${String(Date.now() % 100).padStart(2, "0")}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+        requesterId: ownerId,
+        categoryId: rgCategoryId,
+        relatedSystemId: rgSystemId,
+        summary: "Role guard fixture ticket",
+        description: "Fixture ticket owned by the role-guard owner.",
+        requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
+        currentStatus: "NEW",
+      },
+      select: { id: true },
+    });
+    rgTicketId = ticket.id;
+
+    cookieOwner = await loginAs(EMAIL_OWNER);
+    cookieStaff = await loginAs(EMAIL_STAFF);
+    cookieAdmin = await loginAs(EMAIL_ADMIN);
+
+    const upload = await request(app)
+      .post(`/api/tickets/${rgTicketId}/attachments`)
+      .set("Cookie", cookieOwner)
+      .set("Origin", ORIGIN)
+      .attach("file", pngBuffer(1024), { filename: "guard.png", contentType: "image/png" })
+      .expect(201);
+    rgAttachmentId = upload.body.id as number;
+  });
+
+  afterAll(async () => {
+    await prisma.ticket.deleteMany({ where: { requesterId: { in: [ownerId, staffId, adminId].filter(Boolean) as number[] } } });
+    await prisma.user.deleteMany({ where: { email: { in: [EMAIL_OWNER, EMAIL_STAFF, EMAIL_ADMIN] } } });
+  });
+
+  function validRgTicketBody() {
+    return {
+      categoryId: rgCategoryId,
+      relatedSystemId: rgSystemId,
+      summary: "Role guard probe",
+      description: "Description long enough here.",
+      requestedPriority: "MEDIUM",
+    };
+  }
+
+  it("list: IT_STAFF and ADMINISTRATOR get 403 FORBIDDEN", async () => {
+    for (const cookie of [cookieStaff, cookieAdmin]) {
+      const res = await request(app).get("/api/tickets").set("Cookie", cookie).expect(403);
+      expect(res.body.error.code).toBe("FORBIDDEN");
+      expect(res.body.error.message).toBe("You do not have permission to access this function.");
+    }
+  });
+
+  it("detail: IT_STAFF and ADMINISTRATOR get 403 FORBIDDEN", async () => {
+    for (const cookie of [cookieStaff, cookieAdmin]) {
+      const res = await request(app).get(`/api/tickets/${rgTicketId}`).set("Cookie", cookie).expect(403);
+      expect(res.body.error.code).toBe("FORBIDDEN");
+      expect(res.body.error.message).toBe("You do not have permission to access this function.");
+    }
+  });
+
+  it("create: IT_STAFF and ADMINISTRATOR get 403 FORBIDDEN and nothing persists", async () => {
+    for (const [cookie, uid] of [[cookieStaff, staffId], [cookieAdmin, adminId]] as const) {
+      const res = await request(app)
+        .post("/api/tickets")
+        .set("Cookie", cookie)
+        .set("Origin", ORIGIN)
+        .send(validRgTicketBody())
+        .expect(403);
+      expect(res.body.error.code).toBe("FORBIDDEN");
+      const leaked = await prisma.ticket.findFirst({
+        where: { requesterId: uid, summary: "Role guard probe" },
+      });
+      expect(leaked).toBeNull();
+    }
+  });
+
+  it("attachments: IT_STAFF and ADMINISTRATOR get 403 FORBIDDEN on metadata/download/upload/remove", async () => {
+    for (const cookie of [cookieStaff, cookieAdmin]) {
+      const meta = await request(app).get(`/api/attachments/${rgAttachmentId}`).set("Cookie", cookie).expect(403);
+      expect(meta.body.error.code).toBe("FORBIDDEN");
+
+      const download = await request(app)
+        .get(`/api/attachments/${rgAttachmentId}/download`)
+        .set("Cookie", cookie)
+        .expect(403);
+      expect(download.body.error.code).toBe("FORBIDDEN");
+
+      const upload = await request(app)
+        .post(`/api/tickets/${rgTicketId}/attachments`)
+        .set("Cookie", cookie)
+        .set("Origin", ORIGIN)
+        .attach("file", pngBuffer(1024), { filename: "cross.png", contentType: "image/png" })
+        .expect(403);
+      expect(upload.body.error.code).toBe("FORBIDDEN");
+
+      const remove = await request(app)
+        .post(`/api/attachments/${rgAttachmentId}/remove`)
+        .set("Cookie", cookie)
+        .set("Origin", ORIGIN)
+        .send({ reason: "not mine" })
+        .expect(403);
+      expect(remove.body.error.code).toBe("FORBIDDEN");
+    }
+    // Guarded fixture attachment is untouched: owner can still read it.
+    const ownMeta = await request(app).get(`/api/attachments/${rgAttachmentId}`).set("Cookie", cookieOwner).expect(200);
+    expect(ownMeta.body.id).toBe(rgAttachmentId);
+  });
+});
+
 describe("getAuthUserId 401-safe helper (Issue #46 fix)", () => {
   function mockRes() {
     const res: Record<string, unknown> & { statusCode: number; body: unknown } = {
