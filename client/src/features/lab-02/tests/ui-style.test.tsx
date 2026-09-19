@@ -102,6 +102,11 @@ describe("Lab 2 UI style contract", () => {
       </>,
     );
     for (const [value, cls] of cases) {
+      if (value === "WAITING_FOR_REQUESTER") {
+        // Dense display keeps the fixed badge frame.
+        expect(screen.getByText("Wait for Req.")).toHaveClass(cls);
+        continue;
+      }
       expect(screen.getByText(value)).toHaveClass(cls);
     }
     expect(screen.getByText("LOW")).toHaveClass("badge-priority-low");

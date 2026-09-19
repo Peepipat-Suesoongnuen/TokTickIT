@@ -81,10 +81,8 @@ body {
   border: 1px solid #9ccfb3;
 }
 
-.badge-status-new::before {
-  content: "\2022";
-  margin-right: 0.3rem;
-}
+/* Issue #48 — locked decision (agent.md §14): NEW has no decorative dot.
+   The ::before bullet was a Lab 2 leftover and is removed for all roles. */
 
 .badge-status-open,
 .badge-status-in-progress,
@@ -126,6 +124,62 @@ body {
   align-items: center;
   justify-content: center;
   width: 96px;
+}
+
+/* Issue #48 — staff queue table has eight columns, so the fixed-badge
+   language covers Requested Priority (4) + IT Priority (5) + Status (6),
+   matching the mockup's cols 4/5/6 rule. Scoped to the staff table: the
+   Lab 2 requester table is untouched. */
+.lab2-ticket-table-staff td:nth-child(4) .badge,
+.lab2-ticket-table-staff td:nth-child(5) .badge,
+.lab2-ticket-table-staff td:nth-child(6) .badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* Issue #48 — staff queue toolbar: all seven filters in a single desktop
+   row (Search 2fr + six 1fr), stacking below md like the mockup grid. */
+.lab3-staff-toolbar-grid {
+  display: grid;
+  grid-template-columns: 2fr repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (max-width: 767.98px) {
+  .lab3-staff-toolbar-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Issue #48 — staff detail operations in a 3-column grid on desktop,
+   stacking on mobile, mirroring the approved mockup. */
+.lab3-operations-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+@media (max-width: 767.98px) {
+  .lab3-operations-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Issue #48 — staff detail operation cards mirror the approved mockup. */
+.lab3-operation-card {
+  border: 1px solid var(--zen-border, #d8dedb);
+  border-radius: 6px;
+  padding: 12px;
+  background: #fbfcfb;
 }
 
 .lab2-success-icon {
