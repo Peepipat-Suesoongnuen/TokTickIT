@@ -6,7 +6,6 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AuthContext, AuthProvider, useAuth } from "../../../contexts/AuthContext.js";
 import AppShell from "../../../components/AppShell.js";
 import ChangePassword from "../../../pages/ChangePassword.js";
-import { RequesterProvider } from "../../../contexts/RequesterContext.js";
 import * as api from "../../../api.js";
 
 vi.mock("../../../api.js");
@@ -95,16 +94,14 @@ describe("logout failure keeps auth state (Issue #45)", () => {
     const logoutMock = vi.fn().mockRejectedValue({ status: 500, body: null });
     render(
       <MemoryRouter initialEntries={["/create"]}>
-        <RequesterProvider>
-          <AuthContext.Provider
-            value={{ user: activeUser, loading: false, login: vi.fn(), logout: logoutMock, refresh: vi.fn() }}
-          >
-            <AppShell>
-              <p>child marker</p>
-            </AppShell>
-            <LocationDisplay />
-          </AuthContext.Provider>
-        </RequesterProvider>
+        <AuthContext.Provider
+          value={{ user: activeUser, loading: false, login: vi.fn(), logout: logoutMock, refresh: vi.fn() }}
+        >
+          <AppShell>
+            <p>child marker</p>
+          </AppShell>
+          <LocationDisplay />
+        </AuthContext.Provider>
       </MemoryRouter>,
     );
 
@@ -123,24 +120,22 @@ describe("logout failure keeps auth state (Issue #45)", () => {
     const logoutMock = vi.fn().mockResolvedValue(undefined);
     render(
       <MemoryRouter initialEntries={["/create"]}>
-        <RequesterProvider>
-          <AuthContext.Provider
-            value={{ user: activeUser, loading: false, login: vi.fn(), logout: logoutMock, refresh: vi.fn() }}
-          >
-            <Routes>
-              <Route
-                path="/create"
-                element={
-                  <AppShell>
-                    <p>child marker</p>
-                  </AppShell>
-                }
-              />
-              <Route path="/my-tickets" element={<p>my tickets page</p>} />
-            </Routes>
-            <LocationDisplay />
-          </AuthContext.Provider>
-        </RequesterProvider>
+        <AuthContext.Provider
+          value={{ user: activeUser, loading: false, login: vi.fn(), logout: logoutMock, refresh: vi.fn() }}
+        >
+          <Routes>
+            <Route
+              path="/create"
+              element={
+                <AppShell>
+                  <p>child marker</p>
+                </AppShell>
+              }
+            />
+            <Route path="/my-tickets" element={<p>my tickets page</p>} />
+          </Routes>
+          <LocationDisplay />
+        </AuthContext.Provider>
       </MemoryRouter>,
     );
 

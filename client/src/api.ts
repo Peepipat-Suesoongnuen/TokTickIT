@@ -5,29 +5,9 @@ export interface Category {
   name: string;
 }
 
-export interface DevelopmentRequester {
-  id: number;
-  name: string;
-  email: string;
-}
-
 export interface SystemStatus {
   online: boolean;
   categories: Category[];
-}
-
-// Issue 2 + Issue 4 — call the backend.
-// Steps: fetch `${API_URL}/api/health`; if not ok, throw.
-//        then fetch `${API_URL}/api/categories`; if not ok, throw.
-//        return { online: true, categories }.
-export async function fetchRequesters(): Promise<DevelopmentRequester[]> {
-  const res = await fetch(`${API_URL}/api/requesters`);
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
-    throw new Error(msg);
-  }
-  return res.json();
 }
 
 export interface RelatedSystem {
@@ -64,7 +44,6 @@ export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
 }
 
 export interface CreateTicketPayload {
-  requesterId: number;
   categoryId: number;
   relatedSystemId: number;
   summary: string;
@@ -73,9 +52,11 @@ export interface CreateTicketPayload {
 }
 
 export async function createTicket(payload: CreateTicketPayload) {
+  // Issue #46 — session-derived owner: no requesterId in body or query.
   const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => null);
@@ -84,7 +65,6 @@ export async function createTicket(payload: CreateTicketPayload) {
 }
 
 export interface ListTicketsParams {
-  requesterId: number;
   search?: string;
   categoryId?: number;
   requestedPriority?: string;
@@ -154,8 +134,8 @@ function parseListTicketsResponse(body: unknown): ListTicketsResponse {
 }
 
 export async function listTickets(params: ListTicketsParams): Promise<ListTicketsResponse> {
+  // Issue #46 — session-derived owner: no requesterId query parameter.
   const qs = new URLSearchParams();
-  qs.set("requesterId", String(params.requesterId));
   if (params.search !== undefined) qs.set("search", params.search);
   if (params.categoryId !== undefined) qs.set("categoryId", String(params.categoryId));
   if (params.requestedPriority !== undefined) qs.set("requestedPriority", params.requestedPriority);
@@ -164,37 +144,50 @@ export async function listTickets(params: ListTicketsParams): Promise<ListTicket
   if (params.order !== undefined) qs.set("order", params.order);
   if (params.page !== undefined) qs.set("page", String(params.page));
   if (params.pageSize !== undefined) qs.set("pageSize", String(params.pageSize));
-  const res = await fetch(`${API_URL}/api/tickets?${qs.toString()}`);
+  const suffix = qs.toString();
+  const res = await fetch(`${API_URL}/api/tickets${suffix ? `?${suffix}` : ""}`, {
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body };
   return parseListTicketsResponse(body);
 }
 
-export async function getTicketDetail(ticketId: number, requesterId: number) {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requesterId}`);
+export async function getTicketDetail(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
   return body;
 }
 
-export async function uploadAttachment(ticketId: number, requesterId: number, file: File) {
+export async function uploadAttachment(ticketId: number, file: File) {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`, { method: "POST", body: form });
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Upload failed" };
   return body;
 }
 
-export async function getAttachmentMetadata(attachmentId: number, requesterId: number) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}?requesterId=${requesterId}`);
+export async function getAttachmentMetadata(attachmentId: number) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
   return body;
 }
 
-export async function downloadAttachment(attachmentId: number, requesterId: number) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`);
+export async function downloadAttachment(attachmentId: number) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw { status: res.status, body, message: body?.error?.message ?? "Download failed" };
@@ -217,10 +210,11 @@ export async function downloadAttachment(attachmentId: number, requesterId: numb
   URL.revokeObjectURL(url);
 }
 
-export async function removeAttachment(attachmentId: number, requesterId: number, reason: string) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/remove?requesterId=${requesterId}`, {
+export async function removeAttachment(attachmentId: number, reason: string) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/remove`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ reason }),
   });
   const body = await res.json().catch(() => null);

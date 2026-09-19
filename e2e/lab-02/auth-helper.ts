@@ -1,24 +1,25 @@
-// Lab-2 authenticate-first helper (Issue #45, Task 8, test-only).
+// Lab-2 authenticate-first helper (Issue #45, Task 8, test-only;
+// Issue #46, Task 4: post-cutover landing is the authenticated app shell).
 //
-// The Task 6 auth gate fronts the whole app with Login, so Lab-2 specs
-// (written for the pre-auth requester-selector flow) must sign in before
-// their original selector steps. Call loginAs(page, email, password) FIRST
-// in each spec; all original steps/assertions stay untouched.
-//
-// Seeded users are NEVER used here: loginAs signs in ONLY as the dedicated
-// e2e-owned user below (upserted with a fresh initial hash by global-setup on
-// every run, so prior runs' password changes never leak). The first login of
-// a run lands on the mandatory change-password gate, which this helper
-// completes; later tests in the same run find the credential already changed,
-// so on "Invalid email or password" the helper retries with the changed
-// password below. The changed password is a deterministic constant (NOT
-// unique per run) for exactly this reason — anything timestamp-unique would
-// be unrecoverable after the first test.
+// Call loginAs(page, email, password) FIRST in each spec. Seeded users are
+// NEVER used here: loginAs signs in ONLY as the dedicated e2e-owned users
+// below (upserted with a fresh initial hash by global-setup on every run,
+// so prior runs' password changes never leak). The first login of a run
+// lands on the mandatory change-password gate, which this helper completes;
+// later tests in the same run find the credential already changed, so on
+// "Invalid email or password" the helper retries with the changed password
+// below. The changed password is a deterministic constant (NOT unique per
+// run) for exactly this reason — anything timestamp-unique would be
+// unrecoverable after the first test.
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
-// Dedicated e2e-owned login identity (Issue #45 isolation fix). NEVER pass a
-// seeded email to loginAs — seeded rows must stay pristine for seed.test.ts.
+// Dedicated e2e-owned login identities (Issue #45 isolation fix + Issue #46
+// two-user flow). NEVER pass a seeded email to loginAs — seeded rows must
+// stay pristine for seed.test.ts.
 export const E2E_REQUESTER_EMAIL = "e2e-requester@example.com";
+export const E2E_REQUESTER_NAME = "E2E Requester";
+export const E2E_REQUESTER_B_EMAIL = "e2e-requester-b@example.com";
+export const E2E_REQUESTER_B_NAME = "E2E Requester B";
 
 // Test-only mirror of LOCAL_INITIAL_PASSWORD, whose single source of truth
 // is server/src/lib/migrated-credentials.ts (duplicated here because
@@ -81,11 +82,13 @@ export async function loginAs(page: Page, email: string, password: string): Prom
   await submitLogin(page, email, currentPassword);
 
   const changeHeading = page.getByRole("heading", { name: "Change Password" });
-  const requesterSelect = page.getByLabel("Development Requester");
+  // Issue #46: the requester selector is deleted — the post-auth entry point
+  // is the authenticated app shell (My Tickets heading + user menu).
+  const appHeading = page.getByRole("heading", { name: "My Tickets" });
   const loginAlert = page.getByRole("alert");
 
-  // Exactly one of: change gate, requester selector, or login error.
-  await expect(changeHeading.or(requesterSelect).or(loginAlert)).toBeVisible({ timeout: 10_000 });
+  // Exactly one of: change gate, authenticated app, or login error.
+  await expect(changeHeading.or(appHeading).or(loginAlert)).toBeVisible({ timeout: 10_000 });
 
   if (await loginAlert.isVisible()) {
     const text = (await loginAlert.textContent()) ?? "";
@@ -94,7 +97,7 @@ export async function loginAs(page: Page, email: string, password: string): Prom
       // resets passwords): retry once with the changed password.
       currentPassword = LAB02_CHANGED_PASSWORD;
       await submitLogin(page, email, currentPassword);
-      await expect(changeHeading.or(requesterSelect)).toBeVisible({ timeout: 10_000 });
+      await expect(changeHeading.or(appHeading)).toBeVisible({ timeout: 10_000 });
     } else {
       throw new Error(`loginAs failed for ${email}: ${text.trim() || "unknown login error"}`);
     }
@@ -107,6 +110,15 @@ export async function loginAs(page: Page, email: string, password: string): Prom
     await page.getByRole("button", { name: "Change Password" }).click();
   }
 
-  // Landed in the app: requester selection is the post-auth entry point.
-  await expect(requesterSelect).toBeVisible({ timeout: 10_000 });
+  // Landed in the app: authenticated shell shows My Tickets + identity menu.
+  await expect(appHeading).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".lab3-user-menu")).toBeVisible({ timeout: 10_000 });
+}
+
+// Issue #46 (E2E-04): switch the browser session from one dedicated e2e user
+// to another via the real Logout UI (the Change Requester button is deleted).
+export async function logout(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "User menu" }).click();
+  await page.getByRole("menuitem", { name: "Logout" }).click();
+  await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible({ timeout: 10_000 });
 }

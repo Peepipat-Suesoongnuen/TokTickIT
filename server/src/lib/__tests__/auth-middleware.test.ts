@@ -4,6 +4,8 @@ import express from "express";
 import request from "supertest";
 import {
   SESSION_COOKIE_NAME,
+  FORBIDDEN_CODE,
+  FORBIDDEN_MESSAGE,
   ORIGIN_NOT_ALLOWED_CODE,
   UNAUTHENTICATED_CODE,
   PASSWORD_CHANGE_REQUIRED_CODE,
@@ -15,6 +17,7 @@ import {
   requireActiveUser,
   requireOrigin,
   requirePasswordChanged,
+  requireRole,
   requireSession,
 } from "../../auth.js";
 
@@ -299,6 +302,93 @@ describe("middleware exports (default Prisma-bound instances)", () => {
     expect(typeof requireSession).toBe("function");
     expect(typeof requireActiveUser).toBe("function");
     expect(typeof requirePasswordChanged).toBe("function");
+    expect(typeof requireRole).toBe("function");
     expect(typeof createAuthMiddleware).toBe("function");
+  });
+});
+
+// Issue #46 (BR-19, api-spec §1.5/§1.7): explicit role gate for cutover
+// routes. Runs after requireSession/requireActiveUser; wrong role → 403
+// BEFORE resource processing, missing user → 401 (defensive).
+describe("requireRole (explicit role gate)", () => {
+  function buildRoleApp(user: Record<string, unknown> | null, ...roles: string[]) {
+    let sessionLoaderCalls = 0;
+    let resourceLookups = 0;
+    const { requireSession, requireActiveUser, requireRole } = createAuthMiddleware({
+      loadSession: async () => {
+        sessionLoaderCalls += 1;
+        if (!user) return null;
+        return {
+          session: { id: 1, userId: 12, expiresAt: futureExpiry() },
+          user: user as never,
+        };
+      },
+    });
+    const app = express();
+    app.get(
+      "/api/tickets",
+      requireSession,
+      requireActiveUser,
+      requireRole(...roles),
+      (_req, res) => {
+        resourceLookups += 1;
+        res.status(200).json({ ok: true });
+      }
+    );
+    return { app, getSessionLoaderCalls: () => sessionLoaderCalls, getLookups: () => resourceLookups };
+  }
+
+  it("allowed role passes to the handler", async () => {
+    const { app, getLookups } = buildRoleApp(fakeUser({ role: "REQUESTER" }), "REQUESTER");
+    const res = await request(app)
+      .get("/api/tickets")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${RAW_TOKEN}`);
+    expect(res.status).toBe(200);
+    expect(getLookups()).toBe(1);
+  });
+
+  it("wrong role -> 403 FORBIDDEN before resource lookup", async () => {
+    for (const role of ["IT_STAFF", "ADMINISTRATOR"]) {
+      const { app, getSessionLoaderCalls, getLookups } = buildRoleApp(
+        fakeUser({ role }),
+        "REQUESTER"
+      );
+      const res = await request(app)
+        .get("/api/tickets")
+        .set("Cookie", `${SESSION_COOKIE_NAME}=${RAW_TOKEN}`);
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({
+        error: { code: FORBIDDEN_CODE, message: FORBIDDEN_MESSAGE },
+      });
+      expect(getSessionLoaderCalls()).toBe(1);
+      expect(getLookups()).toBe(0);
+    }
+  });
+
+  it("missing user -> 401 UNAUTHENTICATED", async () => {
+    const { app, getLookups } = buildRoleApp(null, "REQUESTER");
+    const res = await request(app)
+      .get("/api/tickets")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${RAW_TOKEN}`);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      error: { code: UNAUTHENTICATED_CODE, message: expect.any(String) },
+    });
+    expect(getLookups()).toBe(0);
+  });
+
+  it("defensive: no user attached on the request -> 401 even without the session chain", async () => {
+    const { requireRole } = createAuthMiddleware();
+    const app = express();
+    app.get("/probe", requireRole("REQUESTER"), (_req, res) => res.status(200).json({ ok: true }));
+    const res = await request(app).get("/probe");
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      error: { code: UNAUTHENTICATED_CODE, message: expect.any(String) },
+    });
+  });
+
+  it("forbidden code constant matches the wire code", () => {
+    expect(FORBIDDEN_CODE).toBe("FORBIDDEN");
   });
 });

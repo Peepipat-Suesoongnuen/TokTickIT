@@ -4,22 +4,37 @@ import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
 import AppShell from "../../../components/AppShell";
 import AttachmentSection, { Attachment } from "../../../components/AttachmentSection";
+import { PriorityBadge, StatusBadge } from "../../../components/Badges.js";
 import CreateTicket from "../../../pages/CreateTicket";
 import MyTickets from "../../../pages/MyTickets";
-import { RequesterProvider } from "../../../contexts/RequesterContext";
+import { AuthContext } from "../../../contexts/AuthContext";
 import * as api from "../../../api.js";
 
 vi.mock("../../../api.js");
 
-const requester = { id: 41, name: "Style Test Requester", email: "style@test.local" };
+const authUser = {
+  id: 41,
+  name: "Style Test Requester",
+  email: "style@test.local",
+  role: "REQUESTER",
+  active: true,
+  mustChangePassword: false,
+};
 
-function withRequester(ui: React.ReactNode) {
-  localStorage.setItem("toktickit.requester", JSON.stringify(requester));
+function withAuth(ui: React.ReactNode) {
   return render(
     <BrowserRouter>
-      <RequesterProvider>{ui}</RequesterProvider>
+      <AuthContext.Provider
+        value={{ user: authUser, loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}
+      >
+        {ui}
+      </AuthContext.Provider>
     </BrowserRouter>
   );
+}
+
+function withoutRequester(ui: React.ReactNode) {
+  return render(<BrowserRouter>{ui}</BrowserRouter>);
 }
 
 function mockReferenceData() {
@@ -34,19 +49,16 @@ beforeEach(() => {
 
 describe("Lab 2 UI style contract", () => {
   it("STYLE-01: shell header and primary Create action use Zen Green token classes", async () => {
-    withRequester(<AppShell><p>content</p></AppShell>);
+    withoutRequester(<AppShell><p>content</p></AppShell>);
     expect(screen.getByRole("banner")).toHaveClass("zen-header");
 
     mockReferenceData();
-    withRequester(<CreateTicket />);
+    withAuth(<CreateTicket />);
     await waitFor(() => expect(screen.getByLabelText(/Category/)).toBeEnabled());
     expect(screen.getByRole("button", { name: "Submit Ticket" })).toHaveClass("btn-zen-primary");
   });
 
-  it("STYLE-02/03: selected-state and priority/status badge classes map to documented tokens", async () => {
-    withRequester(<AppShell><p>content</p></AppShell>);
-    expect(screen.getByText(requester.name).closest(".zen-selected")).not.toBeNull();
-
+  it("STYLE-02/03: priority/status badge classes map to documented tokens", async () => {
     vi.mocked(api.fetchCategories).mockResolvedValue([{ id: 11, name: "Hardware" }]);
     vi.mocked(api.listTickets).mockResolvedValue({
       data: [{
@@ -63,16 +75,42 @@ describe("Lab 2 UI style contract", () => {
       meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
     });
 
-    withRequester(<MyTickets />);
+    withoutRequester(<MyTickets />);
     const priority = await screen.findAllByText("CRITICAL", { selector: ".badge" });
     const status = await screen.findAllByText("NEW", { selector: ".badge" });
     expect(priority[0]).toHaveClass("badge-priority-critical");
     expect(status[0]).toHaveClass("badge-status-new");
   });
 
+  it("STYLE-02/03: every Lab 3 status maps to its themed badge class", async () => {
+    const cases: Array<[string, string]> = [
+      ["NEW", "badge-status-new"],
+      ["OPEN", "badge-status-open"],
+      ["IN_PROGRESS", "badge-status-in-progress"],
+      ["WAITING_FOR_REQUESTER", "badge-status-waiting"],
+      ["RESOLVED", "badge-status-resolved"],
+      ["REOPENED", "badge-status-reopened"],
+      ["CLOSED", "badge-status-closed"],
+      ["CANCELLED", "badge-status-cancelled"],
+    ];
+    const { unmount } = render(
+      <>
+        {cases.map(([value]) => (
+          <StatusBadge key={value} value={value} />
+        ))}
+        <PriorityBadge value="LOW" />
+      </>,
+    );
+    for (const [value, cls] of cases) {
+      expect(screen.getByText(value)).toHaveClass(cls);
+    }
+    expect(screen.getByText("LOW")).toHaveClass("badge-priority-low");
+    unmount();
+  });
+
   it("STYLE-04/05: required markers and read-only fields are explicitly distinguishable", async () => {
     mockReferenceData();
-    withRequester(<CreateTicket />);
+    withAuth(<CreateTicket />);
     await waitFor(() => expect(api.fetchCategories).toHaveBeenCalled());
 
     expect(screen.getAllByText("*", { selector: ".required-marker" }).length).toBeGreaterThanOrEqual(5);
@@ -82,7 +120,7 @@ describe("Lab 2 UI style contract", () => {
   });
 
   it("UI-19: global focus-visible rule and mobile nav button expose keyboard/accessibility semantics", async () => {
-    withRequester(<AppShell><p>content</p></AppShell>);
+    withoutRequester(<AppShell><p>content</p></AppShell>);
     const menu = screen.getByRole("button", { name: "Toggle navigation" });
     expect(menu).toHaveAttribute("aria-expanded", "false");
     expect(menu).toHaveAttribute("aria-controls", "lab2-navigation");
@@ -95,7 +133,7 @@ describe("Lab 2 UI style contract", () => {
 
   it("UI-19: Create Ticket moves focus to the first invalid field", async () => {
     mockReferenceData();
-    withRequester(<CreateTicket />);
+    withAuth(<CreateTicket />);
     await waitFor(() => expect(screen.getByLabelText(/Category/)).toBeEnabled());
 
     await userEvent.click(screen.getByRole("button", { name: "Submit Ticket" }));
@@ -137,12 +175,12 @@ describe("Lab 2 UI style contract", () => {
   });
 
   it("UI-20: responsive proxy classes are applied to navigation and Create actions", async () => {
-    withRequester(<AppShell><p>content</p></AppShell>);
+    withoutRequester(<AppShell><p>content</p></AppShell>);
     expect(screen.getByRole("button", { name: "Toggle navigation" })).toHaveClass("lab2-nav-toggle");
     expect(document.getElementById("lab2-navigation")).toHaveClass("lab2-nav-links");
 
     mockReferenceData();
-    withRequester(<CreateTicket />);
+    withAuth(<CreateTicket />);
     await waitFor(() => expect(screen.getByLabelText(/Category/)).toBeEnabled());
     expect(screen.getByRole("button", { name: "Submit Ticket" }).parentElement).toHaveClass("lab2-mobile-stack");
   });

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useRequester } from "../contexts/RequesterContext";
 import { getTicketDetail, downloadAttachment, removeAttachment, uploadAttachment } from "../api";
 import AttachmentSection, { Attachment, formatBangkok } from "../components/AttachmentSection";
+import { PriorityBadge, StatusBadge } from "../components/Badges.js";
 
 interface TicketDetailData {
   id: number;
@@ -22,7 +22,6 @@ interface TicketDetailData {
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
-  const { requester } = useRequester();
   const [ticket, setTicket] = useState<TicketDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +31,13 @@ export default function TicketDetail() {
   const requestSeq = useRef(0);
 
   async function load() {
-    if (!requester || !id) return;
+    if (!id) return;
     const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
     setNotFound(false);
     try {
-      const data = await getTicketDetail(Number(id), requester.id);
+      const data = await getTicketDetail(Number(id));
       if (seq !== requestSeq.current) return;
       setTicket(data);
     } catch (err: unknown) {
@@ -54,13 +53,13 @@ export default function TicketDetail() {
   useEffect(() => {
     load();
     return () => { requestSeq.current += 1; };
-  }, [id, requester?.id]);
+  }, [id]);
 
   async function handleUpload(file: File) {
-    if (!ticket || !requester) return;
+    if (!ticket) return;
     try {
       setUploadError(null);
-      await uploadAttachment(ticket.id, requester.id, file);
+      await uploadAttachment(ticket.id, file);
       await load();
     } catch (err: unknown) {
       const e = err as { body?: { error?: { message?: string } } };
@@ -69,20 +68,20 @@ export default function TicketDetail() {
   }
 
   async function handleDownload(attId: number) {
-    if (!ticket || !requester) return;
+    if (!ticket) return;
     try {
       setAttachmentError(null);
-      await downloadAttachment(attId, requester.id);
+      await downloadAttachment(attId);
     } catch (err: unknown) {
       setAttachmentError((err as { message?: string })?.message ?? "Unable to download attachment");
     }
   }
 
   async function handleRemove(attId: number, reason: string) {
-    if (!ticket || !requester) return;
+    if (!ticket) return;
     try {
       setAttachmentError(null);
-      await removeAttachment(attId, requester.id, reason);
+      await removeAttachment(attId, reason);
       await load();
     } catch (err: unknown) {
       const msg = (err as { body?: { error?: { message?: string } }; message?: string })?.body?.error?.message ?? (err as Error).message ?? "Unable to remove attachment";
@@ -139,8 +138,10 @@ export default function TicketDetail() {
               <textarea className="form-control form-readonly" value={ticket.description} readOnly rows={4} aria-label="Description" />
             </div>
             <div className="col-md-6">
-              <span className={`badge badge-priority-${ticket.requestedPriority.toLowerCase()}`}>{ticket.requestedPriority}</span>
-              <span className={`badge ms-2 ${ticket.currentStatus === "NEW" ? "badge-status-new" : ""}`}>{ticket.currentStatus}</span>
+              <PriorityBadge value={ticket.requestedPriority} />
+              <span className="ms-2">
+                <StatusBadge value={ticket.currentStatus} />
+              </span>
             </div>
           </div>
         </div>

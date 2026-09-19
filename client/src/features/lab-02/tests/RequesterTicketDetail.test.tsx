@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import TicketDetail from "../../../pages/TicketDetail";
 import * as api from "../../../api.js";
-import { RequesterProvider } from "../../../contexts/RequesterContext.js";
 import { formatBangkok } from "../../../components/AttachmentSection";
 
 vi.mock("../../../api.js");
@@ -22,17 +21,13 @@ function deferred<T>() {
 function renderDetail(initialPath = "/tickets/1") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
-      <RequesterProvider>
-        <Routes>
-          <Route path="/tickets/:id" element={<TicketDetail />} />
-          <Route path="/my-tickets" element={<div>My Tickets destination</div>} />
-        </Routes>
-      </RequesterProvider>
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetail />} />
+        <Route path="/my-tickets" element={<div>My Tickets destination</div>} />
+      </Routes>
     </MemoryRouter>
   );
 }
-
-const mockRequester = { id: 1, name: "Test User", email: "test@test.com" };
 
 const baseTicket = {
   id: 1,
@@ -53,7 +48,6 @@ const baseTicket = {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  localStorage.setItem("toktickit.requester", JSON.stringify(mockRequester));
 });
 
 afterEach(() => {

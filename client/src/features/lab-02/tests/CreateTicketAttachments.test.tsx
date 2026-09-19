@@ -4,10 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CreateTicket from "../../../pages/CreateTicket";
 import * as api from "../../../api.js";
-import { RequesterProvider } from "../../../contexts/RequesterContext.js";
+import { AuthContext } from "../../../contexts/AuthContext.js";
 
 vi.mock("../../../api.js");
 
+const authUser = {
+  id: 41,
+  name: "Issue 27 Requester",
+  email: "issue27-ui@test.local",
+  role: "REQUESTER",
+  active: true,
+  mustChangePassword: false,
+};
 const requester = { id: 41, name: "Issue 27 Requester", email: "issue27-ui@test.local" };
 const categories = [{ id: 11, name: "Hardware" }];
 const systems = [{ id: 21, name: "Email" }];
@@ -15,11 +23,13 @@ const systems = [{ id: 21, name: "Email" }];
 function renderCreateTicket() {
   return render(
     <MemoryRouter initialEntries={["/create"]}>
-      <RequesterProvider>
+      <AuthContext.Provider
+        value={{ user: authUser, loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}
+      >
         <Routes>
           <Route path="/create" element={<CreateTicket />} />
         </Routes>
-      </RequesterProvider>
+      </AuthContext.Provider>
     </MemoryRouter>,
   );
 }
@@ -59,7 +69,6 @@ function createdTicket(id: number, ticketNumber: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  localStorage.setItem("toktickit.requester", JSON.stringify(requester));
 });
 
 afterEach(() => {
@@ -88,7 +97,7 @@ describe("Create Ticket attachment evidence", () => {
     expect(screen.getByText("2609-0501")).toBeInTheDocument();
     expect(createSpy).toHaveBeenCalledTimes(1);
     expect(uploadSpy).toHaveBeenCalledTimes(1);
-    expect(uploadSpy).toHaveBeenCalledWith(501, requester.id, expect.objectContaining({ name: "evidence.png" }));
+    expect(uploadSpy).toHaveBeenCalledWith(501, expect.objectContaining({ name: "evidence.png" }));
     expect(screen.getByText(/evidence\.png — failed \(Upload service rejected the file\)/)).toBeInTheDocument();
 
     const retry = screen.getByRole("link", { name: "Retry from Ticket Detail" });

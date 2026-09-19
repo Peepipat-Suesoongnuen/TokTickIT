@@ -1,7 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useRequester } from "./contexts/RequesterContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import RequesterSelection from "./pages/RequesterSelection";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
 import AppShell from "./components/AppShell";
@@ -11,7 +9,6 @@ import TicketDetail from "./pages/TicketDetail";
 
 function GatedApp() {
   const { user, loading } = useAuth();
-  const { requester } = useRequester();
 
   if (loading) {
     return (
@@ -27,10 +24,6 @@ function GatedApp() {
 
   if (user.mustChangePassword) {
     return <ChangePassword />;
-  }
-
-  if (!requester) {
-    return <RequesterSelection />;
   }
 
   return (

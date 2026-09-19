@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { hashPassword } from "../../src/lib/password-hash.js";
+import { loginAs } from "../helpers/auth-test.js";
 
 const UPLOAD_DIR = path.resolve("uploads");
 
@@ -16,33 +18,30 @@ function pngBuffer(size = 1024): Buffer {
 
 describe("Initial attachment partial failure evidence (API-22 / AC-23)", () => {
   const prisma = getPrisma();
-  const requesterEmail = "api22-partial-upload@test.local";
+  // Issue #46 (Lab 3): session-derived ownership — fixture is a real loginable
+  // User; every request carries the session cookie, no requesterId is sent.
+  const requesterEmail = "lab2-initial-attachment@example.com";
+  const requesterPassword = "Lab2-Heal-Valid-9!";
   let requester: { id: number };
+  let cookie: string;
   let category: { id: number };
   let relatedSystem: { id: number };
 
   beforeAll(async () => {
-    const req = await prisma.developmentRequester.upsert({
-      where: { email: requesterEmail },
-      update: { name: "API 22 Partial Upload Requester", isActive: true },
-      create: { name: "API 22 Partial Upload Requester", email: requesterEmail, isActive: true },
-    });
-    requester = { id: req.id };
-    // Lab 3 healing: POST /api/tickets writes Ticket.requesterId → User(id) FK.
-    await prisma.user.upsert({
-      where: { id: req.id },
-      update: {},
-      create: {
-        id: req.id,
+    const passwordHash = await hashPassword(requesterPassword);
+    await prisma.user.deleteMany({ where: { email: requesterEmail } });
+    const req = await prisma.user.create({
+      data: {
         name: "API 22 Partial Upload Requester",
         email: requesterEmail,
-        passwordHash: "lab2-fixture-hash",
+        passwordHash,
         role: "REQUESTER",
         isActive: true,
-        mustChangePassword: true,
-        failedLoginAttempts: 0,
+        mustChangePassword: false,
       },
     });
+    requester = { id: req.id };
+    cookie = await loginAs(requesterEmail, requesterPassword);
 
     const cat = await prisma.category.findFirst({ where: { isActive: true }, orderBy: { name: "asc" } });
     const system = await prisma.relatedSystem.findFirst({ where: { isActive: true }, orderBy: { name: "asc" } });
@@ -55,7 +54,6 @@ describe("Initial attachment partial failure evidence (API-22 / AC-23)", () => {
     if (requester) {
       await prisma.ticket.deleteMany({ where: { requesterId: requester.id } });
     }
-    await prisma.developmentRequester.deleteMany({ where: { email: requesterEmail } });
     await prisma.user.deleteMany({ where: { email: requesterEmail } });
   });
 
@@ -66,8 +64,8 @@ describe("Initial attachment partial failure evidence (API-22 / AC-23)", () => {
     try {
       const created = await request(app)
         .post("/api/tickets")
+        .set("Cookie", cookie)
         .send({
-          requesterId: requester.id,
           categoryId: category.id,
           relatedSystemId: relatedSystem.id,
           summary: "Partial attachment upload evidence",
@@ -79,19 +77,22 @@ describe("Initial attachment partial failure evidence (API-22 / AC-23)", () => {
       ticketId = created.body.id;
 
       const successfulUpload = await request(app)
-        .post(`/api/tickets/${ticketId}/attachments?requesterId=${requester.id}`)
+        .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Cookie", cookie)
         .attach("file", pngBuffer(2048), { filename: "saved-evidence.png", contentType: "image/png" })
         .expect(201);
       successfulAttachmentId = successfulUpload.body.id;
 
       const failedUpload = await request(app)
-        .post(`/api/tickets/${ticketId}/attachments?requesterId=${requester.id}`)
+        .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Cookie", cookie)
         .attach("file", Buffer.from("not permitted"), { filename: "rejected.txt", contentType: "text/plain" })
         .expect(415);
       expect(failedUpload.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
 
       const detail = await request(app)
-        .get(`/api/tickets/${ticketId}?requesterId=${requester.id}`)
+        .get(`/api/tickets/${ticketId}`)
+        .set("Cookie", cookie)
         .expect(200);
 
       expect(detail.body.id).toBe(ticketId);

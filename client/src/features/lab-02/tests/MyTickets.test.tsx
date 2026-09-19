@@ -4,16 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
 import MyTickets, { formatBangkok } from "../../../pages/MyTickets";
 import * as api from "../../../api.js";
-import { RequesterProvider } from "../../../contexts/RequesterContext.js";
 
 vi.mock("../../../api.js");
 
 function renderWithProviders() {
   return render(
     <BrowserRouter>
-      <RequesterProvider>
-        <MyTickets />
-      </RequesterProvider>
+      <MyTickets />
     </BrowserRouter>
   );
 }
@@ -39,7 +36,6 @@ afterEach(() => {
 });
 
 describe("MyTickets", () => {
-  const mockRequester = { id: 1, name: "Test User", email: "test@test.com" };
   const mockCategories = [{ id: 1, name: "Hardware" }, { id: 2, name: "Software" }];
   const mockSystems = [{ id: 1, name: "Email" }, { id: 2, name: "VPN" }];
   const mockTickets = [
@@ -70,7 +66,7 @@ describe("MyTickets", () => {
   ];
 
   beforeEach(() => {
-    localStorage.setItem("toktickit.requester", JSON.stringify({ id: 1, name: "Test User", email: "test@test.com" }));
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -513,81 +509,6 @@ describe("MyTickets", () => {
       await userEvent.click(screen.getByRole("button", { name: "Retry" }));
       await waitFor(() => expect(screen.getAllByText("2608-0001").length).toBeGreaterThan(0), { timeout: 3000 });
       expect(listSpy).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe("Requester race protection", () => {
-    it("keeps requester B tickets when requester A resolves later", async () => {
-      const requesterAResult = deferred<any>();
-      const requesterBResult = deferred<any>();
-      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
-      vi.spyOn(api, "listTickets").mockImplementation(({ requesterId }) =>
-        requesterId === 1 ? requesterAResult.promise : requesterBResult.promise
-      );
-
-      renderWithProviders();
-      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 1 })));
-
-      const requesterB = { id: 2, name: "Requester B", email: "b@test.com" };
-      localStorage.setItem("toktickit.requester", JSON.stringify(requesterB));
-      act(() => {
-        window.dispatchEvent(new StorageEvent("storage", {
-          key: "toktickit.requester",
-          newValue: JSON.stringify(requesterB),
-        }));
-      });
-      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 2 })));
-
-      await act(async () => {
-        requesterBResult.resolve({
-          data: [{ id: 2, ticketNumber: "B-0001", summary: "Requester B ticket", category: { name: "Hardware" }, requestedPriority: "LOW", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" }],
-          meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
-        });
-      });
-      await waitFor(() => expect(screen.getAllByText("B-0001").length).toBeGreaterThan(0));
-
-      await act(async () => {
-        requesterAResult.resolve({
-          data: [{ id: 1, ticketNumber: "A-0001", summary: "Requester A ticket", category: { name: "Hardware" }, requestedPriority: "HIGH", currentStatus: "NEW", ticketDate: "2026-08-20T09:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" }],
-          meta: { page: 1, pageSize: 10, totalCount: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
-        });
-      });
-
-      expect(screen.queryByText("A-0001")).not.toBeInTheDocument();
-      expect(screen.getAllByText("B-0001").length).toBeGreaterThan(0);
-    });
-
-    it("ignores a stale requester failure without ending the latest loading state", async () => {
-      const requesterAResult = deferred<any>();
-      const requesterBResult = deferred<any>();
-      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
-      vi.spyOn(api, "listTickets").mockImplementation(({ requesterId }) =>
-        requesterId === 1 ? requesterAResult.promise : requesterBResult.promise
-      );
-
-      renderWithProviders();
-      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 1 })));
-
-      const requesterB = { id: 2, name: "Requester B", email: "b@test.com" };
-      act(() => {
-        window.dispatchEvent(new StorageEvent("storage", {
-          key: "toktickit.requester",
-          newValue: JSON.stringify(requesterB),
-        }));
-      });
-      await waitFor(() => expect(api.listTickets).toHaveBeenCalledWith(expect.objectContaining({ requesterId: 2 })));
-
-      await act(async () => requesterAResult.reject(new Error("stale requester failure")));
-      expect(screen.getByText("Loading tickets…")).toBeInTheDocument();
-      expect(screen.queryByText("Unable to connect to TokTickIT API")).not.toBeInTheDocument();
-
-      await act(async () => {
-        requesterBResult.resolve({
-          data: [],
-          meta: { page: 1, pageSize: 10, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
-        });
-      });
-      await waitFor(() => expect(screen.queryByText("Loading tickets…")).not.toBeInTheDocument());
     });
   });
 

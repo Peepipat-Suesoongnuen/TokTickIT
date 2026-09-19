@@ -2,32 +2,23 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { hashPassword } from "../../src/lib/password-hash.js";
+import { loginAs } from "../helpers/auth-test.js";
 
 describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   const prisma = getPrisma();
+  // Issue #46 (Lab 3): session-derived ownership — fixtures are real loginable
+  // Users; every request carries the session cookie, no requesterId is sent.
+  const emailA = "lab2-mytickets-a@example.com";
+  const emailB = "lab2-mytickets-b@example.com";
+  const password = "Lab2-Heal-Valid-9!";
   let requesterA: { id: number };
   let requesterB: { id: number };
+  let cookieA: string;
+  let cookieB: string;
   let category: { id: number };
   let relatedSystem: { id: number };
-
-  // Lab 3 healing: Ticket.requesterId now FKs User(id), while routes still
-  // validate against DevelopmentRequester — mirror each fixture as a same-id User.
-  async function mirrorUser(id: number, name: string, email: string, isActive = true) {
-    await prisma.user.upsert({
-      where: { id },
-      update: {},
-      create: {
-        id,
-        name,
-        email,
-        passwordHash: "lab2-fixture-hash",
-        role: "REQUESTER",
-        isActive,
-        mustChangePassword: true,
-        failedLoginAttempts: 0,
-      },
-    });
-  }
+  const INACTIVE_EMAIL = "lab2-inactive-mytickets@example.com";
 
   beforeAll(async () => {
     // Isolated fixture: clean only this suite's data (by unique ticketNumbers/emails)
@@ -48,22 +39,31 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
     });
     relatedSystem = sys;
 
-    // Create two active requesters
-    const reqA = await prisma.developmentRequester.upsert({
-      where: { email: "requesterA@test.com" },
-      update: {},
-      create: { name: "Requester A", email: "requesterA@test.com", isActive: true },
-    });
-    requesterA = { id: reqA.id };
-    await mirrorUser(reqA.id, "Requester A", "requesterA@test.com");
-
-    const reqB = await prisma.developmentRequester.upsert({
-      where: { email: "requesterB@test.com" },
-      update: {},
-      create: { name: "Requester B", email: "requesterB@test.com", isActive: true },
-    });
-    requesterB = { id: reqB.id };
-    await mirrorUser(reqB.id, "Requester B", "requesterB@test.com");
+    // Create two active requesters (loginable Users)
+    const passwordHash = await hashPassword(password);
+    await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB] } } });
+    const [userA, userB] = await Promise.all(
+      [
+        { name: "Requester A", email: emailA },
+        { name: "Requester B", email: emailB },
+      ].map((u) =>
+        prisma.user.create({
+          data: {
+            name: u.name,
+            email: u.email,
+            passwordHash,
+            role: "REQUESTER",
+            isActive: true,
+            mustChangePassword: false,
+          },
+          select: { id: true },
+        })
+      )
+    );
+    requesterA = { id: userA.id };
+    requesterB = { id: userB.id };
+    cookieA = await loginAs(emailA, password);
+    cookieB = await loginAs(emailB, password);
 
     // Create test tickets
     await prisma.ticket.createMany({
@@ -116,18 +116,16 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
   afterAll(async () => {
     await prisma.ticket.deleteMany({ where: { ticketNumber: { in: ["2608-0001", "2608-0002", "2608-0003"] } } });
-    await prisma.developmentRequester.deleteMany({
-      where: { email: { in: ["requesterA@test.com", "requesterB@test.com", "inactive2@test.com"] } },
-    });
     await prisma.user.deleteMany({
-      where: { email: { in: ["requesterA@test.com", "requesterB@test.com", "inactive2@test.com"] } },
+      where: { email: { in: [emailA, emailB, INACTIVE_EMAIL] } },
     });
   });
 
   describe("Ownership enforcement (AC-11)", () => {
     it("should return only requester's own tickets (API-08)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}`)
+        .get(`/api/tickets`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(2);
@@ -137,7 +135,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should not return other requester's tickets (AC-11)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterB.id}`)
+        .get(`/api/tickets`)
+        .set("Cookie", cookieB)
         .expect(200);
 
       expect(res.body.data).toHaveLength(1);
@@ -147,7 +146,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should include official ticketDate in My Tickets list items (Issue 12C)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&sort=ticketNumber&order=asc`)
+        .get(`/api/tickets?sort=ticketNumber&order=asc`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(2);
@@ -174,7 +174,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   describe("Search (AC-12)", () => {
     it("should find tickets by summary case-insensitive (AC-12, API-09)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&search=battery`)
+        .get(`/api/tickets?search=battery`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(1);
@@ -183,7 +184,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should find tickets by Ticket Number partial match (AC-12, API-09)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&search=0002`)
+        .get(`/api/tickets?search=0002`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(1);
@@ -192,7 +194,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should not match a term that exists only in Description (AC-12, API-09)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&search=timeout`)
+        .get(`/api/tickets?search=timeout`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(0);
@@ -201,7 +204,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for whitespace-only search (AC-12)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&search=   `)
+        .get(`/api/tickets?search=   `)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
@@ -212,7 +216,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   describe("Filtering (AC-13)", () => {
     it("should filter by categoryId valid value (AC-13, API-10)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&categoryId=${category.id}`)
+        .get(`/api/tickets?categoryId=${category.id}`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data.length).toBeGreaterThan(0);
@@ -221,7 +226,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for non-existent categoryId (AC-13, API-10)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&categoryId=9999`)
+        .get(`/api/tickets?categoryId=9999`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
@@ -235,7 +241,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       });
       try {
         const res = await request(app)
-          .get(`/api/tickets?requesterId=${requesterA.id}&categoryId=${inactive.id}`)
+          .get(`/api/tickets?categoryId=${inactive.id}`)
+          .set("Cookie", cookieA)
           .expect(400);
         expect(res.body.error.code).toBe("VALIDATION_FAILED");
         expect(res.body.fieldErrors.categoryId).toBeDefined();
@@ -246,7 +253,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should filter by requestedPriority (AC-13, API-10)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&requestedPriority=CRITICAL`)
+        .get(`/api/tickets?requestedPriority=CRITICAL`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(1);
@@ -255,7 +263,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should filter by currentStatus NEW (Issue 12C)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&currentStatus=NEW`)
+        .get(`/api/tickets?currentStatus=NEW`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(2);
@@ -266,7 +275,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   describe("Sorting (AC-14, BR-21)", () => {
     it("should sort by updatedAt DESC by default (AC-14, API-11)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}`)
+        .get(`/api/tickets`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       const timestamps = res.body.data.map((t: any) => new Date(t.updatedAt).getTime());
@@ -277,7 +287,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should sort by requestedPriority with custom rank (AC-14, BR-21)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&sort=requestedPriority&order=asc`)
+        .get(`/api/tickets?sort=requestedPriority&order=asc`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       const priorities = res.body.data.map((t: any) => t.requestedPriority);
@@ -289,7 +300,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       ["desc", ["2608-0002", "2608-0001"]],
     ] as const)("should sort by Ticket Number %s (AC-14, API-11)", async (order, expected) => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&sort=ticketNumber&order=${order}`)
+        .get(`/api/tickets?sort=ticketNumber&order=${order}`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data.map((ticket: { ticketNumber: string }) => ticket.ticketNumber)).toEqual(expected);
@@ -318,7 +330,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       );
       try {
         const res = await request(app)
-          .get(`/api/tickets?requesterId=${requesterA.id}&sort=${sortField}&order=desc&pageSize=10`)
+          .get(`/api/tickets?sort=${sortField}&order=desc&pageSize=10`)
+          .set("Cookie", cookieA)
           .expect(200);
         const tieIds = res.body.data
           .filter((ticket: { ticketNumber: string }) => ticket.ticketNumber.startsWith("2699-99"))
@@ -345,7 +358,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       });
       try {
         const res = await request(app)
-          .get(`/api/tickets?requesterId=${requesterA.id}&sort=requestedPriority&order=asc`)
+          .get(`/api/tickets?sort=requestedPriority&order=asc`)
+          .set("Cookie", cookieA)
           .expect(200);
         const highIds = res.body.data
           .filter((ticket: { requestedPriority: string }) => ticket.requestedPriority === "HIGH")
@@ -361,7 +375,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   describe("Pagination (AC-15)", () => {
     it("should paginate with page and pageSize (AC-15, API-12)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&page=1&pageSize=10`)
+        .get(`/api/tickets?page=1&pageSize=10`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(2);
@@ -379,7 +394,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it.each([10, 20, 50])("should accept pageSize %i", async (pageSize) => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&page=1&pageSize=${pageSize}`)
+        .get(`/api/tickets?page=1&pageSize=${pageSize}`)
+        .set("Cookie", cookieA)
         .expect(200);
       expect(res.body.meta.pageSize).toBe(pageSize);
       expect(res.body.data).toHaveLength(2);
@@ -387,7 +403,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return empty data with valid meta when page > totalPages (AC-15)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&page=10&pageSize=10`)
+        .get(`/api/tickets?page=10&pageSize=10`)
+        .set("Cookie", cookieA)
         .expect(200);
 
       expect(res.body.data).toHaveLength(0);
@@ -400,7 +417,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   describe("Strict query contract (AC-16)", () => {
     it("should return 400 for unknown parameter (AC-16, API-13)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&unknownParam=foo`)
+        .get(`/api/tickets?unknownParam=foo`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
@@ -409,7 +427,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid page (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&page=0`)
+        .get(`/api/tickets?page=0`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.page).toBeDefined();
@@ -417,7 +436,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid pageSize (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&pageSize=15`)
+        .get(`/api/tickets?pageSize=15`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.pageSize).toBeDefined();
@@ -425,7 +445,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid sort field (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&sort=invalid`)
+        .get(`/api/tickets?sort=invalid`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.sort).toBeDefined();
@@ -433,7 +454,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid order (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&order=invalid`)
+        .get(`/api/tickets?order=invalid`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.order).toBeDefined();
@@ -441,7 +463,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid priority value", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&requestedPriority=INVALID`)
+        .get(`/api/tickets?requestedPriority=INVALID`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.requestedPriority).toBeDefined();
@@ -449,7 +472,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid currentStatus value", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&currentStatus=CLOSED`)
+        .get(`/api/tickets?currentStatus=CLOSED`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.currentStatus).toBeDefined();
@@ -457,7 +481,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for duplicate query param (AC-16)", async () => {
       const res = await request(app)
-        .get(`/api/tickets?requesterId=${requesterA.id}&page=1&page=2`)
+        .get(`/api/tickets?page=1&page=2`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.page).toBeDefined();
@@ -466,6 +491,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
     it("should return 400 for duplicate requesterId (AC-16)", async () => {
       const res = await request(app)
         .get(`/api/tickets?requesterId=${requesterA.id}&requesterId=${requesterB.id}`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.requesterId).toBeDefined();
@@ -474,6 +500,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
     it("should return 400 for unsafe integer requesterId (AC-16)", async () => {
       const res = await request(app)
         .get(`/api/tickets?requesterId=9007199254740992`)
+        .set("Cookie", cookieA)
         .expect(400);
 
       expect(res.body.fieldErrors.requesterId).toBeDefined();
@@ -481,27 +508,43 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
   });
 
   describe("Ownership and access control", () => {
-    it("should return 400 for missing requesterId", async () => {
+    it("should return own tickets without requesterId (session-derived owner)", async () => {
       const res = await request(app)
         .get(`/api/tickets`)
-        .expect(400);
+        .set("Cookie", cookieA)
+        .expect(200);
 
-      expect(res.body.fieldErrors.requesterId).toBeDefined();
+      expect(res.body.data).toHaveLength(2);
+      expect(res.body.data.every((t: any) => t.requester?.id === requesterA.id)).toBe(true);
+      expect(res.body.meta.totalCount).toBe(2);
     });
 
     it("should return 400 for inactive requesterId", async () => {
-      // Create inactive requester
-      const inactive = await getPrisma().developmentRequester.upsert({
-        where: { email: "inactive2@test.com" },
-        update: { isActive: false },
-        create: { name: "Inactive", email: "inactive2@test.com", isActive: false },
+      // Inactive user can never own the session — a client-supplied
+      // requesterId is rejected as an unknown parameter either way.
+      const passwordHash = await hashPassword(password);
+      await prisma.user.deleteMany({ where: { email: INACTIVE_EMAIL } });
+      const inactive = await prisma.user.create({
+        data: {
+          name: "Inactive",
+          email: INACTIVE_EMAIL,
+          passwordHash,
+          role: "REQUESTER",
+          isActive: false,
+          mustChangePassword: false,
+        },
       });
 
-      const res = await request(app)
-        .get(`/api/tickets?requesterId=${inactive.id}`)
-        .expect(400);
+      try {
+        const res = await request(app)
+          .get(`/api/tickets?requesterId=${inactive.id}`)
+          .set("Cookie", cookieA)
+          .expect(400);
 
-      expect(res.body.fieldErrors.requesterId).toBeDefined();
+        expect(res.body.fieldErrors.requesterId).toBeDefined();
+      } finally {
+        await prisma.user.delete({ where: { id: inactive.id } });
+      }
     });
   });
 
@@ -510,7 +553,8 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       const countSpy = vi.spyOn(prisma.ticket, "count").mockRejectedValueOnce(new Error("SQL connection details"));
       try {
         const res = await request(app)
-          .get(`/api/tickets?requesterId=${requesterA.id}`)
+          .get(`/api/tickets`)
+          .set("Cookie", cookieA)
           .expect(500);
         expect(res.body).toEqual({
           error: {

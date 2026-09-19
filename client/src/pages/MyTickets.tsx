@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listTickets, fetchCategories, Category, TicketListItem, TicketListMeta } from "../api";
-import { useRequester } from "../contexts/RequesterContext";
 
 export function formatBangkok(dateStr: string): string {
   const date = new Date(dateStr);
@@ -23,17 +22,9 @@ export function formatBangkok(dateStr: string): string {
   return `${value("year")}-${value("month")}-${value("day")} ${value("hour")}:${value("minute")}:${value("second")}`;
 }
 
-function PriorityBadge({ value }: { value: string }) {
-  const token = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(value) ? value.toLowerCase() : "low";
-  return <span className={`badge badge-priority-${token}`}>{value}</span>;
-}
-
-function StatusBadge({ value }: { value: string }) {
-  return <span className={`badge ${value === "NEW" ? "badge-status-new" : ""}`}>{value}</span>;
-}
+import { PriorityBadge, StatusBadge } from "../components/Badges.js";
 
 export default function MyTickets() {
-  const { requester } = useRequester();
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
@@ -112,20 +103,18 @@ export default function MyTickets() {
     setData([]);
     setMeta(null);
     setError("");
-    if (requester) void loadCategories();
+    void loadCategories();
     return () => {
       categoryRequestSequence.current += 1;
     };
-  }, [requester?.id]);
+  }, []);
 
   const load = async () => {
-    if (!requester) return;
     const requestSequence = ++ticketRequestSequence.current;
     setLoading(true);
     setError("");
     try {
       const res = await listTickets({
-        requesterId: requester.id,
         search: debouncedSearch || undefined,
         categoryId: categoryId ? Number(categoryId) : undefined,
         requestedPriority: priority || undefined,
@@ -156,9 +145,7 @@ export default function MyTickets() {
     return () => {
       ticketRequestSequence.current += 1;
     };
-  }, [requester?.id, debouncedSearch, categoryId, priority, currentStatus, sort, order, page, pageSize]);
-
-  if (!requester) return null;
+  }, [debouncedSearch, categoryId, priority, currentStatus, sort, order, page, pageSize]);
 
   const clearFilters = () => {
     setSearch("");

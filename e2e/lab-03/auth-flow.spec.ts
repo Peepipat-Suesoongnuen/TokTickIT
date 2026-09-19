@@ -16,8 +16,6 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { getTestDatabaseUrl } from "../lab-02/test-env";
 
-const API_URL = "http://127.0.0.1:3100";
-
 const E2E_NAME = "E2E Auth";
 const E2E_EMAIL = "e2e-auth@example.com";
 // Policy-shaped (upper + lower + special, 8-64 chars) and distinct from each other.
@@ -55,13 +53,7 @@ test.afterAll(() => {
 
 test("E2E-AUTH-01 valid login -> change password -> shell identity -> logout -> protected route", async ({
   page,
-  request,
 }) => {
-  const response = await request.get(`${API_URL}/api/requesters`);
-  expect(response.ok()).toBeTruthy();
-  const requesters = (await response.json()) as { id: number; name: string }[];
-  expect(requesters.length).toBeGreaterThan(0);
-
   // Valid login lands on the mandatory change-password gate.
   await page.goto("/");
   await page.locator("#login-email").fill(E2E_EMAIL);
@@ -75,10 +67,8 @@ test("E2E-AUTH-01 valid login -> change password -> shell identity -> logout -> 
   await page.locator("#cp-confirm").fill(NEW_PASSWORD);
   await page.getByRole("button", { name: "Change Password" }).click();
 
-  // Shell requires a development requester; then identity shows name+role.
-  await expect(page.getByLabel("Development Requester")).toBeVisible();
-  await page.getByLabel("Development Requester").selectOption(String(requesters[0].id));
-  await page.getByRole("button", { name: "Continue" }).click();
+  // Issue #46: the requester selector is deleted — the change gate lands
+  // directly in the authenticated shell, where identity shows name+role.
   await expect(page.locator(".lab3-user-menu")).toContainText(E2E_NAME);
   await expect(page.locator(".lab3-user-menu")).toContainText("REQUESTER");
 
