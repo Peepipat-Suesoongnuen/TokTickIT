@@ -18,6 +18,7 @@ import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePassword
 import { UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE } from "./auth.js";
 import type { AuthRequest, AuthUserRow } from "./auth.js";
 import authRouter from "./routes/auth.js";
+import staffRouter from "./routes/staff.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -87,6 +88,11 @@ app.get("/api/health", (_req: Request, res: Response) => {
 // follow in later tasks). Mounted at /api/auth; the router owns its Origin
 // gate so login is protected before any credential processing.
 app.use("/api/auth", authRouter);
+
+// Issue #48 (Lab 3) — IT Staff Ticket workspace (api-spec §§8–11).
+// The router owns Staff/Admin role gating; Requester is rejected with 403
+// before Ticket-specific data is exposed.
+app.use("/api/staff", staffRouter);
 
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list (evolved in Lab 2)

@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext.js";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -10,6 +10,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const auth = useContext(AuthContext);
   const user = auth?.user ?? null;
   const navigate = useNavigate();
+  const location = useLocation();
+  // Issue #48 — dense Staff/Admin screens use the wider ~1360px content
+  // area from the approved mockups (agent.md §14); Requester keeps 1200px.
+  const wide = location.pathname.startsWith("/staff");
+  // Issue #48 — role-aware primary navigation (FR-04): Requesters keep
+  // the Lab 2 ticket flow; IT Staff/Administrator navigate the shared
+  // Ticket Queue. Backend authorization enforces every operation.
+  // A null user (legacy standalone renders) keeps the requester links.
+  const staffWorkspace = user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR";
   const [navOpen, setNavOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -29,7 +38,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="zen-header text-white py-2">
-        <div className="container d-flex justify-content-between align-items-center lab2-header-row" style={{ maxWidth: 1200 }}>
+        <div className="container d-flex justify-content-between align-items-center lab2-header-row" style={{ maxWidth: wide ? 1360 : 1200 }}>
           <span className="fw-bold">
             TokTickIT <span className="fw-normal small">IT Service Desk</span>
           </span>
@@ -87,7 +96,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <nav className="border-bottom bg-white" aria-label="Primary navigation">
-        <div className="container py-2" style={{ maxWidth: 1200 }}>
+        <div className="container py-2" style={{ maxWidth: wide ? 1360 : 1200 }}>
           <button
             type="button"
             className="btn btn-outline-success lab2-nav-toggle"
@@ -99,24 +108,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span aria-hidden="true">☰</span>
           </button>
           <div id="lab2-navigation" className={`lab2-nav-links ${navOpen ? "is-open" : ""}`}>
-            <NavLink
-              to="/my-tickets"
-              className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
-              onClick={() => setNavOpen(false)}
-            >
-              My Tickets
-            </NavLink>
-            <NavLink
-              to="/create"
-              className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
-              onClick={() => setNavOpen(false)}
-            >
-              Create Ticket
-            </NavLink>
+            {staffWorkspace ? (
+              <NavLink
+                to="/staff/queue"
+                className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
+                onClick={() => setNavOpen(false)}
+              >
+                Ticket Queue
+              </NavLink>
+            ) : (
+              <>
+                <NavLink
+                  to="/my-tickets"
+                  className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
+                  onClick={() => setNavOpen(false)}
+                >
+                  My Tickets
+                </NavLink>
+                <NavLink
+                  to="/create"
+                  className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
+                  onClick={() => setNavOpen(false)}
+                >
+                  Create Ticket
+                </NavLink>
+              </>
+            )}
           </div>
         </div>
       </nav>
-      <main className="container py-4" style={{ maxWidth: 1200 }}>
+      <main className="container py-4" style={{ maxWidth: wide ? 1360 : 1200 }}>
         {children}
       </main>
     </>

@@ -285,7 +285,164 @@ export async function changePassword(
   });
 }
 
-// Throwing on failure lets the UI show a single Offline/error state.
+// Issue #48 — IT Staff Ticket workspace (Lab 3 api-spec §§8–11).
+// Staff/Admin session only; Requester receives 403 from the backend.
+
+export interface StaffQueueParams {
+  search?: string;
+  categoryId?: number;
+  requestedPriority?: string;
+  itPriority?: string;
+  currentStatus?: string;
+  owner?: string;
+  sort?: string;
+  order?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface StaffTicketQueueItem {
+  id: number;
+  ticketNumber: string;
+  ticketDate: string;
+  summary: string;
+  requester: { id: number; name: string };
+  category: { id: number; name: string };
+  requestedPriority: string;
+  itPriority: string;
+  currentStatus: string;
+  ticketOwner: { id: number; name: string } | null;
+  requesterResolutionIndicatedAt: string | null;
+  updatedAt: string;
+}
+
+export interface StaffQueueResponse {
+  data: StaffTicketQueueItem[];
+  meta: TicketListMeta;
+}
+
+export interface EligibleOwner {
+  id: number;
+  name: string;
+  role: string;
+}
+
+export interface StaffTicketMutation {
+  id: number;
+  ticketNumber: string;
+  currentStatus: string;
+  requestedPriority: string;
+  itPriority: string;
+  ticketOwner: { id: number; name: string; role: string } | null;
+  requesterResolutionIndicatedAt: string | null;
+  updatedAt: string;
+}
+
+export interface StaffTicketDetail extends StaffTicketMutation {
+  ticketDate: string;
+  requester: { id: number; name: string; email: string };
+  category: { id: number; name: string };
+  relatedSystem: { id: number; name: string };
+  summary: string;
+  description: string;
+  attachments: Array<{
+    id: number;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+    removedAt: string | null;
+    removedReason: string | null;
+    createdAt: string;
+  }>;
+  createdAt: string;
+}
+
+export interface StaffApiFailure {
+  status: number;
+  body: {
+    error?: { code?: string; message?: string };
+    fieldErrors?: Record<string, string>;
+  } | null;
+}
+
+async function staffGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+async function staffMutate<T>(path: string, method: "POST" | "PATCH", payload: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+export async function listStaffTickets(params: StaffQueueParams): Promise<StaffQueueResponse> {
+  const qs = new URLSearchParams();
+  if (params.search !== undefined) qs.set("search", params.search);
+  if (params.categoryId !== undefined) qs.set("categoryId", String(params.categoryId));
+  if (params.requestedPriority !== undefined) qs.set("requestedPriority", params.requestedPriority);
+  if (params.itPriority !== undefined) qs.set("itPriority", params.itPriority);
+  if (params.currentStatus !== undefined) qs.set("currentStatus", params.currentStatus);
+  if (params.owner !== undefined) qs.set("owner", params.owner);
+  if (params.sort !== undefined) qs.set("sort", params.sort);
+  if (params.order !== undefined) qs.set("order", params.order);
+  if (params.page !== undefined) qs.set("page", String(params.page));
+  if (params.pageSize !== undefined) qs.set("pageSize", String(params.pageSize));
+  const suffix = qs.toString();
+  return staffGet<StaffQueueResponse>(`/api/staff/tickets${suffix ? `?${suffix}` : ""}`);
+}
+
+export async function getStaffTicketDetail(ticketId: number): Promise<StaffTicketDetail> {
+  return staffGet<StaffTicketDetail>(`/api/staff/tickets/${ticketId}`);
+}
+
+export async function listEligibleOwners(): Promise<{ data: EligibleOwner[] }> {
+  return staffGet<{ data: EligibleOwner[] }>("/api/staff/ticket-owners");
+}
+
+export async function claimStaffTicket(ticketId: number): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/claim`, "POST", {});
+}
+
+export async function assignStaffTicketOwner(
+  ticketId: number,
+  ownerId: number,
+  expectedOwnerId: number | null,
+): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/owner`, "PATCH", { ownerId, expectedOwnerId });
+}
+
+export async function setStaffTicketPriority(
+  ticketId: number,
+  itPriority: string,
+  expectedItPriority: string,
+): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/it-priority`, "PATCH", {
+    itPriority,
+    expectedItPriority,
+  });
+}
+
+export async function setStaffTicketStatus(
+  ticketId: number,
+  status: string,
+  expectedCurrentStatus: string,
+  ownerId?: number,
+): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/status`, "PATCH", {
+    status,
+    expectedCurrentStatus,
+    ...(ownerId === undefined ? {} : { ownerId }),
+  });
+}
 export async function checkSystem(): Promise<SystemStatus> {
   // A thrown fetch (network error) or a non-ok HTTP response must surface as a
   // single friendly message so the UI never shows the raw "Failed to fetch".

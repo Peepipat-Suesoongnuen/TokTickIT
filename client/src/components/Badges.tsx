@@ -16,5 +16,10 @@ export function PriorityBadge({ value }: { value: string }) {
 
 export function StatusBadge({ value }: { value: string }) {
   const cls = STATUS_CLASS[value] ?? "";
-  return <span className={`badge ${cls}`}>{value}</span>;
+  // Issue #48 — dense display: the long WAITING_FOR_REQUESTER enum is
+  // abbreviated so the badge fits its fixed frame. No title/aria-label
+  // override: extra accessible-name sources on this shared badge broke the
+  // Lab 2 A11Y-01 locator expectations (verified by bisect).
+  const display = value === "WAITING_FOR_REQUESTER" ? "Wait for Req." : value;
+  return <span className={`badge ${cls}`}>{display}</span>;
 }
