@@ -21,6 +21,7 @@ import { UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE } from "./auth.js";
 import type { AuthRequest, AuthUserRow } from "./auth.js";
 import authRouter from "./routes/auth.js";
 import staffRouter from "./routes/staff.js";
+import adminRouter from "./routes/admin.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -95,6 +96,11 @@ app.use("/api/auth", authRouter);
 // The router owns Staff/Admin role gating; Requester is rejected with 403
 // before Ticket-specific data is exposed.
 app.use("/api/staff", staffRouter);
+
+// Issue #50 (Lab 3) — Administrator User Management (api-spec §13).
+// The router owns the ADMINISTRATOR role gate; other roles are rejected
+// with 403 before protected User detail is exposed.
+app.use("/api/admin", adminRouter);
 
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list (evolved in Lab 2)

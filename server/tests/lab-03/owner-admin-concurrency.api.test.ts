@@ -284,3 +284,166 @@ describe("BR-76 staff-side owner integrity vs admin eligibility change (Issue #4
     await reactivateTarget();
   });
 });
+
+// Issue #50 (Lab 3) — BR-76 admin side (AC-14, api-spec §15): the
+// Administrator deactivate/demote API shares the owner-integrity protocol.
+// Both sides use real API calls with real overlapping execution: the loser
+// always receives a safe 409 and the owner-eligibility invariant holds.
+describe("BR-76 admin-side protocol via Admin API (Issue #50)", () => {
+  const RUN50 = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6)}`;
+  const ADMIN_EMAIL = `q50-oc-admin-${RUN50}@test.local`;
+  const STAFF_X = `q50-oc-x-${RUN50}@test.local`;
+  const STAFF_Y = `q50-oc-y-${RUN50}@test.local`;
+  const REQ_EMAIL = `q50-oc-req-${RUN50}@test.local`;
+
+  let adminId = 0;
+  let xId = 0;
+  let yId = 0;
+  let reqId = 0;
+  let catId = 0;
+  let sysId = 0;
+  let cookieA = "";
+
+  async function staffLogin(email: string): Promise<string> {
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("Origin", ORIGIN)
+      .send({ email, password: PASSWORD })
+      .expect(200);
+    const cookie = sessionCookieValue(res.headers["set-cookie"]);
+    expect(cookie).toBeDefined();
+    return cookie as string;
+  }
+
+  let seq = 0;
+  async function mkTicket(owner: number | null, status: Status = "NEW"): Promise<number> {
+    seq += 1;
+    const row = await prisma.ticket.create({
+      data: {
+        ticketNumber: `50${RUN50.slice(-6)}-${String(5000 + seq)}`,
+        requesterId: reqId,
+        categoryId: catId,
+        relatedSystemId: sysId,
+        summary: `Admin-race fixture ${RUN50} #${seq}`,
+        description: "Admin race fixture description.",
+        requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
+        currentStatus: status,
+        ticketOwnerId: owner,
+      },
+      select: { id: true },
+    });
+    return row.id;
+  }
+
+  beforeAll(async () => {
+    const passwordHash = await hashPassword(PASSWORD);
+    const users = await Promise.all(
+      [
+        { email: ADMIN_EMAIL, role: "ADMINISTRATOR" },
+        { email: STAFF_X, role: "IT_STAFF" },
+        { email: STAFF_Y, role: "IT_STAFF" },
+        { email: REQ_EMAIL, role: "REQUESTER" },
+      ].map((u) =>
+        prisma.user.create({
+          data: {
+            name: `OC50 ${u.role} ${RUN50}`,
+            email: u.email,
+            passwordHash,
+            role: u.role as "ADMINISTRATOR" | "IT_STAFF" | "REQUESTER",
+            isActive: true,
+            mustChangePassword: false,
+          },
+          select: { id: true },
+        })
+      )
+    );
+    [adminId, xId, yId, reqId] = users.map((u) => u.id);
+    const category = await prisma.category.findFirst({ where: { isActive: true }, orderBy: { name: "asc" } });
+    const system = await prisma.relatedSystem.findFirst({ where: { isActive: true }, orderBy: { name: "asc" } });
+    if (!category || !system) throw new Error("Admin-race test requires seeded reference data");
+    catId = category.id;
+    sysId = system.id;
+    cookieA = await loginAs(ADMIN_EMAIL);
+  });
+
+  afterAll(async () => {
+    await prisma.ticket.deleteMany({ where: { requesterId: reqId } });
+    await prisma.user.deleteMany({ where: { email: { in: [ADMIN_EMAIL, STAFF_X, STAFF_Y, REQ_EMAIL] } } });
+  });
+
+  it("API-47: admin-first deactivation blocks the claim; staff-first claim blocks the deactivation", async () => {
+    // Admin wins: X deactivated via API, then X cannot even log in.
+    await mkTicket(null);
+    await request(app)
+      .patch(`/api/admin/users/${xId}`)
+      .set("Cookie", cookieA)
+      .set("Origin", ORIGIN)
+      .send({ active: false })
+      .expect(200);
+    const denied = await request(app)
+      .post("/api/auth/login")
+      .set("Origin", ORIGIN)
+      .send({ email: STAFF_X, password: PASSWORD })
+      .expect(401);
+    // Safe generic login failure (BR-09): no account-state disclosure.
+    expect(denied.body.error.code).toBe("INVALID_CREDENTIALS");
+    await prisma.user.update({ where: { id: xId }, data: { isActive: true } });
+    void adminId;
+
+    // Staff wins: X claims first, then the admin deactivation is rejected.
+    const id2 = await mkTicket(null);
+    const cookieX2 = await staffLogin(STAFF_X);
+    const claimed = await request(app)
+      .post(`/api/staff/tickets/${id2}/claim`)
+      .set("Cookie", cookieX2)
+      .set("Origin", ORIGIN)
+      .send({})
+      .expect(200);
+    expect(claimed.body.ticketOwner).toMatchObject({ id: xId });
+    const blocked = await request(app)
+      .patch(`/api/admin/users/${xId}`)
+      .set("Cookie", cookieA)
+      .set("Origin", ORIGIN)
+      .send({ active: false })
+      .expect(409);
+    expect(blocked.body.error.code).toBe("USER_HAS_ACTIVE_TICKETS");
+  });
+
+  it("API-49: reassign vs demote race preserves a valid owner with safe 409s", async () => {
+    const id = await mkTicket(xId, "OPEN");
+    const cookieX = await staffLogin(STAFF_X);
+    const [reassignRes, demoteRes] = await Promise.all([
+      request(app)
+        .patch(`/api/staff/tickets/${id}/owner`)
+        .set("Cookie", cookieX)
+        .set("Origin", ORIGIN)
+        .send({ ownerId: yId, expectedOwnerId: xId }),
+      request(app)
+        .patch(`/api/admin/users/${yId}`)
+        .set("Cookie", cookieA)
+        .set("Origin", ORIGIN)
+        .send({ role: "REQUESTER" }),
+    ]);
+    // Exactly one side wins: either the reassign committed to an eligible
+    // target (demote rejected) or the demote committed first (reassign
+    // rejected) — never an inactive/REQUESTER owner.
+    const pair = [reassignRes.status, demoteRes.status].sort();
+    expect(pair).toEqual([200, 409]);
+    if (reassignRes.status === 409) {
+      expect(reassignRes.body.error.code).toBe("OWNER_NOT_ELIGIBLE");
+      expect(demoteRes.status).toBe(200);
+    } else {
+      expect(demoteRes.body.error.code).toBe("USER_HAS_ACTIVE_TICKETS");
+    }
+    const final = await prisma.ticket.findUnique({
+      where: { id },
+      select: { ticketOwnerId: true, currentStatus: true },
+    });
+    expect(final?.currentStatus).toBe("OPEN");
+    const owner = await prisma.user.findUnique({ where: { id: final!.ticketOwnerId! }, select: { isActive: true, role: true } });
+    expect(owner).toMatchObject({ isActive: true });
+    expect(["IT_STAFF", "ADMINISTRATOR"]).toContain(owner?.role);
+    await prisma.user.update({ where: { id: yId }, data: { role: "IT_STAFF", isActive: true } });
+  });
+});
