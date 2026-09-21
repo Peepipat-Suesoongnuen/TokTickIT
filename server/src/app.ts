@@ -7,6 +7,8 @@ import {
   isSummaryValid,
   isDescriptionValid,
   isPriorityValid,
+  isPublicCommentValid,
+  normalizeMessageContent,
 } from "./lib/validation.js";
 import { formatYYMM, formatTicketNumber, getNextSequence } from "./lib/ticket-number.js";
 import multer from "multer";
@@ -14,7 +16,7 @@ import { v4 as uuid } from "uuid";
 import path from "path";
 import fs from "fs";
 import { isAllowedMime, isAllowedSignature, MAX_ACTIVE } from "./lib/attachmentValidation.js";
-import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requirePasswordChanged, requireRole, requireSession } from "./auth.js";
+import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requireOrigin, requirePasswordChanged, requireRole, requireSession } from "./auth.js";
 import { UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE } from "./auth.js";
 import type { AuthRequest, AuthUserRow } from "./auth.js";
 import authRouter from "./routes/auth.js";
@@ -340,6 +342,7 @@ app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordCh
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
         requester: { select: { id: true, name: true, email: true } },
+        owner: { select: { id: true, name: true } },
         attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalFilename: true, mimeType: true, sizeBytes: true, removedAt: true, removedReason: true, createdAt: true } },
       },
     });
@@ -352,6 +355,12 @@ app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordCh
       ticketDate: ticket.ticketDate,
       currentStatus: ticket.currentStatus,
       requestedPriority: ticket.requestedPriority,
+      // Issue #49 (AC-06, api-spec §5.3): Assigned To/Unassigned, IT
+      // Priority, and the resolution indication ride the owned detail.
+      // No owner email and no Internal Notes are exposed here.
+      itPriority: ticket.itPriority,
+      ticketOwner: ticket.owner,
+      requesterResolutionIndicatedAt: ticket.requesterResolutionIndicatedAt,
       summary: ticket.summary,
       description: ticket.description,
       category: ticket.category,
@@ -361,6 +370,141 @@ app.get("/api/tickets/:id", requireSession, requireActiveUser, requirePasswordCh
       updatedAt: ticket.updatedAt,
       attachments: ticket.attachments,
     });
+  } catch {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Issue #49 — Public Comments + Requester resolution indication (api-spec §7)
+// ---------------------------------------------------------------------------
+
+const COMMENT_SELECT = {
+  id: true,
+  author: { select: { id: true, name: true, role: true } },
+  content: true,
+  createdAt: true,
+} as const;
+
+const COMMENT_ORDER = [{ createdAt: "asc" }, { id: "asc" }] as const;
+
+// GET /api/tickets/:id/comments — own Ticket for Requesters; authorized
+// Ticket access for IT Staff/Administrator. Cross-requester access shares
+// the safe 404 (api-spec §1.7).
+app.get("/api/tickets/:id/comments", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
+    }
+    const me = (req as AuthRequest).user;
+    if (!me) {
+      return sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
+    }
+    const ticket =
+      me.role === "REQUESTER"
+        ? await getPrisma().ticket.findFirst({ where: { id, requesterId: me.id }, select: { id: true } })
+        : await getPrisma().ticket.findUnique({ where: { id }, select: { id: true } });
+    if (!ticket) {
+      return sendError(res, 404, "TICKET_NOT_FOUND", "Ticket not found.");
+    }
+    const comments = await getPrisma().publicComment.findMany({
+      where: { ticketId: id },
+      orderBy: COMMENT_ORDER as never,
+      select: COMMENT_SELECT,
+    });
+    res.status(200).json({ data: comments });
+  } catch {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});
+
+// POST /api/tickets/:id/comments — append-only, backend-authored (BR-34/35).
+// Commenting never changes Ticket status, including while Waiting (BR-30).
+app.post("/api/tickets/:id/comments", requireOrigin, requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    for (const k of Object.keys(body)) {
+      if (k !== "content") {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [k]: "Unknown parameter." });
+      }
+    }
+    if (!("content" in body)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { content: "content is required." });
+    }
+    if (!isPublicCommentValid(body.content)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { content: "content must be 1-200 characters after trimming." });
+    }
+    const me = (req as AuthRequest).user;
+    if (!me) {
+      return sendError(res, 401, UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE);
+    }
+    const ticket =
+      me.role === "REQUESTER"
+        ? await getPrisma().ticket.findFirst({ where: { id, requesterId: me.id }, select: { id: true } })
+        : await getPrisma().ticket.findUnique({ where: { id }, select: { id: true } });
+    if (!ticket) {
+      return sendError(res, 404, "TICKET_NOT_FOUND", "Ticket not found.");
+    }
+    const created = await getPrisma().publicComment.create({
+      data: {
+        ticketId: id,
+        authorId: me.id,
+        content: normalizeMessageContent(body.content as string),
+      },
+      select: COMMENT_SELECT,
+    });
+    res.status(201).json(created);
+  } catch {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});
+
+// Allowed indication states (BR-05, api-spec §7.3).
+const INDICATION_ALLOWED = new Set(["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"]);
+
+// POST /api/tickets/:id/problem-appears-resolved — Requester-only, own
+// Ticket only. Never mutates formal Current Status; idempotent while the
+// indication is already present.
+app.post("/api/tickets/:id/problem-appears-resolved", requireOrigin, requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid ticket id." });
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    for (const k of Object.keys(body)) {
+      return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [k]: "Unknown parameter." });
+    }
+    const rid = getAuthUserId((req as AuthRequest).user, res);
+    if (rid === null) return;
+    const ticket = await getPrisma().ticket.findFirst({
+      where: { id, requesterId: rid },
+      select: { id: true, currentStatus: true, requesterResolutionIndicatedAt: true },
+    });
+    if (!ticket) {
+      return sendError(res, 404, "TICKET_NOT_FOUND", "Ticket not found.");
+    }
+    if (!INDICATION_ALLOWED.has(ticket.currentStatus)) {
+      return sendError(res, 409, "INVALID_TICKET_STATE", "The ticket is not in a state that allows this operation.");
+    }
+    if (ticket.requesterResolutionIndicatedAt !== null) {
+      res.status(200).json({ requesterResolutionIndicatedAt: ticket.requesterResolutionIndicatedAt });
+      return;
+    }
+    const updated = await getPrisma().ticket.update({
+      where: { id },
+      data: { requesterResolutionIndicatedAt: new Date() },
+      select: { requesterResolutionIndicatedAt: true },
+    });
+    res.status(200).json({ requesterResolutionIndicatedAt: updated.requesterResolutionIndicatedAt });
   } catch {
     sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
   }

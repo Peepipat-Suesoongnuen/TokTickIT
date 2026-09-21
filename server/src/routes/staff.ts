@@ -12,6 +12,7 @@ import {
 } from "../auth.js";
 import { isOwnerEligible, lockUserRowForUpdate } from "../lib/owner-integrity.js";
 import { isTransitionAllowed, statusRequiresOwner } from "../lib/ticket-status.js";
+import { isInternalNoteValid, normalizeMessageContent } from "../lib/validation.js";
 
 // Issue #48 (Lab 3) — IT Staff Ticket workspace (api-spec §§8–11).
 //
@@ -767,3 +768,80 @@ staffRouter.patch(
     }
   }
 );
+
+// ---------------------------------------------------------------------------
+// Internal Notes (api-spec §12) — Staff/Admin only. Requester is rejected
+// with 403 at the role boundary before note content is queried or exposed.
+// Notes are append-only, backend-authored/timestamped, trimmed plain text
+// (1–2,000 chars). No edit/delete endpoint exists.
+// ---------------------------------------------------------------------------
+const NOTE_SELECT = {
+  id: true,
+  author: { select: { id: true, name: true, role: true } },
+  content: true,
+  createdAt: true,
+} as const;
+
+const NOTE_ORDER = [{ createdAt: "asc" }, { id: "asc" }] as const;
+
+staffRouter.get("/tickets/:id/internal-notes", ...STAFF_GUARD, async (req: Request, res: Response) => {
+  try {
+    const id = parsePositiveInt(req.params.id);
+    if (id === null) {
+      return invalid(res, { id: "Ticket id must be a positive integer." });
+    }
+    const ticket = await getPrisma().ticket.findUnique({ where: { id }, select: { id: true } });
+    if (!ticket) {
+      return sendError(res, 404, "TICKET_NOT_FOUND", "Ticket not found.");
+    }
+    const notes = await getPrisma().internalNote.findMany({
+      where: { ticketId: id },
+      orderBy: NOTE_ORDER as never,
+      select: NOTE_SELECT,
+    });
+    res.status(200).json({ data: notes });
+  } catch (err) {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});
+
+staffRouter.post("/tickets/:id/internal-notes", requireOrigin, ...STAFF_GUARD, async (req: Request, res: Response) => {
+  try {
+    const id = parsePositiveInt(req.params.id);
+    if (id === null) {
+      return invalid(res, { id: "Ticket id must be a positive integer." });
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    for (const k of Object.keys(body)) {
+      if (k !== "content") {
+        return invalid(res, { [k]: "Unknown parameter." });
+      }
+    }
+    if (!("content" in body)) {
+      return invalid(res, { content: "content is required." });
+    }
+    if (!isInternalNoteValid(body.content)) {
+      return invalid(res, { content: "content must be 1-2000 characters after trimming." });
+    }
+    const me = (req as AuthRequest).user;
+    if (!me) {
+      sendError(res, 401, "UNAUTHENTICATED", "Authentication required.");
+      return;
+    }
+    const ticket = await getPrisma().ticket.findUnique({ where: { id }, select: { id: true } });
+    if (!ticket) {
+      return sendError(res, 404, "TICKET_NOT_FOUND", "Ticket not found.");
+    }
+    const created = await getPrisma().internalNote.create({
+      data: {
+        ticketId: id,
+        authorId: me.id,
+        content: normalizeMessageContent(body.content as string),
+      },
+      select: NOTE_SELECT,
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
+  }
+});

@@ -113,6 +113,18 @@ test("E2E-02 requester creates -> staff queue -> claim -> priority -> in progres
   await expect(page.getByText("Status updated.")).toBeVisible();
   await expect(page.getByText("IN_PROGRESS")).toBeVisible();
 
+  // AC-12 (Issue #49 extension): staff communicates on both channels.
+  const staffComment = "E2E staff comment: investigating the outage";
+  const staffNote = "E2E staff note: check the access logs first";
+  await page.getByRole("tab", { name: "Public Comments" }).click();
+  await page.getByPlaceholder("Add a public comment…").fill(staffComment);
+  await page.getByRole("button", { name: "Post Comment" }).click();
+  await expect(page.getByText(staffComment)).toBeVisible();
+  await page.getByRole("tab", { name: "Internal Notes" }).click();
+  await page.getByPlaceholder("Add an internal note…").fill(staffNote);
+  await page.getByRole("button", { name: "Add Note" }).click();
+  await expect(page.getByText(staffNote)).toBeVisible();
+
   // Queue reflects the worked ticket consistently.
   await page.getByRole("link", { name: "Back to Ticket Queue" }).click();
   await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();

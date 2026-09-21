@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import TicketDetail from "../../../pages/TicketDetail";
@@ -48,6 +48,9 @@ const baseTicket = {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  // Issue #49: detail loads the comment timeline alongside the ticket;
+  // default to an empty timeline unless a test overrides it.
+  vi.spyOn(api, "listTicketComments").mockResolvedValue({ data: [] });
 });
 
 afterEach(() => {
@@ -148,6 +151,9 @@ describe("RequesterTicketDetail", () => {
 
     await waitFor(() => expect(screen.getByText(`Ticket ${baseTicket.ticketNumber}`)).toBeInTheDocument());
 
+    // Issue #49: attachments live under the Attachments tab.
+    await userEvent.click(screen.getByRole("tab", { name: "Attachments" }));
+
     // removed file name should be rendered
     const removedSpan = screen.getByText("old.pdf");
     expect(removedSpan).toBeInTheDocument();
@@ -185,14 +191,128 @@ describe("RequesterTicketDetail", () => {
     expect(screen.getByText("Ticket Number")).toBeInTheDocument();
     expect(screen.getByDisplayValue(baseTicket.ticketNumber)).toBeInTheDocument();
 
-    // Ticket Date field with Bangkok formatting
+    // Ticket Date field with Bangkok formatting (Last Updated shares the
+    // fixture timestamp, so assert each field through its own label).
     const expectedDate = formatBangkok(baseTicket.ticketDate);
-    expect(screen.getByLabelText("Ticket Date")).toBeInTheDocument();
-    expect(screen.getByDisplayValue(expectedDate)).toBeInTheDocument();
+    expect(screen.getByLabelText("Ticket Date")).toHaveValue(expectedDate);
+    expect(screen.getByLabelText("Last Updated")).toHaveValue(expectedDate);
+
+    // Issue #49: attachments live under the Attachments tab.
+    await userEvent.click(screen.getByRole("tab", { name: "Attachments" }));
 
     // attachments rendered
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+  });
+});
+
+describe("RequesterTicketDetail communication additions (Lab 3 Issue #49, UI-06)", () => {
+  const ownedTicket = {
+    ...baseTicket,
+    itPriority: "HIGH",
+    ticketOwner: { id: 17, name: "Bob Staff" },
+    requesterResolutionIndicatedAt: null,
+  };
+
+  const comments = [
+    {
+      id: 81,
+      author: { id: 1, name: "Test User", role: "REQUESTER" },
+      content: "Still broken after restart.",
+      createdAt: "2026-09-12T12:30:00.000Z",
+    },
+    {
+      id: 82,
+      author: { id: 17, name: "Bob Staff", role: "IT_STAFF" },
+      content: "Looking into the logs now.",
+      createdAt: "2026-09-12T12:45:00.000Z",
+    },
+  ];
+
+  beforeEach(() => {
+    vi.spyOn(api, "getTicketDetail").mockResolvedValue(ownedTicket);
+    vi.spyOn(api, "listTicketComments").mockResolvedValue({ data: comments });
+  });
+
+  it("shows Assigned To alongside retained requester fields and no Internal Notes surface", async () => {
+    renderDetail();
+    await waitFor(() => expect(screen.getByText(`Ticket ${baseTicket.ticketNumber}`)).toBeInTheDocument());
+
+    // Breadcrumb row below navigation per the approved mockup.
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByRole("link", { name: "My Tickets" })).toHaveAttribute("href", "/my-tickets");
+
+    expect(screen.getByLabelText("Assigned To")).toHaveValue("Bob Staff");
+    expect(screen.getByText("Req. Priority")).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByLabelText("Last Updated")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(baseTicket.ticketNumber)).toBeInTheDocument();
+    expect(screen.queryByText(/internal note/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Internal Notes" })).not.toBeInTheDocument();
+  });
+
+  it("Unassigned tickets show Unassigned instead of an owner name", async () => {
+    vi.spyOn(api, "getTicketDetail").mockResolvedValue({ ...ownedTicket, ticketOwner: null });
+    renderDetail();
+    await waitFor(() => expect(screen.getByText(`Ticket ${baseTicket.ticketNumber}`)).toBeInTheDocument());
+    expect(screen.getByLabelText("Assigned To")).toHaveValue("Unassigned");
+  });
+
+  it("Public Comments tab shows the timeline, compact composer, and posts within 200 chars", async () => {
+    const user = userEvent.setup();
+    const postSpy = vi.spyOn(api, "postTicketComment").mockImplementation(async (_id, content) => ({
+      id: 83,
+      author: { id: 1, name: "Test User", role: "REQUESTER" },
+      content,
+      createdAt: "2026-09-12T13:00:00.000Z",
+    }));
+    renderDetail();
+    await waitFor(() => expect(screen.getByText(`Ticket ${baseTicket.ticketNumber}`)).toBeInTheDocument());
+
+    await user.click(screen.getByRole("tab", { name: "Public Comments" }));
+    expect(screen.getByText("Still broken after restart.")).toBeInTheDocument();
+    expect(screen.getByText("Looking into the logs now.")).toBeInTheDocument();
+    // Underline tabs per the requester mockup: active tab carries the
+    // active class and selected state.
+    const activeTab = screen.getByRole("tab", { name: "Public Comments" });
+    expect(activeTab).toHaveClass("lab3-rd-tab", "active");
+    expect(activeTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Attachments" })).not.toHaveClass("active");
+
+    const composer = screen.getByPlaceholderText("Add a public comment…");
+    await user.type(composer, "Any update from IT?");
+    expect(screen.getByText("19 / 200")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Post Comment" }));
+    expect(postSpy).toHaveBeenCalledWith(1, "Any update from IT?");
+    expect(await screen.findByText("Any update from IT?")).toBeInTheDocument();
+  });
+
+  it("Ticket Actions offers Problem Appears Resolved only in allowed statuses", async () => {
+    const user = userEvent.setup();
+    const resolveSpy = vi.spyOn(api, "markProblemResolved").mockResolvedValue({
+      requesterResolutionIndicatedAt: "2026-09-12T12:40:00.000Z",
+    });
+    // After resolving, the reloaded ticket carries the indication.
+    vi.spyOn(api, "getTicketDetail")
+      .mockResolvedValueOnce(ownedTicket)
+      .mockResolvedValue({ ...ownedTicket, requesterResolutionIndicatedAt: "2026-09-12T12:40:00.000Z" });
+    renderDetail();
+    await waitFor(() => expect(screen.getByText(`Ticket ${baseTicket.ticketNumber}`)).toBeInTheDocument());
+
+    await user.click(screen.getByRole("tab", { name: "Ticket Actions" }));
+    await user.click(screen.getByRole("button", { name: "Problem Appears Resolved" }));
+    expect(resolveSpy).toHaveBeenCalledWith(1);
+    expect(await screen.findByText("You indicated that the problem appears resolved.")).toBeInTheDocument();
+  });
+
+  it("Ticket Actions hides the action in RESOLVED and explains formal status stays", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "getTicketDetail").mockResolvedValue({ ...ownedTicket, currentStatus: "RESOLVED" });
+    renderDetail();
+    await waitFor(() => expect(screen.getByText(`Ticket ${baseTicket.ticketNumber}`)).toBeInTheDocument());
+
+    await user.click(screen.getByRole("tab", { name: "Ticket Actions" }));
+    expect(screen.queryByRole("button", { name: "Problem Appears Resolved" })).not.toBeInTheDocument();
   });
 });

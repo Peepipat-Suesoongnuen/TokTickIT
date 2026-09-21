@@ -169,6 +169,8 @@ test("E2E-03 removal blocks blank reason then preserves removed metadata", async
 
   await loginAs(page, E2E_REQUESTER_EMAIL, LAB02_INITIAL_PASSWORD);
   await page.goto(`/tickets/${ticket.id}`);
+  // Issue #49: attachments live under the Attachments tab.
+  await page.getByRole("tab", { name: "Attachments" }).click();
   const attachmentRow = page.locator("li", { hasText: filename });
   await attachmentRow.getByRole("button", { name: "Remove" }).click();
 

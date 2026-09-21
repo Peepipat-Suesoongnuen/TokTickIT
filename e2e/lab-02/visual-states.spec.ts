@@ -252,6 +252,8 @@ test("VISUAL-01 captures required requester/create/list/attachment visual states
   expect(uploadResponse.status()).toBe(201);
 
   await page.goto(`/tickets/${ticket.id}`);
+  // Issue #49: attachments live under the Attachments tab.
+  await page.getByRole("tab", { name: "Attachments" }).click();
   const row = page.locator("li", { hasText: filename });
   await row.getByRole("button", { name: "Remove" }).click();
   await page.getByLabel("Reason").fill("Issue 12 visual evidence");
