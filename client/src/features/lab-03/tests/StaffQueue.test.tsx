@@ -175,6 +175,26 @@ describe("StaffQueue (Lab 3 Issue #48, UI-07)", () => {
     await user.click(link);
   });
 
+  it("pagination shows numbered pages like the requester list with correct disabled states", async () => {
+    const user = userEvent.setup();
+    mockedApi.listStaffTickets.mockResolvedValue({
+      data: [queueRow],
+      meta: { page: 1, pageSize: 10, totalCount: 25, totalPages: 3, hasNextPage: true, hasPreviousPage: false },
+    });
+    renderQueue();
+    await screen.findAllByText("2609-0101");
+
+    const nav = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(nav).getByRole("button", { name: "Go to page 1" })).toBeDisabled();
+    expect(within(nav).getByRole("button", { name: "Go to page 2" })).toBeEnabled();
+    expect(within(nav).getByRole("button", { name: "Go to page 3" })).toBeEnabled();
+    expect(within(nav).getByRole("button", { name: "Previous page" })).toBeDisabled();
+    expect(within(nav).getByRole("button", { name: "Next page" })).toBeEnabled();
+
+    await user.click(within(nav).getByRole("button", { name: "Go to page 2" }));
+    expect(mockedApi.listStaffTickets).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
+  });
+
   it("sort controls drive the queue sort query and show the active direction", async () => {
     const user = userEvent.setup();
     renderQueue();

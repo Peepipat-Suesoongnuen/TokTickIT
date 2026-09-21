@@ -533,3 +533,80 @@ export async function listTicketNotes(ticketId: number): Promise<{ data: TicketN
 export async function postTicketNote(ticketId: number, content: string): Promise<TicketNote> {
   return commPost<TicketNote>(`/api/staff/tickets/${ticketId}/internal-notes`, { content });
 }
+
+// Issue #50 — minimalist Administrator User Management (api-spec §13).
+
+export interface ManagedUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+export interface CreateUserPayload {
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  initialPassword: string;
+}
+
+export interface UpdateUserPayload {
+  name?: string;
+  email?: string;
+  role?: string;
+  active?: boolean;
+}
+
+export async function listUsers(params: { search?: string; role?: string } = {}): Promise<{ data: ManagedUser[] }> {
+  const qs = new URLSearchParams();
+  if (params.search !== undefined) qs.set("search", params.search);
+  if (params.role !== undefined) qs.set("role", params.role);
+  const suffix = qs.toString();
+  const res = await fetch(`${API_URL}/api/admin/users${suffix ? `?${suffix}` : ""}`, {
+    credentials: "include",
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as { data: ManagedUser[] };
+}
+
+export async function createUser(payload: CreateUserPayload): Promise<ManagedUser> {
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as ManagedUser;
+}
+
+export async function updateUser(userId: number, payload: UpdateUserPayload): Promise<ManagedUser> {
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as ManagedUser;
+}
+
+export async function setInitialPassword(userId: number, initialPassword: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}/initial-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ initialPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw { status: res.status, body } satisfies StaffApiFailure;
+  }
+}

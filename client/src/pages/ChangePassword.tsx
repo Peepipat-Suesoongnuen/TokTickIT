@@ -35,7 +35,7 @@ function ruleMet(id: string, current: string, next: string): boolean {
   }
 }
 
-function EyeIcon({ off }: { off: boolean }) {
+export function EyeIcon({ off }: { off: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"

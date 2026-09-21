@@ -10,6 +10,7 @@ import {
   TicketListMeta,
 } from "../api";
 import { PriorityBadge, StatusBadge } from "../components/Badges.js";
+import Pagination from "../components/Pagination.js";
 import { formatBangkok } from "./MyTickets.js";
 
 const STATUSES = [
@@ -422,31 +423,7 @@ export default function StaffQueue() {
             ))}
           </div>
 
-          {meta && meta.totalPages > 0 && (
-            <nav className="d-flex justify-content-between align-items-center mt-3 lab2-pagination" aria-label="Pagination">
-              <span className="text-secondary small">
-                Page {meta.page} of {meta.totalPages} • {meta.totalCount} tickets
-              </span>
-              <div className="btn-group" role="group" aria-label="Pagination controls">
-                <button
-                  className="btn btn-outline-secondary btn-sm"
-                  disabled={!meta.hasPreviousPage}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  aria-label="Previous page"
-                >
-                  Previous
-                </button>
-                <button
-                  className="btn btn-outline-secondary btn-sm"
-                  disabled={!meta.hasNextPage}
-                  onClick={() => setPage((p) => p + 1)}
-                  aria-label="Next page"
-                >
-                  Next
-                </button>
-              </div>
-            </nav>
-          )}
+          {meta && <Pagination meta={meta} noun="tickets" onPage={setPage} />}
         </>
       )}
     </div>

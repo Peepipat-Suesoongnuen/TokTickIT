@@ -8,6 +8,10 @@ import MyTickets from "./pages/MyTickets";
 import TicketDetail from "./pages/TicketDetail";
 import StaffQueue from "./pages/StaffQueue";
 import StaffTicketDetail from "./pages/StaffTicketDetail";
+import AdminUsers from "./pages/AdminUsers";
+import AdminUserCreate from "./pages/AdminUserCreate";
+import AdminUserEdit from "./pages/AdminUserEdit";
+import AdminUserPassword from "./pages/AdminUserPassword";
 
 function GatedApp() {
   const { user, loading } = useAuth();
@@ -32,6 +36,8 @@ function GatedApp() {
   // flow; IT Staff/Administrator work from the shared Ticket Queue.
   // Backend authorization remains the enforcement authority.
   const isStaffWorkspace = user.role === "IT_STAFF" || user.role === "ADMINISTRATOR";
+  // Issue #50 — minimalist User Management is Administrator-only UI.
+  const isAdmin = user.role === "ADMINISTRATOR";
 
   return (
     <AppShell>
@@ -40,6 +46,14 @@ function GatedApp() {
           <>
             <Route path="/staff/queue" element={<StaffQueue />} />
             <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} />
+            {isAdmin && (
+              <>
+                <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/users/new" element={<AdminUserCreate />} />
+                <Route path="/admin/users/:id" element={<AdminUserEdit />} />
+                <Route path="/admin/users/:id/initial-password" element={<AdminUserPassword />} />
+              </>
+            )}
             <Route path="/change-password" element={<ChangePassword />} />
             <Route path="*" element={<Navigate to="/staff/queue" replace />} />
           </>

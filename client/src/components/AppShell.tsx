@@ -11,9 +11,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const user = auth?.user ?? null;
   const navigate = useNavigate();
   const location = useLocation();
-  // Issue #48 — dense Staff/Admin screens use the wider ~1360px content
+  // Issue #48/#50 — dense Staff/Admin screens use the wider ~1360px content
   // area from the approved mockups (agent.md §14); Requester keeps 1200px.
-  const wide = location.pathname.startsWith("/staff");
+  // Both workspaces share one shell so switching Ticket Queue ↔ User
+  // Management never resizes the layout.
+  const wide = location.pathname.startsWith("/staff") || location.pathname.startsWith("/admin");
   // Issue #48 — role-aware primary navigation (FR-04): Requesters keep
   // the Lab 2 ticket flow; IT Staff/Administrator navigate the shared
   // Ticket Queue. Backend authorization enforces every operation.
@@ -109,13 +111,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <div id="lab2-navigation" className={`lab2-nav-links ${navOpen ? "is-open" : ""}`}>
             {staffWorkspace ? (
-              <NavLink
-                to="/staff/queue"
-                className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
-                onClick={() => setNavOpen(false)}
-              >
-                Ticket Queue
-              </NavLink>
+              <>
+                <NavLink
+                  to="/staff/queue"
+                  className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
+                  onClick={() => setNavOpen(false)}
+                >
+                  Ticket Queue
+                </NavLink>
+                {user?.role === "ADMINISTRATOR" && (
+                  <NavLink
+                    to="/admin/users"
+                    className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
+                    onClick={() => setNavOpen(false)}
+                  >
+                    User Management
+                  </NavLink>
+                )}
+              </>
             ) : (
               <>
                 <NavLink
