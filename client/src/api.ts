@@ -443,8 +443,7 @@ export async function setStaffTicketStatus(
     ...(ownerId === undefined ? {} : { ownerId }),
   });
 }
-export async function checkSystem(): Promise<SystemStatus> {
-  // A thrown fetch (network error) or a non-ok HTTP response must surface as a
+export async function checkSystem(): Promise<SystemStatus> {  // A thrown fetch (network error) or a non-ok HTTP response must surface as a
   // single friendly message so the UI never shows the raw "Failed to fetch".
   try {
     const healthRes = await fetch(`${API_URL}/api/health`);
@@ -467,4 +466,70 @@ export async function checkSystem(): Promise<SystemStatus> {
     }
     throw new Error("Unable to connect to TokTickIT API");
   }
+}
+
+// Issue #49 — Ticket communication (Lab 3 api-spec §§7/12): append-only
+// Public Comments (requester + staff on authorized tickets), Internal Notes
+// (staff/admin only), and the Requester resolution indication.
+
+export interface CommentAuthor {
+  id: number;
+  name: string;
+  role: string;
+}
+
+export interface TicketComment {
+  id: number;
+  author: CommentAuthor;
+  content: string;
+  createdAt: string;
+}
+
+export interface TicketNote {
+  id: number;
+  author: CommentAuthor;
+  content: string;
+  createdAt: string;
+}
+
+async function commGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+async function commPost<T>(path: string, payload: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+export async function listTicketComments(ticketId: number): Promise<{ data: TicketComment[] }> {
+  return commGet<{ data: TicketComment[] }>(`/api/tickets/${ticketId}/comments`);
+}
+
+export async function postTicketComment(ticketId: number, content: string): Promise<TicketComment> {
+  return commPost<TicketComment>(`/api/tickets/${ticketId}/comments`, { content });
+}
+
+export async function markProblemResolved(ticketId: number): Promise<{ requesterResolutionIndicatedAt: string }> {
+  return commPost<{ requesterResolutionIndicatedAt: string }>(
+    `/api/tickets/${ticketId}/problem-appears-resolved`,
+    {},
+  );
+}
+
+export async function listTicketNotes(ticketId: number): Promise<{ data: TicketNote[] }> {
+  return commGet<{ data: TicketNote[] }>(`/api/staff/tickets/${ticketId}/internal-notes`);
+}
+
+export async function postTicketNote(ticketId: number, content: string): Promise<TicketNote> {
+  return commPost<TicketNote>(`/api/staff/tickets/${ticketId}/internal-notes`, { content });
 }

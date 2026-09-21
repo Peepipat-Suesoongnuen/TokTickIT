@@ -8,10 +8,17 @@ import {
   setStaffTicketPriority,
   setStaffTicketStatus,
   downloadAttachment,
+  listTicketComments,
+  postTicketComment,
+  listTicketNotes,
+  postTicketNote,
   StaffTicketDetail as StaffTicketDetailData,
   EligibleOwner,
+  TicketComment,
+  TicketNote,
 } from "../api";
 import { PriorityBadge, StatusBadge } from "../components/Badges.js";
+import { MessageTimeline, MessageComposer } from "../components/Communication.js";
 import { formatBangkok } from "./MyTickets.js";
 
 // Client-side offer list mirrors the approved matrix (specification §5);
@@ -45,6 +52,8 @@ export default function StaffTicketDetail() {
 
   const [ticket, setTicket] = useState<StaffTicketDetailData | null>(null);
   const [owners, setOwners] = useState<EligibleOwner[]>([]);
+  const [comments, setComments] = useState<TicketComment[]>([]);
+  const [notes, setNotes] = useState<TicketNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [forbidden, setForbidden] = useState(false);
@@ -71,6 +80,14 @@ export default function StaffTicketDetail() {
       ]);
       setTicket(detail);
       setOwners(ownerList.data);
+      // Communication timelines load best-effort alongside the ticket;
+      // a failure here never blocks the operational workflow.
+      const [commentList, noteList] = await Promise.all([
+        listTicketComments(ticketId).catch(() => ({ data: [] as TicketComment[] })),
+        listTicketNotes(ticketId).catch(() => ({ data: [] as TicketNote[] })),
+      ]);
+      setComments(commentList.data);
+      setNotes(noteList.data);
       setOwnerDraft(detail.ticketOwner ? String(detail.ticketOwner.id) : "");
       setPriorityDraft(detail.itPriority);
       setStatusDraft("");
@@ -321,14 +338,30 @@ export default function StaffTicketDetail() {
         {tab === "comments" && (
           <div role="tabpanel">
             <h3 className="h6">Public Comments</h3>
-            <p className="text-secondary mb-0">Public comments arrive with Issue #49.</p>
+            <p className="form-text">Visible to Requester, IT Staff and Administrators.</p>
+            <MessageComposer
+              kind="comment"
+              onPost={async (content) => {
+                const created = await postTicketComment(ticketId, content);
+                setComments((prev) => [...prev, created]);
+              }}
+            />
+            <MessageTimeline items={comments} emptyText="No public comments yet." />
           </div>
         )}
 
         {tab === "notes" && (
           <div role="tabpanel">
             <h3 className="h6">Internal Notes</h3>
-            <p className="text-secondary mb-0">Internal notes arrive with Issue #49.</p>
+            <p className="form-text">Visible only to IT Staff and Administrators.</p>
+            <MessageComposer
+              kind="note"
+              onPost={async (content) => {
+                const created = await postTicketNote(ticketId, content);
+                setNotes((prev) => [...prev, created]);
+              }}
+            />
+            <MessageTimeline items={notes} emptyText="No internal notes yet." />
           </div>
         )}
 

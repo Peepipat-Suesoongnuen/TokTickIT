@@ -182,6 +182,52 @@ body {
   background: #fbfcfb;
 }
 
+/* Issue #49 — requester detail underline tabs mirror the approved
+   requester mockup (scoped: staff keeps its button tabs). */
+.lab3-rd-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--zen-border);
+  background: #fbfcfb;
+  overflow-x: auto;
+}
+
+.lab3-rd-tab {
+  flex: 1 0 auto;
+  min-height: 46px;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--zen-muted);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lab3-rd-tab.active {
+  color: var(--zen-primary);
+  border-bottom-color: var(--zen-secondary);
+  background: #fff;
+}
+
+.lab3-rd-tab:focus-visible {
+  outline: 2px solid var(--zen-primary);
+  outline-offset: -2px;
+}
+
+@media (max-width: 767.98px) {
+  .lab3-rd-tabs {
+    justify-content: flex-start;
+  }
+  .lab3-rd-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 8px;
+    font-size: 0.84rem;
+  }
+}
+
 .lab2-success-icon {
   font-weight: 700;
   margin-right: 0.35rem;

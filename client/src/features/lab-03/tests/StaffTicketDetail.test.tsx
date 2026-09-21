@@ -57,6 +57,9 @@ beforeEach(() => {
       { id: 22, name: "Admin One", role: "ADMINISTRATOR" },
     ],
   });
+  // Issue #49: the detail page loads both communication timelines.
+  mockedApi.listTicketComments.mockResolvedValue({ data: [] });
+  mockedApi.listTicketNotes.mockResolvedValue({ data: [] });
 });
 
 describe("StaffTicketDetail (Lab 3 Issue #48, UI-08)", () => {
@@ -96,16 +99,28 @@ describe("StaffTicketDetail (Lab 3 Issue #48, UI-08)", () => {
     expect(options).not.toContain("OPEN");
   });
 
-  it("Q1-A: communication tabs show the Issue #49 placeholder and no composer", async () => {
+  it("communication tabs render live timelines with composers (Issue #49 replaces the Q1-A placeholders)", async () => {
     const user = userEvent.setup();
+    mockedApi.listTicketComments.mockResolvedValue({
+      data: [
+        { id: 81, author: { id: 5, name: "Alice Example", role: "REQUESTER" }, content: "Still broken.", createdAt: "2026-09-12T12:30:00.000Z" },
+      ],
+    });
+    mockedApi.listTicketNotes.mockResolvedValue({
+      data: [
+        { id: 21, author: { id: 17, name: "Bob Staff", role: "IT_STAFF" }, content: "Checking logs.", createdAt: "2026-09-12T13:00:00.000Z" },
+      ],
+    });
     renderDetail();
     await screen.findByRole("heading", { name: "Ticket 2609-0101" });
 
     await user.click(screen.getByRole("tab", { name: "Public Comments" }));
-    expect(screen.getByText("Public comments arrive with Issue #49.")).toBeInTheDocument();
+    expect(screen.getByText("Still broken.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Add a public comment…")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Internal Notes" }));
-    expect(screen.getByText("Internal notes arrive with Issue #49.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Post Comment" })).not.toBeInTheDocument();
+    expect(screen.getByText("Checking logs.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Add an internal note…")).toBeInTheDocument();
+    expect(screen.queryByText(/arrive with Issue #49/)).not.toBeInTheDocument();
   });
 
   it("attachments tab lists requester files read-only with download and no upload", async () => {
