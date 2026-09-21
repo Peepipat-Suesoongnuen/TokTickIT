@@ -233,6 +233,8 @@ test("A11Y-01 keyboard-only controls are reachable, operable, labelled, and visi
   await expect(page.getByLabel("Related System")).toBeVisible();
   await expect(page.getByLabel("Summary")).toBeVisible();
   await expect(page.getByLabel("Description")).toBeVisible();
+  // Issue #49: attachments live under the Attachments tab.
+  await page.getByRole("tab", { name: "Attachments" }).click();
   await expect(page.getByLabel("Choose file")).toBeVisible();
   await expectAllVisibleControlsTabReachable(page);
 
