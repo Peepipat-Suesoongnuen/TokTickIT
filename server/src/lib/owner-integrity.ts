@@ -44,3 +44,26 @@ export async function lockUserRowForUpdate(
   if (rows.length === 0) return null;
   return rows[0];
 }
+
+// Issue #50 (BR-43) — last-active-Administrator invariant. Locks every
+// currently active Administrator row so concurrent eligibility-changing
+// updates serialize: the second committer re-evaluates on post-commit
+// state and exactly one of them survives. Rows are locked one by one in
+// ascending id order: a bare SELECT ... FOR UPDATE acquires locks in scan
+// order (not ORDER BY output order), which deadlocks concurrent lockers.
+// The role literal is a server-side constant (BR-74 safe).
+export async function lockActiveAdminsForUpdate(
+  db: LockableDb & Pick<PrismaClient, "user">
+): Promise<number[]> {
+  const actives = await db.user.findMany({
+    where: { role: "ADMINISTRATOR", isActive: true },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  const locked: number[] = [];
+  for (const row of actives) {
+    const got = await lockUserRowForUpdate(db, row.id);
+    if (got && got.isActive && got.role === "ADMINISTRATOR") locked.push(got.id);
+  }
+  return locked;
+}
