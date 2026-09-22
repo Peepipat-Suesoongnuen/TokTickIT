@@ -200,14 +200,23 @@ describe("StaffQueue (Lab 3 Issue #48, UI-07)", () => {
     renderQueue();
     await screen.findAllByText("2609-0101");
 
-    // Desktop header sort: IT Priority descending.
-    await user.click(within(screen.getByRole("table")).getByRole("button", { name: /Sort by IT Priority/ }));
+    // Inactive sortable columns show the idle glyph like My Tickets.
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByText("↕").length).toBeGreaterThanOrEqual(3);
+
+    // Desktop header sort: IT Priority descending, then toggles ascending.
+    const sortButton = within(table).getByRole("button", { name: /Sort by IT Priority/ });
+    await user.click(sortButton);
     expect(mockedApi.listStaffTickets).toHaveBeenLastCalledWith(
       expect.objectContaining({ sort: "itPriority", order: "desc" }),
     );
-    expect(
-      within(screen.getByRole("table")).getByRole("button", { name: /Sort by IT Priority/ }),
-    ).toHaveTextContent("↓");
+    expect(sortButton).toHaveTextContent("↓");
+    expect(within(table).getByRole("columnheader", { name: /IT Priority/ })).toHaveAttribute("aria-sort", "descending");
+    await user.click(sortButton);
+    expect(mockedApi.listStaffTickets).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: "itPriority", order: "asc" }),
+    );
+    expect(sortButton).toHaveTextContent("↑");
 
     // Mobile sort group offers the approved fields.
     for (const label of ["Ticket Number", "Requested Priority", "IT Priority", "Last Updated"]) {

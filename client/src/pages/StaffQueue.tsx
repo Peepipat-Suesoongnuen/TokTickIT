@@ -163,7 +163,13 @@ export default function StaffQueue() {
     setOrder("desc");
   };
 
-  const sortArrow = (field: SortField) => (sort === field ? (order === "asc" ? " ↑" : " ↓") : "");
+  // Same sort-indicator language as Requester My Tickets (reference):
+  // active column shows ↑/↓, inactive sortable columns show ↕.
+  const sortState = (field: SortField) =>
+    sort === field ? (order === "asc" ? "ascending" : "descending") : "none";
+
+  const sortGlyph = (field: SortField) =>
+    sort === field ? (order === "asc" ? "↑" : "↓") : "↕";
 
   const openTicketFromContainer = (event: React.MouseEvent<HTMLElement>, ticketId: number) => {
     if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return;
@@ -296,48 +302,52 @@ export default function StaffQueue() {
             <table className="table table-hover align-middle lab2-ticket-table lab2-ticket-table-staff" aria-busy={loading}>
               <thead>
                 <tr>
-                  <th>
+                  <th aria-sort={sortState("ticketNumber")}>
                     <button
                       type="button"
                       className="btn btn-link p-0 text-decoration-none lab2-sort-button"
-                      aria-label={`Sort by Ticket Number${sort === "ticketNumber" ? `, currently ${order === "asc" ? "ascending" : "descending"}` : ""}`}
+                      aria-label={`Sort by Ticket Number${sort === "ticketNumber" ? `, currently ${sortState("ticketNumber")}` : ""}`}
                       onClick={() => applySort("ticketNumber")}
                     >
-                      <span className="lab2-sort-label">Ticket No.{sortArrow("ticketNumber")}</span>
+                      <span className="lab2-sort-label">Ticket No.</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("ticketNumber")}</span>
                     </button>
                   </th>
                   <th>Summary</th>
                   <th>Category</th>
-                  <th>
+                  <th aria-sort={sortState("requestedPriority")}>
                     <button
                       type="button"
                       className="btn btn-link p-0 text-decoration-none lab2-sort-button"
-                      aria-label={`Sort by Requested Priority${sort === "requestedPriority" ? `, currently ${order === "asc" ? "ascending" : "descending"}` : ""}`}
+                      aria-label={`Sort by Requested Priority${sort === "requestedPriority" ? `, currently ${sortState("requestedPriority")}` : ""}`}
                       onClick={() => applySort("requestedPriority")}
                     >
-                      <span className="lab2-sort-label">Req. Priority{sortArrow("requestedPriority")}</span>
+                      <span className="lab2-sort-label">Req. Priority</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("requestedPriority")}</span>
                     </button>
                   </th>
-                  <th>
+                  <th aria-sort={sortState("itPriority")}>
                     <button
                       type="button"
                       className="btn btn-link p-0 text-decoration-none lab2-sort-button"
-                      aria-label={`Sort by IT Priority${sort === "itPriority" ? `, currently ${order === "asc" ? "ascending" : "descending"}` : ""}`}
+                      aria-label={`Sort by IT Priority${sort === "itPriority" ? `, currently ${sortState("itPriority")}` : ""}`}
                       onClick={() => applySort("itPriority")}
                     >
-                      <span className="lab2-sort-label">IT Priority{sortArrow("itPriority")}</span>
+                      <span className="lab2-sort-label">IT Priority</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("itPriority")}</span>
                     </button>
                   </th>
                   <th>Status</th>
                   <th>Owner</th>
-                  <th>
+                  <th aria-sort={sortState("updatedAt")}>
                     <button
                       type="button"
                       className="btn btn-link p-0 text-decoration-none lab2-sort-button"
-                      aria-label={`Sort by Last Updated${sort === "updatedAt" ? `, currently ${order === "asc" ? "ascending" : "descending"}` : ""}`}
+                      aria-label={`Sort by Last Updated${sort === "updatedAt" ? `, currently ${sortState("updatedAt")}` : ""}`}
                       onClick={() => applySort("updatedAt")}
                     >
-                      <span className="lab2-sort-label">Updated{sortArrow("updatedAt")}</span>
+                      <span className="lab2-sort-label">Updated</span>
+                      <span className="lab2-sort-glyph" aria-hidden="true">{sortGlyph("updatedAt")}</span>
                     </button>
                   </th>
                 </tr>
