@@ -16,6 +16,8 @@ const SHOTS = path.resolve("artifacts", "lab-03", "screenshots");
 const REQ_EMAIL = "e2e-vis-req@example.com";
 const STAFF_EMAIL = "e2e-vis-staff@example.com";
 const ADMIN_EMAIL = "e2e-vis-admin@example.com";
+const GATE_EMAIL = "e2e-vis-gate@example.com";
+const GATE_PASSWORD = "E2E-Vis#Gate-Gg1!";
 const PASSWORD = "E2E-Vis#Shot-Ff0!";
 
 function runUserHelper(args: string[]): void {
@@ -63,12 +65,15 @@ test.beforeAll(() => {
   runUserHelper(["setup", REQ_EMAIL, PASSWORD, "E2E Vis Req", "REQUESTER", "false"]);
   runUserHelper(["setup", STAFF_EMAIL, PASSWORD, "E2E Vis Staff", "IT_STAFF", "false"]);
   runUserHelper(["setup", ADMIN_EMAIL, PASSWORD, "E2E Vis Admin", "ADMINISTRATOR", "false"]);
+  // Mandatory-change gate fixture: fresh initial hash every run.
+  runUserHelper(["setup", GATE_EMAIL, GATE_PASSWORD, "E2E Vis Gate", "REQUESTER", "true"]);
 });
 
 test.afterAll(() => {
   runUserHelper(["cleanup", REQ_EMAIL]);
   runUserHelper(["cleanup", STAFF_EMAIL]);
   runUserHelper(["cleanup", ADMIN_EMAIL]);
+  runUserHelper(["cleanup", GATE_EMAIL]);
 });
 
 test("VISUAL-01 desktop evidence for all major Lab 3 screens", async ({ page }) => {
@@ -79,6 +84,16 @@ test("VISUAL-01 desktop evidence for all major Lab 3 screens", async ({ page }) 
   await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
   await checkNoOverflow(page, "login");
   await page.screenshot({ path: `${SHOTS}/authentication/login-desktop.png` });
+
+  // Mandatory change-password gate (fresh initial credential). Clears
+  // cookies afterward so later logins in this test start logged out.
+  await page.locator("#login-email").fill(GATE_EMAIL);
+  await page.locator("#login-password").fill(GATE_PASSWORD);
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Change Password" })).toBeVisible();
+  await checkNoOverflow(page, "change-password");
+  await page.screenshot({ path: `${SHOTS}/authentication/change-password-desktop.png` });
+  await page.context().clearCookies();
 
   // Requester: my tickets, create, detail.
   await login(page, REQ_EMAIL);
@@ -92,15 +107,23 @@ test("VISUAL-01 desktop evidence for all major Lab 3 screens", async ({ page }) 
   await checkNoOverflow(page, "create");
   await page.screenshot({ path: `${SHOTS}/requester/create-ticket-desktop.png` });
 
-  // Requester detail with comments tab (first owned ticket or empty state).
+  // Requester detail with comments tab — deterministic ticket created
+  // in-spec so this capture can never silently skip (reviewer blocker).
+  await page.goto("/create");
+  await page.locator("#category").selectOption({ index: 1 });
+  await page.locator("#relatedSystem").selectOption({ index: 1 });
+  await page.locator("#summary").fill("Visual evidence ticket");
+  await page.locator("#description").fill("Deterministic visual fixture ticket body.");
+  await page.locator("#priority").selectOption("MEDIUM");
+  await page.getByRole("button", { name: "Submit Ticket" }).click();
+  await expect(page.getByRole("status")).toContainText("Ticket created successfully");
   await page.goto("/my-tickets");
   const firstLink = page.getByRole("table").getByRole("link").first();
-  if ((await firstLink.count()) > 0) {
-    await firstLink.click();
-    await page.getByRole("tab", { name: "Public Comments" }).click();
-    await checkNoOverflow(page, "requester-detail");
-    await page.screenshot({ path: `${SHOTS}/requester/ticket-detail-desktop.png`, fullPage: true });
-  }
+  await expect(firstLink).toBeVisible();
+  await firstLink.click();
+  await page.getByRole("tab", { name: "Public Comments" }).click();
+  await checkNoOverflow(page, "requester-detail");
+  await page.screenshot({ path: `${SHOTS}/requester/ticket-detail-desktop.png`, fullPage: true });
   await logout(page);
 
   // Staff: queue + detail actions.
@@ -126,6 +149,24 @@ test("VISUAL-01 desktop evidence for all major Lab 3 screens", async ({ page }) 
   await expect(page.getByRole("heading", { name: "Edit User" })).toBeVisible();
   await checkNoOverflow(page, "admin-edit");
   await page.screenshot({ path: `${SHOTS}/user-management/edit-user-desktop.png`, fullPage: true });
+
+  // Admin create form (nav-scoped link: breadcrumbs now link back too).
+  await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "User Management" }).click();
+  await page.getByRole("link", { name: "Create User" }).click();
+  await expect(page.getByRole("heading", { name: "Create User" })).toBeVisible();
+  await checkNoOverflow(page, "admin-create");
+  await page.screenshot({ path: `${SHOTS}/user-management/create-user-desktop.png`, fullPage: true });
+
+  // Admin reset form (via the edit page of a known user).
+  // Nav-scoped: the edit breadcrumb links back with the same name.
+  await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "User Management" }).click();
+  await page.getByLabel("Search").fill(STAFF_EMAIL);
+  await page.getByRole("table").getByText(STAFF_EMAIL).click();
+  await expect(page.getByRole("heading", { name: "Edit User" })).toBeVisible();
+  await page.getByRole("link", { name: "Set New Initial Password" }).click();
+  await expect(page.getByRole("heading", { name: "Set New Initial Password" })).toBeVisible();
+  await checkNoOverflow(page, "admin-reset");
+  await page.screenshot({ path: `${SHOTS}/user-management/set-initial-password-desktop.png`, fullPage: true });
 });
 
 test("VISUAL-01 tablet and mobile evidence for key screens", async ({ page }) => {
@@ -143,15 +184,79 @@ test("VISUAL-01 tablet and mobile evidence for key screens", async ({ page }) =>
     await page.goto("/my-tickets").catch(() => undefined);
   }
 
-  // Requester mobile cards.
+  // Requester mobile cards + create/detail at tablet and mobile.
   await page.getByRole("button", { name: "User menu" }).click();
   await page.getByRole("menuitem", { name: "Logout" }).click();
   await login(page, REQ_EMAIL);
+  for (const [width, height, suffix] of [
+    [900, 1200, "tablet"],
+    [375, 812, "mobile"],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/my-tickets");
+    await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
+    await checkNoOverflow(page, `requester-list-${suffix}`);
+    await page.screenshot({ path: `${SHOTS}/requester/my-tickets-${suffix}.png` });
+
+    await page.goto("/create");
+    await expect(page.getByRole("heading", { name: "Create Ticket" })).toBeVisible();
+    await checkNoOverflow(page, `requester-create-${suffix}`);
+    await page.screenshot({ path: `${SHOTS}/requester/create-ticket-${suffix}.png` });
+
+    // Deterministic detail: the visual ticket created in the desktop test.
+    // Locator follows the responsive representation (table ≥768px).
+    await page.goto("/my-tickets");
+    await page.locator("#my-tickets-search").fill("Visual evidence ticket");
+    const detailLink =
+      width >= 768
+        ? page.getByRole("table").getByRole("link").first()
+        : page.locator(".d-md-none").getByRole("link").first();
+    await expect(detailLink).toBeVisible({ timeout: 15000 });
+    await detailLink.click();
+    await page.getByRole("tab", { name: "Public Comments" }).click();
+    await checkNoOverflow(page, `requester-detail-${suffix}`);
+    await page.screenshot({ path: `${SHOTS}/requester/ticket-detail-${suffix}.png`, fullPage: true });
+  }
+
+  // Admin mobile list + edit + create + reset (nav hides behind the
+  // toggle below md widths).
+  await page.getByRole("button", { name: "User menu" }).click();
+  await page.getByRole("menuitem", { name: "Logout" }).click();
+  await login(page, ADMIN_EMAIL);
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto("/my-tickets");
-  await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
-  await checkNoOverflow(page, "requester-mobile");
-  await page.screenshot({ path: `${SHOTS}/requester/my-tickets-mobile.png` });
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  const umLink = page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "User Management" });
+  await expect(umLink).toBeVisible({ timeout: 10000 });
+  await umLink.click();
+  await expect(page.getByRole("heading", { name: "User Management" })).toBeVisible();
+  await checkNoOverflow(page, "admin-list-mobile");
+  await page.screenshot({ path: `${SHOTS}/user-management/user-list-mobile.png` });
+  await page.getByRole("link", { name: "Create User" }).click();
+  await expect(page.getByRole("heading", { name: "Create User" })).toBeVisible();
+  await checkNoOverflow(page, "admin-create-mobile");
+  await page.screenshot({ path: `${SHOTS}/user-management/create-user-mobile.png`, fullPage: true });
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "User Management" }).click();
+  await page.getByLabel("Search").fill(STAFF_EMAIL);
+  await page.getByRole("link", { name: "Edit user E2E Vis Staff" }).click();
+  await expect(page.getByRole("heading", { name: "Edit User" })).toBeVisible();
+  await checkNoOverflow(page, "admin-edit-mobile");
+  await page.screenshot({ path: `${SHOTS}/user-management/edit-user-mobile.png`, fullPage: true });
+  await page.getByRole("link", { name: "Set New Initial Password" }).click();
+  await expect(page.getByRole("heading", { name: "Set New Initial Password" })).toBeVisible();
+  await checkNoOverflow(page, "admin-reset-mobile");
+  await page.screenshot({ path: `${SHOTS}/user-management/set-initial-password-mobile.png`, fullPage: true });
+
+  // Change-password gate on mobile.
+  await page.getByRole("button", { name: "User menu" }).click();
+  await page.getByRole("menuitem", { name: "Logout" }).click();
+  await page.goto("/");
+  await page.locator("#login-email").fill(GATE_EMAIL);
+  await page.locator("#login-password").fill(GATE_PASSWORD);
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Change Password" })).toBeVisible();
+  await checkNoOverflow(page, "change-password-mobile");
+  await page.screenshot({ path: `${SHOTS}/authentication/change-password-mobile.png` });
 });
 
 test("VISUAL-01 queue loading, no-results, and failure states", async ({ page }) => {
