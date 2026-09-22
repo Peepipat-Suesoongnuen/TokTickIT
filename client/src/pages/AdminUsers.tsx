@@ -2,26 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listUsers, ManagedUser } from "../api";
 import { UserRoleBadge, UserStatusBadge } from "../components/Badges.js";
-import Pagination from "../components/Pagination.js";
-import { TicketListMeta } from "../api.js";
 
 // Issue #50 (Lab 3) — minimalist User Management list (ui-spec §7.1):
 // Name/Email/Role/Status columns (no Edit column — the row itself opens
 // Edit and is keyboard-operable), search + optional role filter only.
+// (Path C: the ID column / Status filter / local pagination were removed
+// again — they contradict Labsheet + api-spec §13.1 + ui-spec §7.1 and live
+// on in the follow-up issue instead.)
 export default function AdminUsers() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [role, setRole] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  // Explicit owner override (2026-09-21): a client-side Status filter was
-  // ordered despite Labsheet/Contract/agent.md §14 forbidding a Status list
-  // filter. Deliberately client-side only: the server contract (api-spec
-  // §13.1 — `active` query rejected with 400) is left untouched, so the
-  // API surface does not diverge. Contract docs now DIVERGE from the UI on
-  // this point — flagged for amendment, not silently rewritten.
-  const [statusFilter, setStatusFilter] = useState("");
   const [data, setData] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -29,40 +21,12 @@ export default function AdminUsers() {
   const requestSequence = useRef(0);
   const isInitialLoading = loading && data.length === 0 && !error && !forbidden;
   const isFiltered =
-    debouncedSearch !== "" || role !== "" || statusFilter !== "";
-  // Numeric-only search targets User ID over the loaded rows instead of
-  // the server name/email search (server contract unchanged).
-  const isIdSearch = /^\d+$/.test(debouncedSearch);
-  const filteredData = data.filter((u) => {
-    if (isIdSearch && !String(u.id).includes(debouncedSearch)) return false;
-    if (statusFilter === "") return true;
-    return statusFilter === "active" ? u.active : !u.active;
-  });
-
-  const totalCount = filteredData.length;
-  const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / pageSize);
-  const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
-  const pagedData = filteredData.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const meta: TicketListMeta = {
-    page: safePage,
-    pageSize,
-    totalCount,
-    totalPages,
-    hasNextPage: safePage < totalPages,
-    hasPreviousPage: safePage > 1,
-  };
+    debouncedSearch !== "" || role !== "";
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
-
-  // Client-side paging over the loaded rows (the admin list API has no
-  // pagination parameters): reset to the first page whenever the visible
-  // set changes.
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, role, statusFilter, pageSize]);
 
   const load = async () => {
     const seq = ++requestSequence.current;
@@ -71,7 +35,7 @@ export default function AdminUsers() {
     setForbidden(false);
     try {
       const res = await listUsers({
-        search: !isIdSearch && debouncedSearch ? debouncedSearch : undefined,
+        search: debouncedSearch || undefined,
         role: role || undefined,
       });
       if (seq === requestSequence.current) {
@@ -103,8 +67,6 @@ export default function AdminUsers() {
     setSearch("");
     setDebouncedSearch("");
     setRole("");
-    setStatusFilter("");
-    setPage(1);
   };
 
   const openUser = (id: number) => {
@@ -156,22 +118,6 @@ export default function AdminUsers() {
               <option value="ADMINISTRATOR">Administrator</option>
             </select>
           </div>
-          <div>
-            <label htmlFor="admin-users-status" className="form-label lab2-toolbar-label">Status</label>
-            <select id="admin-users-status" className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="admin-users-page-size" className="form-label lab2-toolbar-label">Rows per page</label>
-            <select id="admin-users-page-size" className="form-select" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
         </div>
       </div>
 
@@ -192,13 +138,13 @@ export default function AdminUsers() {
         </div>
       )}
 
-      {!loading && !error && !forbidden && filteredData.length === 0 && !isFiltered && (
+      {!loading && !error && !forbidden && data.length === 0 && !isFiltered && (
         <div className="alert alert-info text-center">
           <p className="mb-0">No users yet</p>
         </div>
       )}
 
-      {!loading && !error && !forbidden && filteredData.length === 0 && isFiltered && (
+      {!loading && !error && !forbidden && data.length === 0 && isFiltered && (
         <div className="alert alert-warning text-center" role="status">
           <p className="mb-2">No users match the current filters</p>
           <button className="btn btn-outline-success btn-sm" onClick={clearFilters}>
@@ -207,12 +153,11 @@ export default function AdminUsers() {
         </div>
       )}
 
-      {!error && !forbidden && filteredData.length > 0 && (
+      {!error && !forbidden && data.length > 0 && (
         <>
           <div className="d-none d-md-block table-responsive">
             <table className="table table-hover align-middle lab2-ticket-table lab2-admin-table" aria-busy={loading}>
               <colgroup>
-                <col className="lab2-admin-col-id" />
                 <col className="lab2-admin-col-name" />
                 <col className="lab2-admin-col-email" />
                 <col className="lab2-admin-col-role" />
@@ -220,7 +165,6 @@ export default function AdminUsers() {
               </colgroup>
               <thead>
                 <tr>
-                  <th>User ID</th>
                   <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
@@ -228,7 +172,7 @@ export default function AdminUsers() {
                 </tr>
               </thead>
               <tbody>
-                {pagedData.map((u) => (
+                {data.map((u) => (
                   <tr
                     key={u.id}
                     className="lab2-ticket-row admin-user-row"
@@ -237,7 +181,6 @@ export default function AdminUsers() {
                     onKeyDown={(event) => openFromKey(event, u.id)}
                     aria-label={`Edit user ${u.name}`}
                   >
-                    <td>{u.id}</td>
                     <td>{u.name}</td>
                     <td className="lab2-category-cell">{u.email}</td>
                     <td>
@@ -253,7 +196,7 @@ export default function AdminUsers() {
           </div>
 
           <div className="d-md-none" aria-busy={loading}>
-            {pagedData.map((u) => (
+            {data.map((u) => (
               <div
                 key={u.id}
                 className="card mb-2 p-3 lab2-ticket-card"
@@ -267,7 +210,6 @@ export default function AdminUsers() {
                   <div>
                     <div className="fw-bold">{u.name}</div>
                     <div className="small text-secondary">{u.email}</div>
-                    <div className="small text-secondary">User ID: {u.id}</div>
                   </div>
                   <UserStatusBadge active={u.active} />
                 </div>
@@ -277,8 +219,6 @@ export default function AdminUsers() {
               </div>
             ))}
           </div>
-
-          <Pagination meta={meta} noun="users" onPage={setPage} />
         </>
       )}
     </div>

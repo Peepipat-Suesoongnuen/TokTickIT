@@ -41,10 +41,11 @@ describe("AdminUsers list (Lab 3 Issue #50, UI-10)", () => {
     expect((await screen.findAllByText("alice@example.com")).length).toBeGreaterThanOrEqual(1);
 
     const table = screen.getByRole("table");
-    // ID column first per approved position, then the contract four.
+    // Contract columns exactly (Path C: ID column / Status filter /
+    // pagination removed — they live on in the follow-up issue).
     const headers = within(table).getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["User ID", "Name", "Email", "Role", "Status"]);
-    for (const col of ["User ID", "Name", "Email", "Role", "Status"]) {
+    expect(headers).toEqual(["Name", "Email", "Role", "Status"]);
+    for (const col of ["Name", "Email", "Role", "Status"]) {
       expect(within(table).getByText(col)).toBeInTheDocument();
     }
     expect(within(table).queryByText("Edit")).not.toBeInTheDocument();
@@ -52,10 +53,8 @@ describe("AdminUsers list (Lab 3 Issue #50, UI-10)", () => {
 
     expect(screen.getByLabelText("Search")).toBeInTheDocument();
     expect(screen.getByLabelText("Role")).toBeInTheDocument();
-    // Explicit owner override (2026-09-21): client-side Status filter
-    // ordered despite the contract forbidding a server Status filter.
-    // The server contract is untouched (`active` query still 400s).
-    expect(screen.getByLabelText("Status")).toBeInTheDocument();
+    // Status is displayed but is not a list filter (contract).
+    expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
     expect((await screen.findAllByText("ACTIVE")).length).toBeGreaterThanOrEqual(1);
     expect((await screen.findAllByText("INACTIVE")).length).toBeGreaterThanOrEqual(1);
 
@@ -86,85 +85,6 @@ describe("AdminUsers list (Lab 3 Issue #50, UI-10)", () => {
 
     await user.selectOptions(screen.getByLabelText(/Role/), "IT_STAFF");
     expect(mockedApi.listUsers).toHaveBeenLastCalledWith(expect.objectContaining({ role: "IT_STAFF" }));
-  });
-
-  it("numeric search matches User ID over the full list; text search stays server-side", async () => {
-    const user = userEvent.setup();
-    renderList();
-    await screen.findAllByText("alice@example.com");
-
-    // ID cell renders the business identifier first.
-    expect(within(screen.getByRole("table")).getByText("12")).toBeInTheDocument();
-
-    // Numeric input skips the server name/email search and matches IDs.
-    // (No extra server request carries the digits: the last search-bearing
-    // call stays the initial unfiltered load.)
-    const callsBefore = mockedApi.listUsers.mock.calls.length;
-    await user.type(screen.getByLabelText(/Search/), "12");
-    await waitFor(() => {
-      expect(within(screen.getByRole("table")).queryByText("Bob Staff")).not.toBeInTheDocument();
-    });
-    expect(within(screen.getByRole("table")).getByText("12")).toBeInTheDocument();
-    expect(
-      mockedApi.listUsers.mock.calls.every(
-        ([params]) => !(params as Record<string, unknown>).search,
-      ),
-    ).toBe(true);
-    // The reload refetches the full list (no digits sent to the server).
-    expect(mockedApi.listUsers.mock.calls.length).toBe(callsBefore + 1);
-
-    // Existing name search still goes to the server untouched.
-    await user.clear(screen.getByLabelText(/Search/));
-    await user.type(screen.getByLabelText(/Search/), "bob");
-    await waitFor(() =>
-      expect(mockedApi.listUsers).toHaveBeenLastCalledWith(expect.objectContaining({ search: "bob" })),
-    );
-  });
-
-  it("status filter narrows the visible rows client-side without a server query", async () => {
-    const user = userEvent.setup();
-    renderList();
-    await screen.findAllByText("alice@example.com");
-    const callsBefore = mockedApi.listUsers.mock.calls.length;
-
-    await user.selectOptions(screen.getByLabelText("Status"), "Inactive");
-    expect(screen.queryByText("Alice Example")).not.toBeInTheDocument();
-    expect((await screen.findAllByText("Nok Inactive")).length).toBeGreaterThanOrEqual(1);
-    expect(mockedApi.listUsers.mock.calls.length).toBe(callsBefore);
-  });
-
-  it("pagination pages locally with numbered buttons and resets on filter change", async () => {
-    const user = userEvent.setup();
-    const many = Array.from({ length: 12 }, (_, i) => ({
-      id: 100 + i,
-      name: `Paged User ${i}`,
-      email: `paged${i}@example.com`,
-      role: "REQUESTER",
-      active: true,
-      mustChangePassword: false,
-      createdAt: "2026-09-01T08:00:00.000Z",
-    }));
-    mockedApi.listUsers.mockResolvedValue({ data: many });
-    renderList();
-    expect((await screen.findAllByText("Paged User 0")).length).toBeGreaterThanOrEqual(1);
-
-    const nav = screen.getByRole("navigation", { name: "Pagination" });
-    expect(nav).toHaveTextContent("Page 1 of 2 • 12 users");
-    expect(within(nav).getByRole("button", { name: "Previous page" })).toBeDisabled();
-    await user.click(within(nav).getByRole("button", { name: "Go to page 2" }));
-    expect((await screen.findAllByText("Paged User 10")).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText("Paged User 0")).not.toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: "Next page" })).toBeDisabled();
-
-    // Changing a filter resets to the first page.
-    await user.type(screen.getByLabelText(/Search/), "paged");
-    await waitFor(() => expect(screen.getByText("Page 1 of 2 • 12 users")).toBeInTheDocument());
-
-    // An empty server result hides pagination and offers Clear Filters.
-    mockedApi.listUsers.mockResolvedValue({ data: [] });
-    await user.selectOptions(screen.getByLabelText(/Role/), "IT_STAFF");
-    expect(await screen.findByText("No users match the current filters")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Pagination" })).not.toBeInTheDocument();
   });
 
   it("forbidden users see a forbidden message instead of the list", async () => {

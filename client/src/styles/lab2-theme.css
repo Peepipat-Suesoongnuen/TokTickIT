@@ -150,11 +150,10 @@ body {
   table-layout: fixed;
 }
 
-.lab2-admin-table .lab2-admin-col-id { width: 10%; }
-.lab2-admin-table .lab2-admin-col-name { width: 22%; }
-.lab2-admin-table .lab2-admin-col-email { width: 32%; }
-.lab2-admin-table .lab2-admin-col-role { width: 18%; }
-.lab2-admin-table .lab2-admin-col-status { width: 18%; }
+.lab2-admin-table .lab2-admin-col-name { width: 25%; }
+.lab2-admin-table .lab2-admin-col-email { width: 35%; }
+.lab2-admin-table .lab2-admin-col-role { width: 20%; }
+.lab2-admin-table .lab2-admin-col-status { width: 20%; }
 
 .lab2-admin-table td:nth-child(1),
 .lab2-admin-table td:nth-child(2) {
@@ -186,7 +185,7 @@ body {
    stacking below md like the mockup. */
 .lab3-admin-toolbar-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(190px, 1fr);
   gap: 10px;
 }
 
