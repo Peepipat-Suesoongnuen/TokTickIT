@@ -40,10 +40,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public
           TEST_DATABASE_URL: postgresql://toktickit:toktickit@localhost:5432/toktickit_test?schema=public
+      # Guarded migrate/seed: the gate wraps the DB-writing commands
+      # directly, so a misconfigured target can never reach Prisma.
       - working-directory: server
-        run: npx prisma migrate deploy
+        run: npx tsx prisma/guard-test-target.ts -- npx prisma migrate deploy
       - working-directory: server
-        run: npx prisma db seed
+        run: npx tsx prisma/guard-test-target.ts -- npx prisma db seed
       - working-directory: server
         run: npx tsc --noEmit
       - name: Guardrails — test hygiene (one-round fix)
