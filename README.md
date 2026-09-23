@@ -18,21 +18,30 @@ TokTickIT is an IT Service Desk web application built as a full-stack vertical s
 toktickit/
 ├── client/                         # React + TypeScript + Vite frontend
 │   └── src/
-│       ├── components/
+│       ├── components/             # Shared UI incl. badges, pagination, communication
 │       ├── contexts/
-│       ├── pages/
-│       ├── styles/                  # Lab 2 Zen Green theme
-│       └── features/lab-02/tests/   # UI/component/style tests
+│       ├── pages/                  # Requester, Staff, and Admin screens
+│       ├── styles/                 # Lab 2 Zen Green theme (+ Lab 3 extensions)
+│       └── features/
+│           ├── lab-02/tests/       # UI/component/style tests
+│           └── lab-03/tests/       # Lab 3 UI/component tests
 ├── server/
 │   ├── prisma/                      # Prisma schema, migrations, seed
-│   ├── src/                         # Express app + helpers
-│   ├── tests/lab-02/                # API/integration tests
+│   ├── src/                         # Express app + helpers (+ auth/staff/admin routes)
+│   ├── tests/
+│   │   ├── lab-02/                  # API/integration tests
+│   │   └── lab-03/                  # Auth/session/queue/workflow/admin/concurrency tests
 │   └── uploads/                     # Runtime attachment storage (ignored)
-├── e2e/lab-02/                      # Playwright requester flow + visual states
-├── artifacts/lab-02/screenshots/    # Responsive/visual evidence
+├── e2e/
+│   ├── lab-02/                      # Playwright requester flow + visual states
+│   └── lab-03/                      # Auth, staff, communication, admin, security, regression, a11y, visual specs
+├── artifacts/
+│   ├── lab-02/screenshots/          # Responsive/visual evidence
+│   └── lab-03/screenshots/          # Lab 3 evidence by role/screen/state
 ├── docs/
 │   ├── lab-01/
-│   └── lab-02/                      # specification/api/ui/tests/reviewer/ai-use
+│   ├── lab-02/                      # specification/api/ui/tests/reviewer/ai-use
+│   └── lab-03/                      # specification/api-spec/ui-spec/tests/reviewer/ai-use
 ├── playwright.config.ts
 ├── package.json                     # Root Playwright scripts
 └── README.md
@@ -156,7 +165,7 @@ npm test
 
 ### Playwright E2E and responsive/visual evidence
 
-The E2E suite uses the same isolated `toktickit_test` database. `playwright.config.ts` starts dedicated Lab 2 API/UI servers on ports `3100` and `5174`; do not run E2E against the normal development database.
+The E2E suite uses the same isolated `toktickit_test` database. `playwright.config.ts` starts dedicated API/UI servers on ports `3100` and `5174`; do not run E2E against the normal development database.
 
 From the repository root, set both database variables to the dedicated test database and run:
 
@@ -174,7 +183,7 @@ $env:DATABASE_URL=$env:TEST_DATABASE_URL
 npm run test:e2e
 ```
 
-The Playwright global setup applies migrations/seeding to the isolated test database. Responsive and visual screenshots are written under `artifacts/lab-02/screenshots/`.
+The Playwright global setup applies migrations/seeding to the isolated test database. Responsive and visual screenshots are written under `artifacts/lab-02/screenshots/` (Lab 2) and `artifacts/lab-03/screenshots/` (Lab 3, by role/screen/state).
 
 ### Typecheck/build checks used before PR handoff
 
@@ -188,7 +197,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-Hosted CI runs server, client, and E2E jobs on push/pull-request. The E2E job also uploads `artifacts/lab-02/screenshots/` as a workflow artifact.
+Hosted CI runs server, client, E2E, and migration-proof jobs on push/pull-request. The E2E job also uploads screenshots as a workflow artifact.
 
 ## Other Scripts
 
@@ -203,5 +212,5 @@ Hosted CI runs server, client, and E2E jobs on push/pull-request. The E2E job al
 | server | `npm run prisma:migrate` | Run Prisma migrations |
 | server | `npm run prisma:seed` | Seed the database |
 | server | `npm test` | Run Vitest + Supertest |
-| root | `npm run test:e2e` | Run Playwright Lab 2 E2E + responsive/visual tests |
+| root | `npm run test:e2e` | Run Playwright E2E + responsive/visual tests |
 | root | `npm run test:e2e:headed` | Run Playwright with a visible browser |
