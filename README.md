@@ -128,6 +128,19 @@ Backend integration tests require a separate `toktickit_test` database. Never po
 `TEST_DATABASE_URL` at the development database because integration tests create and
 remove fixture records.
 
+`TEST_DATABASE_URL` is **required** for any test run: under `NODE_ENV=test`
+the server fails closed instead of silently falling back to the development
+database (missing, non-PostgreSQL, non-test-like, or dev-colliding targets
+are rejected). Validate up front with the guard (used by CI before every
+DB-writing stage):
+
+```bash
+cd server
+npx tsx prisma/guard-test-target.ts
+# or gate a command directly:
+npx tsx prisma/guard-test-target.ts -- npx prisma migrate deploy
+```
+
 Create the test database once in PostgreSQL:
 
 ```sql
