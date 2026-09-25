@@ -348,6 +348,51 @@ body {
   }
 }
 
+/* Issue #67 — staff detail underline tabs mirror the approved staff
+   mockup (artifacts/lab-03/mockups/it-staff/ticket-detail.html). */
+.staff-detail-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--zen-border);
+  background: #fbfcfb;
+  overflow-x: auto;
+}
+
+.staff-detail-tab {
+  flex: 1 0 auto;
+  min-height: 46px;
+  padding: 10px 13px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--zen-muted);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.staff-detail-tab.active {
+  color: var(--zen-primary);
+  border-bottom-color: var(--zen-secondary);
+  background: #fff;
+}
+
+.staff-detail-tab:focus-visible {
+  outline: 2px solid var(--zen-primary);
+  outline-offset: -2px;
+}
+
+@media (max-width: 767.98px) {
+  .staff-detail-tabs {
+    justify-content: flex-start;
+  }
+  .staff-detail-tab {
+    flex: 0 0 auto;
+    min-width: 132px;
+    padding-inline: 10px;
+    font-size: 0.82rem;
+  }
+}
+
 .lab2-success-icon {
   font-weight: 700;
   margin-right: 0.35rem;

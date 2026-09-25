@@ -246,17 +246,17 @@ export default function StaffTicketDetail() {
         <div className="row g-2 mb-2">
           <div className="col-md-4">
             <label className="form-label lab2-toolbar-label" htmlFor="staff-info-number">Ticket Number</label>
-            <input id="staff-info-number" className="form-control" readOnly value={ticket.ticketNumber} />
+            <input id="staff-info-number" className="form-control form-readonly" readOnly value={ticket.ticketNumber} />
           </div>
           <div className="col-md-4">
             <label className="form-label lab2-toolbar-label" htmlFor="staff-info-date">Ticket Date</label>
-            <input id="staff-info-date" className="form-control" readOnly value={formatBangkok(ticket.ticketDate)} />
+            <input id="staff-info-date" className="form-control form-readonly" readOnly value={formatBangkok(ticket.ticketDate)} />
           </div>
           <div className="col-md-4">
             <label className="form-label lab2-toolbar-label" htmlFor="staff-info-requester">Requester</label>
             <input
               id="staff-info-requester"
-              className="form-control"
+              className="form-control form-readonly"
               readOnly
               value={`${ticket.requester.name} (${ticket.requester.email})`}
             />
@@ -265,37 +265,37 @@ export default function StaffTicketDetail() {
         <div className="row g-2 mb-2">
           <div className="col-md-6">
             <label className="form-label lab2-toolbar-label" htmlFor="staff-info-category">Category</label>
-            <input id="staff-info-category" className="form-control" readOnly value={ticket.category.name} />
+            <input id="staff-info-category" className="form-control form-readonly" readOnly value={ticket.category.name} />
           </div>
           <div className="col-md-6">
             <label className="form-label lab2-toolbar-label" htmlFor="staff-info-system">Related System</label>
-            <input id="staff-info-system" className="form-control" readOnly value={ticket.relatedSystem.name} />
+            <input id="staff-info-system" className="form-control form-readonly" readOnly value={ticket.relatedSystem.name} />
           </div>
         </div>
         <div className="mb-2">
           <label className="form-label lab2-toolbar-label" htmlFor="staff-info-summary">Summary</label>
-          <input id="staff-info-summary" className="form-control" readOnly value={ticket.summary} />
+            <input id="staff-info-summary" className="form-control form-readonly" readOnly value={ticket.summary} />
         </div>
         <div className="mb-2">
           <label className="form-label lab2-toolbar-label" htmlFor="staff-info-description">Description</label>
-          <textarea id="staff-info-description" className="form-control" readOnly rows={3} value={ticket.description} />
+            <textarea id="staff-info-description" className="form-control form-readonly" readOnly rows={3} value={ticket.description} />
         </div>
         <div className="row g-2 mb-2">
           <div className="col-md-3">
             <span className="form-label lab2-toolbar-label d-block">Req. Priority</span>
-            <div className="form-control"><PriorityBadge value={ticket.requestedPriority} /></div>
+            <div className="form-control form-readonly"><PriorityBadge value={ticket.requestedPriority} /></div>
           </div>
           <div className="col-md-3">
             <span className="form-label lab2-toolbar-label d-block">IT Priority</span>
-            <div className="form-control"><PriorityBadge value={ticket.itPriority} /></div>
+            <div className="form-control form-readonly"><PriorityBadge value={ticket.itPriority} /></div>
           </div>
           <div className="col-md-3">
             <span className="form-label lab2-toolbar-label d-block">Status</span>
-            <div className="form-control"><StatusBadge value={ticket.currentStatus} /></div>
+            <div className="form-control form-readonly"><StatusBadge value={ticket.currentStatus} /></div>
           </div>
           <div className="col-md-3">
             <span className="form-label lab2-toolbar-label d-block">Owner</span>
-            <div className="form-control">
+            <div className="form-control form-readonly">
               {ticket.ticketOwner ? `${ticket.ticketOwner.name} (${ticket.ticketOwner.role})` : "Unassigned"}
             </div>
           </div>
@@ -303,17 +303,17 @@ export default function StaffTicketDetail() {
         <div className="row g-2">
           <div className="col-md-6">
             <span className="form-label lab2-toolbar-label d-block">Requester Indication</span>
-            <div className="form-control">{indication}</div>
+            <div className="form-control form-readonly">{indication}</div>
           </div>
           <div className="col-md-6">
             <span className="form-label lab2-toolbar-label d-block">Last Updated</span>
-            <div className="form-control">{formatBangkok(ticket.updatedAt)}</div>
+            <div className="form-control form-readonly">{formatBangkok(ticket.updatedAt)}</div>
           </div>
         </div>
       </section>
 
       <section className="card p-3" aria-label="Ticket workspace">
-        <div className="staff-detail-tabs btn-group mb-3" role="tablist" aria-label="Ticket sections">
+        <div className="staff-detail-tabs mb-3" role="tablist" aria-label="Ticket sections">
           {(
             [
               ["comments", "Public Comments"],
@@ -327,7 +327,7 @@ export default function StaffTicketDetail() {
               type="button"
               role="tab"
               aria-selected={tab === key}
-              className={`staff-detail-tab btn ${tab === key ? "btn-success" : "btn-outline-success"}`}
+              className={`staff-detail-tab ${tab === key ? "active" : ""}`}
               onClick={() => setTab(key)}
             >
               {label}
