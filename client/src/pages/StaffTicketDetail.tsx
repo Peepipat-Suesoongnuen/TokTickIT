@@ -313,7 +313,7 @@ export default function StaffTicketDetail() {
       </section>
 
       <section className="card p-3" aria-label="Ticket workspace">
-        <div className="staff-detail-tabs btn-group mb-3" role="tablist" aria-label="Ticket sections">
+        <div className="staff-detail-tabs mb-3" role="tablist" aria-label="Ticket sections">
           {(
             [
               ["comments", "Public Comments"],
@@ -327,7 +327,7 @@ export default function StaffTicketDetail() {
               type="button"
               role="tab"
               aria-selected={tab === key}
-              className={`staff-detail-tab btn ${tab === key ? "btn-success" : "btn-outline-success"}`}
+              className={`staff-detail-tab ${tab === key ? "active" : ""}`}
               onClick={() => setTab(key)}
             >
               {label}
