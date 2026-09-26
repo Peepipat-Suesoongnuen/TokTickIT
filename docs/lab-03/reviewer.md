@@ -93,9 +93,12 @@ there; this file records the trail, not duplicates of every comment.
 
 Completed staging gates:
 
-- Issues #43–#52, #57, and #67 are closed with peer-reviewed merges into
+- Issues #43–#51, #57, and #67 are closed with peer-reviewed merges into
   `lab3-staging` as listed above; Issue #63 follow-up was formally dropped
-  and closed (exclusions, not requirements).
+  and closed (exclusions, not requirements). Issue #52 was closed early and
+  has been   reopened (board: Backlog) pending the release PR, exact
+  final-main verification, and the submission PDF, per its own acceptance
+  criterion.
 - Current `lab3-staging` tip `14680e7` (merge of PR #68) has hosted CI run
   #170 SUCCESS.
 
