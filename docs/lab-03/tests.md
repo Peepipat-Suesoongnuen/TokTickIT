@@ -298,7 +298,7 @@ follow-up formally dropped and closed — no Lab 3 requirement lost). Open
 work before release: exact final-`main` verification (item 4 below) and the
 final submission PDF with owner-authored prompts/reflection.
 
-Not yet available as final-main evidence. This document is the pre-implementation plan. No `Pass` result, branch evidence, staging CI, reviewer approval, or final-main evidence is claimed until it actually exists.
+Not yet available as final-main evidence. This document started as the pre-implementation plan and is now in release preparation. No `Pass` result, branch evidence, staging CI, reviewer approval, or final-main evidence is claimed until it actually exists.
 
 When implementation begins, evidence entries should distinguish:
 

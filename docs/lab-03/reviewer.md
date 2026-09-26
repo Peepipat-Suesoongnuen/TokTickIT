@@ -30,7 +30,7 @@ This record is based on GitHub PR/review history. It does not treat an AI review
 
 ### PR #54 — contract defects before downstream implementation
 
-Tanaboonnnnn submitted 3× `CHANGES_REQUESTED`: mojibake/encoding fixes, Admin list scope (Status filter removal per Labsheet), bcrypt 72-byte vs 64-char policy, Origin/CSRF fail behavior, seed-rerun evidence; then the owner/admin concurrency race (BR-76); then attachment-matrix vs migration-strategy fork. Each round was fixed in contract revisions and re-reviewed. Final **APPROVED** on exact head `9f35d50` with exact-head CI green before merge.
+Tanaboonnnnn submitted 3× `CHANGES_REQUESTED`: mojibake/encoding fixes, Admin list scope (Status filter removal per Labsheet), bcrypt 72-byte vs 64-char policy, Origin/CSRF fail behavior, seed-rerun evidence; then the owner/admin concurrency race (BR-76); then attachment-matrix vs migration-strategy fork. Each round was fixed in contract revisions and re-reviewed. First **APPROVED** on exact head `9f35d50`, followed by polish fixes (API-15b traceability, MIG-02b mapping) and a final **APPROVED** on exact head `2ca5098` — the PR head that merged — with exact-head CI green before merge.
 
 ### PR #56 — migration/seed blockers and evidence hygiene
 
