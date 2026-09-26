@@ -291,7 +291,14 @@ Planned screenshots are stored under `artifacts/lab-03/screenshots/` by role/scr
 
 ## 13. Final Results
 
-Not yet available. This document is the pre-implementation plan. No `Pass` result, branch evidence, staging CI, reviewer approval, or final-main evidence is claimed until it actually exists.
+Staging release-candidate evidence (not final-main): `lab3-staging` tip
+`14680e7` (merge of PR #68) has hosted CI run #170 SUCCESS. Merged Lab 3
+line: PRs #54, #56, #58–#62, #64–#66, #68 (PR #55 closed unmerged; Issue #63
+follow-up formally dropped and closed — no Lab 3 requirement lost). Open
+work before release: exact final-`main` verification (item 4 below) and the
+final submission PDF with owner-authored prompts/reflection.
+
+Not yet available as final-main evidence. This document started as the pre-implementation plan and is now in release preparation. No `Pass` result, branch evidence, staging CI, reviewer approval, or final-main evidence is claimed until it actually exists.
 
 When implementation begins, evidence entries should distinguish:
 
