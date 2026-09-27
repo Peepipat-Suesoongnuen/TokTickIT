@@ -99,12 +99,15 @@ Completed staging gates:
   has been   reopened (board: Backlog) pending the release PR, exact
   final-main verification, and the submission PDF, per its own acceptance
   criterion.
-- Current `lab3-staging` tip `14680e7` (merge of PR #68) has hosted CI run
-  #170 SUCCESS.
+- Current `lab3-staging` tip `88084ec` (merge of PR #69) has hosted CI runs
+  #177/#178 SUCCESS.
+- Release PR [#70](https://github.com/Peepipat-Suesoongnuen/TokTickIT/pull/70)
+  (`lab3-staging -> main`) is OPEN and awaiting peer review; it has not been
+  merged.
 
 Still pending (not claimed):
 
-- The peer-reviewed `lab3-staging -> main` release PR has not been opened yet.
+- Peer approval and merge of release PR #70.
 - Exact final-`main` verification and the final submission PDF (with
   owner-authored prompts/reflection) have not been produced yet.
 - The author does not self-merge the release PR.
