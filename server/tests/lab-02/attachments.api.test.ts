@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { hashPassword } from "../../src/lib/password-hash.js";
+import { loginAs } from "../helpers/auth-test.js";
 import fs from "fs";
 import path from "path";
 
@@ -18,8 +20,15 @@ function pngBuffer(size = 1024): Buffer {
 
 describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
   const prisma = getPrisma();
+  // Issue #46 (Lab 3): session-derived ownership — fixtures are real loginable
+  // Users; every request carries the session cookie, no requesterId is sent.
+  const emailA = "lab2-attach-a@example.com";
+  const emailB = "lab2-attach-b@example.com";
+  const password = "Lab2-Heal-Valid-9!";
   let requesterA: { id: number };
   let requesterB: { id: number };
+  let cookieA: string;
+  let cookieB: string;
   let category: { id: number };
   let relatedSystem: { id: number };
   let ticketA: { id: number; ticketNumber: string };
@@ -47,19 +56,30 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
     });
     relatedSystem = sys;
 
-    const reqA = await prisma.developmentRequester.upsert({
-      where: { email: "requesterA-attach@test.com" },
-      update: {},
-      create: { name: "Requester A Attach", email: "requesterA-attach@test.com", isActive: true },
-    });
-    requesterA = { id: reqA.id };
-
-    const reqB = await prisma.developmentRequester.upsert({
-      where: { email: "requesterB-attach@test.com" },
-      update: {},
-      create: { name: "Requester B Attach", email: "requesterB-attach@test.com", isActive: true },
-    });
-    requesterB = { id: reqB.id };
+    const passwordHash = await hashPassword(password);
+    await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB] } } });
+    const [userA, userB] = await Promise.all(
+      [
+        { name: "Requester A Attach", email: emailA },
+        { name: "Requester B Attach", email: emailB },
+      ].map((u) =>
+        prisma.user.create({
+          data: {
+            name: u.name,
+            email: u.email,
+            passwordHash,
+            role: "REQUESTER",
+            isActive: true,
+            mustChangePassword: false,
+          },
+          select: { id: true },
+        })
+      )
+    );
+    requesterA = { id: userA.id };
+    requesterB = { id: userB.id };
+    cookieA = await loginAs(emailA, password);
+    cookieB = await loginAs(emailB, password);
 
     const tA = await prisma.ticket.create({
       data: {
@@ -70,6 +90,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
         summary: "Attachment ticket A",
         description: "Description for attachment ticket A that is long enough to be valid",
         requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
         currentStatus: "NEW",
       },
     });
@@ -84,6 +105,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
         summary: "Attachment ticket B",
         description: "Description for attachment ticket B that is long enough to be valid",
         requestedPriority: "LOW",
+        itPriority: "LOW",
         currentStatus: "NEW",
       },
     });
@@ -96,8 +118,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
     await prisma.ticket.deleteMany({
       where: { ticketNumber: { in: [TICKET_A_NUM, TICKET_B_NUM, ...transient] } },
     });
-    await prisma.developmentRequester.deleteMany({
-      where: { email: { in: ["requesterA-attach@test.com", "requesterB-attach@test.com"] } },
+    await prisma.user.deleteMany({
+      where: { email: { in: [emailA, emailB] } },
     });
   });
 
@@ -107,7 +129,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
   describe("POST /api/tickets/:id/attachments — upload", () => {
     it("should return 201 for valid upload (AC-18)", async () => {
       const res = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(2048), { filename: "valid.png", contentType: "image/png" })
         .expect(201);
 
@@ -141,7 +164,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
     it("should return 415 for wrong file type (AC-19)", async () => {
       const before = await prisma.attachment.count({ where: { ticketId: ticketA.id } });
       const res = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", Buffer.from("hello world"), { filename: "bad.txt", contentType: "text/plain" })
         .expect(415);
       expect(res.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
@@ -152,7 +176,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
     it("should return 413 for oversize file >5MB (AC-19)", async () => {
       const big = Buffer.alloc(5 * 1024 * 1024 + 1, 0x61);
       const res = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", big, { filename: "big.png", contentType: "image/png" })
         .expect(413);
       expect(res.body.error.code).toBe("PAYLOAD_TOO_LARGE");
@@ -173,6 +198,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
             summary: "Limit ticket",
             description: "Description for limit ticket that is long enough to be valid",
             requestedPriority: "LOW",
+            itPriority: "LOW",
             currentStatus: "NEW",
           },
         });
@@ -192,7 +218,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
         }
 
         const res = await request(app)
-          .post(`/api/tickets/${t.id}/attachments?requesterId=${requesterA.id}`)
+          .post(`/api/tickets/${t.id}/attachments`)
+          .set("Cookie", cookieA)
           .attach("file", pngBuffer(1024), { filename: "extra.png", contentType: "image/png" })
           .expect(409);
         expect(res.body.error.code).toBe("CONFLICT");
@@ -210,7 +237,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should enforce mime+ext pairing (pdf ext with png mime → 415)", async () => {
       const res = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "mismatch.pdf", contentType: "image/png" })
         .expect(415);
       expect(res.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
@@ -219,7 +247,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
     it("should return 415 when signature mismatches mime (random bytes as png → 415)", async () => {
       const bad = Buffer.alloc(1024, 0x00);
       const res = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", bad, { filename: "bad.png", contentType: "image/png" })
         .expect(415);
       expect(res.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
@@ -239,6 +268,7 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
             summary: "Concurrent ticket",
             description: "Description for concurrent ticket that is long enough to be valid",
             requestedPriority: "LOW",
+            itPriority: "LOW",
             currentStatus: "NEW",
           },
         });
@@ -255,8 +285,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
           });
         }
         const [r1, r2] = await Promise.all([
-          request(app).post(`/api/tickets/${t.id}/attachments?requesterId=${requesterA.id}`).attach("file", pngBuffer(1024), { filename: "p1.png", contentType: "image/png" }),
-          request(app).post(`/api/tickets/${t.id}/attachments?requesterId=${requesterA.id}`).attach("file", pngBuffer(1024), { filename: "p2.png", contentType: "image/png" }),
+          request(app).post(`/api/tickets/${t.id}/attachments`).set("Cookie", cookieA).attach("file", pngBuffer(1024), { filename: "p1.png", contentType: "image/png" }),
+          request(app).post(`/api/tickets/${t.id}/attachments`).set("Cookie", cookieA).attach("file", pngBuffer(1024), { filename: "p2.png", contentType: "image/png" }),
         ]);
         const codes = [r1.status, r2.status].sort();
         expect(codes).toEqual([201, 409]);
@@ -277,7 +307,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 400 when no file provided", async () => {
       const res = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .expect(400);
       expect(res.body.error.code).toBe("VALIDATION_FAILED");
       expect(res.body.fieldErrors.file).toBeDefined();
@@ -285,7 +316,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 when uploading to not-owned ticket (BR-09)", async () => {
       const res = await request(app)
-        .post(`/api/tickets/${ticketB.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketB.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "cross.png", contentType: "image/png" })
         .expect(404);
       expect(res.body.error.code).toBe("NOT_FOUND");
@@ -293,7 +325,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 when ticket does not exist", async () => {
       const res = await request(app)
-        .post(`/api/tickets/999999/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/999999/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "ghost.png", contentType: "image/png" })
         .expect(404);
       expect(res.body.error.code).toBe("NOT_FOUND");
@@ -307,12 +340,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
     it("should return 200 for owned active attachment (API-26)", async () => {
       // Create owned attachment via upload to get real file on disk
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "meta.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .get(`/api/attachments/${upload.body.id}?requesterId=${requesterA.id}`)
+          .get(`/api/attachments/${upload.body.id}`)
+          .set("Cookie", cookieA)
           .expect(200);
         expect(res.body.id).toBe(upload.body.id);
         expect(res.body.ticketId).toBe(ticketA.id);
@@ -330,12 +365,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 for cross-owner metadata (AC-24, API-24)", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "cross-meta.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .get(`/api/attachments/${upload.body.id}?requesterId=${requesterB.id}`)
+          .get(`/api/attachments/${upload.body.id}`)
+          .set("Cookie", cookieB)
           .expect(404);
         expect(res.body.error.code).toBe("NOT_FOUND");
       } finally {
@@ -349,7 +386,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 for missing attachment", async () => {
       const res = await request(app)
-        .get(`/api/attachments/999999?requesterId=${requesterA.id}`)
+        .get(`/api/attachments/999999`)
+        .set("Cookie", cookieA)
         .expect(404);
       expect(res.body.error.code).toBe("NOT_FOUND");
     });
@@ -362,12 +400,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
     it("should return 200 binary stream for owned active attachment (API-27)", async () => {
       const payload = pngBuffer(2048);
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", payload, { filename: "download.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .get(`/api/attachments/${upload.body.id}/download?requesterId=${requesterA.id}`)
+          .get(`/api/attachments/${upload.body.id}/download`)
+          .set("Cookie", cookieA)
           .expect(200);
         expect(res.headers["content-type"]).toBe("image/png");
         expect(res.headers["content-disposition"]).toContain('filename="download.png"');
@@ -384,17 +424,20 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 when downloading removed attachment (BR-17, API-20)", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "to-remove.png", contentType: "image/png" })
         .expect(201);
       try {
         // Soft-remove it
         await request(app)
-          .post(`/api/attachments/${upload.body.id}/remove?requesterId=${requesterA.id}`)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieA)
           .send({ reason: "Uploaded wrong file" })
           .expect(200);
         const res = await request(app)
-          .get(`/api/attachments/${upload.body.id}/download?requesterId=${requesterA.id}`)
+          .get(`/api/attachments/${upload.body.id}/download`)
+          .set("Cookie", cookieA)
           .expect(404);
         expect(res.body.error.code).toBe("NOT_FOUND");
       } finally {
@@ -408,12 +451,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 for cross-owner download (API-25)", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "cross-download.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .get(`/api/attachments/${upload.body.id}/download?requesterId=${requesterB.id}`)
+          .get(`/api/attachments/${upload.body.id}/download`)
+          .set("Cookie", cookieB)
           .expect(404);
         expect(res.body.error.code).toBe("NOT_FOUND");
       } finally {
@@ -432,12 +477,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
   describe("POST /api/attachments/:id/remove — soft-remove", () => {
     it("should return 200 when removing owned attachment with reason (API-19)", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "remove-me.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .post(`/api/attachments/${upload.body.id}/remove?requesterId=${requesterA.id}`)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieA)
           .send({ reason: "Uploaded wrong screenshot" })
           .expect(200);
         expect(res.body.id).toBe(upload.body.id);
@@ -446,7 +493,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
         // Verify detail still lists removed attachment with metadata (FR-08)
         const detail = await request(app)
-          .get(`/api/tickets/${ticketA.id}?requesterId=${requesterA.id}`)
+          .get(`/api/tickets/${ticketA.id}`)
+          .set("Cookie", cookieA)
           .expect(200);
         const found = detail.body.attachments.find((a: any) => a.id === upload.body.id);
         expect(found).toBeDefined();
@@ -462,12 +510,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 400 for blank reason (AC-22, API-21)", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "blank-reason.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .post(`/api/attachments/${upload.body.id}/remove?requesterId=${requesterA.id}`)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieA)
           .send({ reason: "   " })
           .expect(400);
         expect(res.body.error.code).toBe("VALIDATION_FAILED");
@@ -483,12 +533,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 400 when reason missing entirely", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "no-reason.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .post(`/api/attachments/${upload.body.id}/remove?requesterId=${requesterA.id}`)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieA)
           .send({})
           .expect(400);
         expect(res.body.fieldErrors.reason).toBeDefined();
@@ -503,16 +555,19 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 409 when already removed (conflict)", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "double-remove.png", contentType: "image/png" })
         .expect(201);
       try {
         await request(app)
-          .post(`/api/attachments/${upload.body.id}/remove?requesterId=${requesterA.id}`)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieA)
           .send({ reason: "First removal" })
           .expect(200);
         const res = await request(app)
-          .post(`/api/attachments/${upload.body.id}/remove?requesterId=${requesterA.id}`)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieA)
           .send({ reason: "Second removal" })
           .expect(409);
         expect(res.body.error.code).toBe("CONFLICT");
@@ -527,12 +582,14 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 when cross-owner tries to remove (BR-09)", async () => {
       const upload = await request(app)
-        .post(`/api/tickets/${ticketA.id}/attachments?requesterId=${requesterA.id}`)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
         .attach("file", pngBuffer(1024), { filename: "cross-remove.png", contentType: "image/png" })
         .expect(201);
       try {
         const res = await request(app)
-          .post(`/api/attachments/${upload.body.id}/remove?requesterId=${requesterB.id}`)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieB)
           .send({ reason: "Malicious removal" })
           .expect(404);
         expect(res.body.error.code).toBe("NOT_FOUND");
@@ -547,7 +604,8 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
 
     it("should return 404 for missing attachment on remove", async () => {
       const res = await request(app)
-        .post(`/api/attachments/999999/remove?requesterId=${requesterA.id}`)
+        .post(`/api/attachments/999999/remove`)
+        .set("Cookie", cookieA)
         .send({ reason: "Does not exist" })
         .expect(404);
       expect(res.body.error.code).toBe("NOT_FOUND");

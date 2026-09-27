@@ -4,10 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CreateTicket from "../../../pages/CreateTicket";
 import * as api from "../../../api.js";
-import { RequesterProvider } from "../../../contexts/RequesterContext.js";
+import { AuthContext } from "../../../contexts/AuthContext.js";
 
 vi.mock("../../../api.js");
 
+const authUser = {
+  id: 41,
+  name: "Issue 27 Requester",
+  email: "issue27-ui@test.local",
+  role: "REQUESTER",
+  active: true,
+  mustChangePassword: false,
+};
 const requester = { id: 41, name: "Issue 27 Requester", email: "issue27-ui@test.local" };
 const categories = [{ id: 11, name: "Hardware" }];
 const systems = [{ id: 21, name: "Email" }];
@@ -25,12 +33,14 @@ function deferred<T>() {
 function renderCreateTicket() {
   return render(
     <MemoryRouter initialEntries={["/create"]}>
-      <RequesterProvider>
+      <AuthContext.Provider
+        value={{ user: authUser, loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}
+      >
         <Routes>
           <Route path="/create" element={<CreateTicket />} />
           <Route path="/my-tickets" element={<div>My Tickets destination</div>} />
         </Routes>
-      </RequesterProvider>
+      </AuthContext.Provider>
     </MemoryRouter>
   );
 }
@@ -60,7 +70,6 @@ async function fillValidForm() {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  localStorage.setItem("toktickit.requester", JSON.stringify(requester));
 });
 
 afterEach(() => {

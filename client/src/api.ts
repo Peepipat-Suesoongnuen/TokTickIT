@@ -5,29 +5,9 @@ export interface Category {
   name: string;
 }
 
-export interface DevelopmentRequester {
-  id: number;
-  name: string;
-  email: string;
-}
-
 export interface SystemStatus {
   online: boolean;
   categories: Category[];
-}
-
-// Issue 2 + Issue 4 — call the backend.
-// Steps: fetch `${API_URL}/api/health`; if not ok, throw.
-//        then fetch `${API_URL}/api/categories`; if not ok, throw.
-//        return { online: true, categories }.
-export async function fetchRequesters(): Promise<DevelopmentRequester[]> {
-  const res = await fetch(`${API_URL}/api/requesters`);
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
-    throw new Error(msg);
-  }
-  return res.json();
 }
 
 export interface RelatedSystem {
@@ -35,8 +15,12 @@ export interface RelatedSystem {
   name: string;
 }
 
-export async function fetchCategories(requesterId: number): Promise<Category[]> {
-  const res = await fetch(`${API_URL}/api/categories?requesterId=${requesterId}`);
+export async function fetchCategories(): Promise<Category[]> {
+  // Issue #45 (PR #58 review): GET /api/categories is session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  const res = await fetch(`${API_URL}/api/categories`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
@@ -45,8 +29,12 @@ export async function fetchCategories(requesterId: number): Promise<Category[]> 
   return res.json();
 }
 
-export async function fetchRelatedSystems(requesterId: number): Promise<RelatedSystem[]> {
-  const res = await fetch(`${API_URL}/api/related-systems?requesterId=${requesterId}`);
+export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
+  // Issue #45 (PR #58 review): GET /api/related-systems is session-only —
+  // `requesterId` is not accepted (unknown query parameter → 400).
+  const res = await fetch(`${API_URL}/api/related-systems`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const msg = body?.error?.message ?? "Unable to connect to TokTickIT API";
@@ -56,7 +44,6 @@ export async function fetchRelatedSystems(requesterId: number): Promise<RelatedS
 }
 
 export interface CreateTicketPayload {
-  requesterId: number;
   categoryId: number;
   relatedSystemId: number;
   summary: string;
@@ -65,9 +52,11 @@ export interface CreateTicketPayload {
 }
 
 export async function createTicket(payload: CreateTicketPayload) {
+  // Issue #46 — session-derived owner: no requesterId in body or query.
   const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => null);
@@ -76,7 +65,6 @@ export async function createTicket(payload: CreateTicketPayload) {
 }
 
 export interface ListTicketsParams {
-  requesterId: number;
   search?: string;
   categoryId?: number;
   requestedPriority?: string;
@@ -146,8 +134,8 @@ function parseListTicketsResponse(body: unknown): ListTicketsResponse {
 }
 
 export async function listTickets(params: ListTicketsParams): Promise<ListTicketsResponse> {
+  // Issue #46 — session-derived owner: no requesterId query parameter.
   const qs = new URLSearchParams();
-  qs.set("requesterId", String(params.requesterId));
   if (params.search !== undefined) qs.set("search", params.search);
   if (params.categoryId !== undefined) qs.set("categoryId", String(params.categoryId));
   if (params.requestedPriority !== undefined) qs.set("requestedPriority", params.requestedPriority);
@@ -156,37 +144,50 @@ export async function listTickets(params: ListTicketsParams): Promise<ListTicket
   if (params.order !== undefined) qs.set("order", params.order);
   if (params.page !== undefined) qs.set("page", String(params.page));
   if (params.pageSize !== undefined) qs.set("pageSize", String(params.pageSize));
-  const res = await fetch(`${API_URL}/api/tickets?${qs.toString()}`);
+  const suffix = qs.toString();
+  const res = await fetch(`${API_URL}/api/tickets${suffix ? `?${suffix}` : ""}`, {
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body };
   return parseListTicketsResponse(body);
 }
 
-export async function getTicketDetail(ticketId: number, requesterId: number) {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requesterId}`);
+export async function getTicketDetail(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
   return body;
 }
 
-export async function uploadAttachment(ticketId: number, requesterId: number, file: File) {
+export async function uploadAttachment(ticketId: number, file: File) {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`, { method: "POST", body: form });
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Upload failed" };
   return body;
 }
 
-export async function getAttachmentMetadata(attachmentId: number, requesterId: number) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}?requesterId=${requesterId}`);
+export async function getAttachmentMetadata(attachmentId: number) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
+    credentials: "include",
+  });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw { status: res.status, body, message: body?.error?.message ?? "Unable to connect to TokTickIT API" };
   return body;
 }
 
-export async function downloadAttachment(attachmentId: number, requesterId: number) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`);
+export async function downloadAttachment(attachmentId: number) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download`, {
+    credentials: "include",
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw { status: res.status, body, message: body?.error?.message ?? "Download failed" };
@@ -209,10 +210,11 @@ export async function downloadAttachment(attachmentId: number, requesterId: numb
   URL.revokeObjectURL(url);
 }
 
-export async function removeAttachment(attachmentId: number, requesterId: number, reason: string) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/remove?requesterId=${requesterId}`, {
+export async function removeAttachment(attachmentId: number, reason: string) {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/remove`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ reason }),
   });
   const body = await res.json().catch(() => null);
@@ -220,9 +222,228 @@ export async function removeAttachment(attachmentId: number, requesterId: number
   return body;
 }
 
-// Throwing on failure lets the UI show a single Offline/error state.
-export async function checkSystem(): Promise<SystemStatus> {
-  // A thrown fetch (network error) or a non-ok HTTP response must surface as a
+// Issue #45 — authenticated identity (Lab 3 api-spec §3). Auth calls use
+// `credentials: "include"` so the session cookie flows; existing helpers
+// above are untouched.
+
+export interface SafeUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  mustChangePassword: boolean;
+}
+
+export interface AuthFailure {
+  status: number;
+  body: {
+    error?: { code?: string; message?: string };
+    fieldErrors?: Record<string, string>;
+  } | null;
+}
+
+async function authRequest(path: string, init?: RequestInit): Promise<{ user: SafeUser }> {
+  const res = await fetch(`${API_URL}${path}`, { ...init, credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies AuthFailure;
+  return body as { user: SafeUser };
+}
+
+export async function login(email: string, password: string): Promise<{ user: SafeUser }> {
+  return authRequest("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function getCurrentUser(): Promise<{ user: SafeUser }> {
+  return authRequest("/api/auth/me");
+}
+
+export async function logoutUser(): Promise<void> {
+  const res = await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw { status: res.status, body } satisfies AuthFailure;
+  }
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ user: SafeUser }> {
+  // Confirmation is UI-only and is never sent (api-spec §3.4).
+  return authRequest("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+// Issue #48 — IT Staff Ticket workspace (Lab 3 api-spec §§8–11).
+// Staff/Admin session only; Requester receives 403 from the backend.
+
+export interface StaffQueueParams {
+  search?: string;
+  categoryId?: number;
+  requestedPriority?: string;
+  itPriority?: string;
+  currentStatus?: string;
+  owner?: string;
+  sort?: string;
+  order?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface StaffTicketQueueItem {
+  id: number;
+  ticketNumber: string;
+  ticketDate: string;
+  summary: string;
+  requester: { id: number; name: string };
+  category: { id: number; name: string };
+  requestedPriority: string;
+  itPriority: string;
+  currentStatus: string;
+  ticketOwner: { id: number; name: string } | null;
+  requesterResolutionIndicatedAt: string | null;
+  updatedAt: string;
+}
+
+export interface StaffQueueResponse {
+  data: StaffTicketQueueItem[];
+  meta: TicketListMeta;
+}
+
+export interface EligibleOwner {
+  id: number;
+  name: string;
+  role: string;
+}
+
+export interface StaffTicketMutation {
+  id: number;
+  ticketNumber: string;
+  currentStatus: string;
+  requestedPriority: string;
+  itPriority: string;
+  ticketOwner: { id: number; name: string; role: string } | null;
+  requesterResolutionIndicatedAt: string | null;
+  updatedAt: string;
+}
+
+export interface StaffTicketDetail extends StaffTicketMutation {
+  ticketDate: string;
+  requester: { id: number; name: string; email: string };
+  category: { id: number; name: string };
+  relatedSystem: { id: number; name: string };
+  summary: string;
+  description: string;
+  attachments: Array<{
+    id: number;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+    removedAt: string | null;
+    removedReason: string | null;
+    createdAt: string;
+  }>;
+  createdAt: string;
+}
+
+export interface StaffApiFailure {
+  status: number;
+  body: {
+    error?: { code?: string; message?: string };
+    fieldErrors?: Record<string, string>;
+  } | null;
+}
+
+async function staffGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+async function staffMutate<T>(path: string, method: "POST" | "PATCH", payload: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+export async function listStaffTickets(params: StaffQueueParams): Promise<StaffQueueResponse> {
+  const qs = new URLSearchParams();
+  if (params.search !== undefined) qs.set("search", params.search);
+  if (params.categoryId !== undefined) qs.set("categoryId", String(params.categoryId));
+  if (params.requestedPriority !== undefined) qs.set("requestedPriority", params.requestedPriority);
+  if (params.itPriority !== undefined) qs.set("itPriority", params.itPriority);
+  if (params.currentStatus !== undefined) qs.set("currentStatus", params.currentStatus);
+  if (params.owner !== undefined) qs.set("owner", params.owner);
+  if (params.sort !== undefined) qs.set("sort", params.sort);
+  if (params.order !== undefined) qs.set("order", params.order);
+  if (params.page !== undefined) qs.set("page", String(params.page));
+  if (params.pageSize !== undefined) qs.set("pageSize", String(params.pageSize));
+  const suffix = qs.toString();
+  return staffGet<StaffQueueResponse>(`/api/staff/tickets${suffix ? `?${suffix}` : ""}`);
+}
+
+export async function getStaffTicketDetail(ticketId: number): Promise<StaffTicketDetail> {
+  return staffGet<StaffTicketDetail>(`/api/staff/tickets/${ticketId}`);
+}
+
+export async function listEligibleOwners(): Promise<{ data: EligibleOwner[] }> {
+  return staffGet<{ data: EligibleOwner[] }>("/api/staff/ticket-owners");
+}
+
+export async function claimStaffTicket(ticketId: number): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/claim`, "POST", {});
+}
+
+export async function assignStaffTicketOwner(
+  ticketId: number,
+  ownerId: number,
+  expectedOwnerId: number | null,
+): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/owner`, "PATCH", { ownerId, expectedOwnerId });
+}
+
+export async function setStaffTicketPriority(
+  ticketId: number,
+  itPriority: string,
+  expectedItPriority: string,
+): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/it-priority`, "PATCH", {
+    itPriority,
+    expectedItPriority,
+  });
+}
+
+export async function setStaffTicketStatus(
+  ticketId: number,
+  status: string,
+  expectedCurrentStatus: string,
+  ownerId?: number,
+): Promise<StaffTicketMutation> {
+  return staffMutate<StaffTicketMutation>(`/api/staff/tickets/${ticketId}/status`, "PATCH", {
+    status,
+    expectedCurrentStatus,
+    ...(ownerId === undefined ? {} : { ownerId }),
+  });
+}
+export async function checkSystem(): Promise<SystemStatus> {  // A thrown fetch (network error) or a non-ok HTTP response must surface as a
   // single friendly message so the UI never shows the raw "Failed to fetch".
   try {
     const healthRes = await fetch(`${API_URL}/api/health`);
@@ -244,5 +465,148 @@ export async function checkSystem(): Promise<SystemStatus> {
       throw err;
     }
     throw new Error("Unable to connect to TokTickIT API");
+  }
+}
+
+// Issue #49 — Ticket communication (Lab 3 api-spec §§7/12): append-only
+// Public Comments (requester + staff on authorized tickets), Internal Notes
+// (staff/admin only), and the Requester resolution indication.
+
+export interface CommentAuthor {
+  id: number;
+  name: string;
+  role: string;
+}
+
+export interface TicketComment {
+  id: number;
+  author: CommentAuthor;
+  content: string;
+  createdAt: string;
+}
+
+export interface TicketNote {
+  id: number;
+  author: CommentAuthor;
+  content: string;
+  createdAt: string;
+}
+
+async function commGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+async function commPost<T>(path: string, payload: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as T;
+}
+
+export async function listTicketComments(ticketId: number): Promise<{ data: TicketComment[] }> {
+  return commGet<{ data: TicketComment[] }>(`/api/tickets/${ticketId}/comments`);
+}
+
+export async function postTicketComment(ticketId: number, content: string): Promise<TicketComment> {
+  return commPost<TicketComment>(`/api/tickets/${ticketId}/comments`, { content });
+}
+
+export async function markProblemResolved(ticketId: number): Promise<{ requesterResolutionIndicatedAt: string }> {
+  return commPost<{ requesterResolutionIndicatedAt: string }>(
+    `/api/tickets/${ticketId}/problem-appears-resolved`,
+    {},
+  );
+}
+
+export async function listTicketNotes(ticketId: number): Promise<{ data: TicketNote[] }> {
+  return commGet<{ data: TicketNote[] }>(`/api/staff/tickets/${ticketId}/internal-notes`);
+}
+
+export async function postTicketNote(ticketId: number, content: string): Promise<TicketNote> {
+  return commPost<TicketNote>(`/api/staff/tickets/${ticketId}/internal-notes`, { content });
+}
+
+// Issue #50 — minimalist Administrator User Management (api-spec §13).
+
+export interface ManagedUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+export interface CreateUserPayload {
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  initialPassword: string;
+}
+
+export interface UpdateUserPayload {
+  name?: string;
+  email?: string;
+  role?: string;
+  active?: boolean;
+}
+
+export async function listUsers(params: { search?: string; role?: string } = {}): Promise<{ data: ManagedUser[] }> {
+  const qs = new URLSearchParams();
+  if (params.search !== undefined) qs.set("search", params.search);
+  if (params.role !== undefined) qs.set("role", params.role);
+  const suffix = qs.toString();
+  const res = await fetch(`${API_URL}/api/admin/users${suffix ? `?${suffix}` : ""}`, {
+    credentials: "include",
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as { data: ManagedUser[] };
+}
+
+export async function createUser(payload: CreateUserPayload): Promise<ManagedUser> {
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as ManagedUser;
+}
+
+export async function updateUser(userId: number, payload: UpdateUserPayload): Promise<ManagedUser> {
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return body as ManagedUser;
+}
+
+export async function setInitialPassword(userId: number, initialPassword: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}/initial-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ initialPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw { status: res.status, body } satisfies StaffApiFailure;
   }
 }

@@ -9,12 +9,14 @@
     "start": "node dist/index.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:backfill": "tsx prisma/backfill-migrated-passwords.ts",
     "test": "vitest run"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.1",
     "@prisma/client": "^5.22.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
@@ -33,5 +35,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "optionalDependencies": {
+    "@node-rs/argon2-wasm32-wasi": "^2.2.1"
   }
 }
