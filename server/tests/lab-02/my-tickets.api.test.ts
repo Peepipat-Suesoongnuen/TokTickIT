@@ -271,28 +271,38 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       expect(res.body.data.every((ticket: { currentStatus: string }) => ticket.currentStatus === "NEW")).toBe(true);
     });
 
-    it("should filter by non-NEW status e.g. OPEN (API-14, Issue #72)", async () => {
+    it.each([
+      "NEW",
+      "OPEN",
+      "IN_PROGRESS",
+      "WAITING_FOR_REQUESTER",
+      "RESOLVED",
+      "CLOSED",
+      "REOPENED",
+      "CANCELLED",
+    ] as const)("should filter by currentStatus %s (API-14, Issue #72)", async (status) => {
+      const ticketNumber = `2608-01${["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"].indexOf(status)}`;
       const created = await prisma.ticket.create({
         data: {
-          ticketNumber: "2608-0004",
+          ticketNumber,
           requesterId: requesterA.id,
           categoryId: category.id,
           relatedSystemId: relatedSystem.id,
           summary: "Status filter probe",
-          description: "Probe ticket for non-NEW status filter verification",
+          description: "Probe ticket for all-status filter verification",
           requestedPriority: "LOW",
           itPriority: "LOW",
-          currentStatus: "OPEN",
+          currentStatus: status,
         },
       });
       try {
         const res = await request(app)
-          .get(`/api/tickets?currentStatus=OPEN`)
+          .get(`/api/tickets?currentStatus=${status}`)
           .set("Cookie", cookieA)
           .expect(200);
 
-        expect(res.body.data.map((t: { ticketNumber: string }) => t.ticketNumber)).toContain("2608-0004");
-        expect(res.body.data.every((t: { currentStatus: string }) => t.currentStatus === "OPEN")).toBe(true);
+        expect(res.body.data.map((t: { ticketNumber: string }) => t.ticketNumber)).toContain(ticketNumber);
+        expect(res.body.data.every((t: { currentStatus: string }) => t.currentStatus === status)).toBe(true);
       } finally {
         await prisma.ticket.delete({ where: { id: created.id } });
       }
