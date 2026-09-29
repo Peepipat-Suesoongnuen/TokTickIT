@@ -270,6 +270,33 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       expect(res.body.data).toHaveLength(2);
       expect(res.body.data.every((ticket: { currentStatus: string }) => ticket.currentStatus === "NEW")).toBe(true);
     });
+
+    it("should filter by non-NEW status e.g. OPEN (API-14, Issue #72)", async () => {
+      const created = await prisma.ticket.create({
+        data: {
+          ticketNumber: "2608-0004",
+          requesterId: requesterA.id,
+          categoryId: category.id,
+          relatedSystemId: relatedSystem.id,
+          summary: "Status filter probe",
+          description: "Probe ticket for non-NEW status filter verification",
+          requestedPriority: "LOW",
+          itPriority: "LOW",
+          currentStatus: "OPEN",
+        },
+      });
+      try {
+        const res = await request(app)
+          .get(`/api/tickets?currentStatus=OPEN`)
+          .set("Cookie", cookieA)
+          .expect(200);
+
+        expect(res.body.data.map((t: { ticketNumber: string }) => t.ticketNumber)).toContain("2608-0004");
+        expect(res.body.data.every((t: { currentStatus: string }) => t.currentStatus === "OPEN")).toBe(true);
+      } finally {
+        await prisma.ticket.delete({ where: { id: created.id } });
+      }
+    });
   });
 
   describe("Sorting (AC-14, BR-21)", () => {
@@ -472,7 +499,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid currentStatus value", async () => {
       const res = await request(app)
-        .get(`/api/tickets?currentStatus=CLOSED`)
+        .get(`/api/tickets?currentStatus=BOGUS_STATUS`)
         .set("Cookie", cookieA)
         .expect(400);
 

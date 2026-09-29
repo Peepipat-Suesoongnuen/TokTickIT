@@ -472,6 +472,105 @@ describe("Attachment lifecycle (Lab 2 Issue 10)", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Staff/Admin attachment read/download (API-15b, Issue #72) — contract:
+  // staff/admin may read metadata and download active attachments on
+  // authorized tickets; upload/remove stay denied; removed stay blocked.
+  // -------------------------------------------------------------------------
+  describe("Staff attachment read/download (API-15b, Issue #72)", () => {
+    const emailStaff = "lab2-attach-staff@example.com";
+    let cookieStaff: string;
+
+    beforeAll(async () => {
+      await prisma.user.deleteMany({ where: { email: emailStaff } });
+      await prisma.user.create({
+        data: {
+          name: "Staff Attach",
+          email: emailStaff,
+          passwordHash: await hashPassword(password),
+          role: "IT_STAFF",
+          isActive: true,
+          mustChangePassword: false,
+        },
+      });
+      cookieStaff = await loginAs(emailStaff, password);
+    });
+
+    afterAll(async () => {
+      await prisma.user.deleteMany({ where: { email: emailStaff } });
+    });
+
+    it("should let staff read metadata of an active attachment", async () => {
+      const upload = await request(app)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
+        .attach("file", pngBuffer(1024), { filename: "staff-meta.png", contentType: "image/png" })
+        .expect(201);
+      try {
+        const res = await request(app)
+          .get(`/api/attachments/${upload.body.id}`)
+          .set("Cookie", cookieStaff)
+          .expect(200);
+        expect(res.body.originalFilename).toBe("staff-meta.png");
+        expect(res.body).not.toHaveProperty("passwordHash");
+      } finally {
+        const att = await prisma.attachment.findUnique({ where: { id: upload.body.id } });
+        if (att) {
+          try { fs.unlinkSync(path.join(UPLOAD_DIR, att.storedFilename)); } catch {}
+          await prisma.attachment.delete({ where: { id: att.id } });
+        }
+      }
+    });
+
+    it("should let staff download an active attachment", async () => {
+      const upload = await request(app)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
+        .attach("file", pngBuffer(2048), { filename: "staff-download.png", contentType: "image/png" })
+        .expect(201);
+      try {
+        const res = await request(app)
+          .get(`/api/attachments/${upload.body.id}/download`)
+          .set("Cookie", cookieStaff)
+          .expect(200);
+        expect(res.headers["content-type"]).toBe("image/png");
+        expect(res.body.length).toBeGreaterThan(0);
+      } finally {
+        const att = await prisma.attachment.findUnique({ where: { id: upload.body.id } });
+        if (att) {
+          try { fs.unlinkSync(path.join(UPLOAD_DIR, att.storedFilename)); } catch {}
+          await prisma.attachment.delete({ where: { id: att.id } });
+        }
+      }
+    });
+
+    it("should block staff download of a removed attachment (404)", async () => {
+      const upload = await request(app)
+        .post(`/api/tickets/${ticketA.id}/attachments`)
+        .set("Cookie", cookieA)
+        .attach("file", pngBuffer(1024), { filename: "staff-removed.png", contentType: "image/png" })
+        .expect(201);
+      try {
+        await request(app)
+          .post(`/api/attachments/${upload.body.id}/remove`)
+          .set("Cookie", cookieA)
+          .send({ reason: "Uploaded wrong file" })
+          .expect(200);
+        const res = await request(app)
+          .get(`/api/attachments/${upload.body.id}/download`)
+          .set("Cookie", cookieStaff)
+          .expect(404);
+        expect(res.body.error.code).toBe("NOT_FOUND");
+      } finally {
+        const att = await prisma.attachment.findUnique({ where: { id: upload.body.id } });
+        if (att) {
+          try { fs.unlinkSync(path.join(UPLOAD_DIR, att.storedFilename)); } catch {}
+          await prisma.attachment.delete({ where: { id: att.id } });
+        }
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // POST /api/attachments/:id/remove — soft-remove
   // -------------------------------------------------------------------------
   describe("POST /api/attachments/:id/remove — soft-remove", () => {

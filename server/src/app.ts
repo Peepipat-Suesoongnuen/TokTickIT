@@ -20,7 +20,7 @@ import { getApprovedOrigins, isOriginAllowed, requireActiveUser, requireOrigin, 
 import { UNAUTHENTICATED_CODE, UNAUTHENTICATED_MESSAGE } from "./auth.js";
 import type { AuthRequest, AuthUserRow } from "./auth.js";
 import authRouter from "./routes/auth.js";
-import staffRouter from "./routes/staff.js";
+import staffRouter, { TICKET_STATUSES } from "./routes/staff.js";
 import adminRouter from "./routes/admin.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
@@ -225,7 +225,9 @@ app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChange
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requestedPriority: "Invalid priority." });
     }
 
-    if (currentStatus !== undefined && currentStatus !== "NEW") {
+    // Issue #72: requester list accepts any of the eight Lab 3 statuses
+    // (api-spec §1.6); unknown values are still rejected.
+    if (currentStatus !== undefined && !TICKET_STATUSES.has(currentStatus)) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { currentStatus: "Invalid current status." });
     }
 
@@ -591,30 +593,39 @@ app.post("/api/tickets/:id/attachments", requireSession, requireActiveUser, requ
   });
 });
 
-// GET /api/attachments/:id — metadata (FR-10; Issue #46: session-derived owner)
-app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
+// GET /api/attachments/:id — metadata (FR-10; Issue #46: session-derived owner;
+// Issue #72: staff/admin read on authorized tickets per API-15b)
+app.get("/api/attachments/:id", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
-    const rid = getAuthUserId((req as AuthRequest).user, res);
-    if (rid === null) return;
+    const me = (req as AuthRequest).user;
+    const rid = getAuthUserId(me, res);
+    if (rid === null || !me) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
-    if (!att || att.ticket.requesterId !== rid) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    if (!att) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    // Requesters see only own tickets; staff/admin see any ticket they are
+    // authorized to open through Staff Detail (api-spec §1.7).
+    if (me.role === "REQUESTER" && att.ticket.requesterId !== rid) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
     res.status(200).json({ id: att.id, ticketId: att.ticketId, originalFilename: att.originalFilename, mimeType: att.mimeType, sizeBytes: att.sizeBytes, removedAt: att.removedAt, removedReason: att.removedReason, createdAt: att.createdAt });
   } catch { sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again."); }
 });
 
-// GET /api/attachments/:id/download — binary (FR-10, BR-17; Issue #46: session-derived owner)
-app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
+// GET /api/attachments/:id/download — binary (FR-10, BR-17; Issue #46: session-derived owner;
+// Issue #72: staff/admin download on authorized tickets per API-15b; removed stay blocked for all roles)
+app.get("/api/attachments/:id/download", requireSession, requireActiveUser, requirePasswordChanged, async (req: Request, res: Response) => {
   try {
     if (req.query.requesterId !== undefined) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requesterId: "Unknown parameter." });
-    const rid = getAuthUserId((req as AuthRequest).user, res);
-    if (rid === null) return;
+    const me = (req as AuthRequest).user;
+    const rid = getAuthUserId(me, res);
+    if (rid === null || !me) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(id)) return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { id: "Invalid attachment id." });
     const att = await getPrisma().attachment.findUnique({ where: { id }, include: { ticket: true } });
-    if (!att || att.ticket.requesterId !== rid || att.removedAt) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    if (!att) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    if (me.role === "REQUESTER" && att.ticket.requesterId !== rid) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
+    if (att.removedAt) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
     const filePath = path.join(UPLOAD_DIR, att.storedFilename);
     if (!fs.existsSync(filePath)) return sendError(res, 404, "NOT_FOUND", "Resource not found.");
     res.setHeader("Content-Type", att.mimeType);
