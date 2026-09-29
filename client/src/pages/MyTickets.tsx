@@ -230,10 +230,17 @@ export default function MyTickets() {
           </div>
           <div className="col-md-2">
             <label htmlFor="my-tickets-status" className="form-label lab2-toolbar-label">Current Status</label>
-            <select id="my-tickets-status" className="form-select" value={currentStatus} onChange={(e) => setCurrentStatus(e.target.value)}>
-              <option value="">All Statuses</option>
-              <option value="NEW">NEW</option>
-            </select>
+              <select id="my-tickets-status" className="form-select" value={currentStatus} onChange={(e) => setCurrentStatus(e.target.value)}>
+                <option value="">All Statuses</option>
+                <option value="NEW">NEW</option>
+                <option value="OPEN">OPEN</option>
+                <option value="IN_PROGRESS">IN_PROGRESS</option>
+                <option value="WAITING_FOR_REQUESTER">WAITING_FOR_REQUESTER</option>
+                <option value="RESOLVED">RESOLVED</option>
+                <option value="CLOSED">CLOSED</option>
+                <option value="REOPENED">REOPENED</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
           </div>
           <div className="col-md-2">
             <label htmlFor="my-tickets-page-size" className="form-label lab2-toolbar-label">Rows per page</label>

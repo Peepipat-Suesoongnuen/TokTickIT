@@ -270,6 +270,43 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
       expect(res.body.data).toHaveLength(2);
       expect(res.body.data.every((ticket: { currentStatus: string }) => ticket.currentStatus === "NEW")).toBe(true);
     });
+
+    it.each([
+      "NEW",
+      "OPEN",
+      "IN_PROGRESS",
+      "WAITING_FOR_REQUESTER",
+      "RESOLVED",
+      "CLOSED",
+      "REOPENED",
+      "CANCELLED",
+    ] as const)("should filter by currentStatus %s (API-14, Issue #72)", async (status) => {
+      const ticketNumber = `2608-01${["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"].indexOf(status)}`;
+      const created = await prisma.ticket.create({
+        data: {
+          ticketNumber,
+          requesterId: requesterA.id,
+          categoryId: category.id,
+          relatedSystemId: relatedSystem.id,
+          summary: "Status filter probe",
+          description: "Probe ticket for all-status filter verification",
+          requestedPriority: "LOW",
+          itPriority: "LOW",
+          currentStatus: status,
+        },
+      });
+      try {
+        const res = await request(app)
+          .get(`/api/tickets?currentStatus=${status}`)
+          .set("Cookie", cookieA)
+          .expect(200);
+
+        expect(res.body.data.map((t: { ticketNumber: string }) => t.ticketNumber)).toContain(ticketNumber);
+        expect(res.body.data.every((t: { currentStatus: string }) => t.currentStatus === status)).toBe(true);
+      } finally {
+        await prisma.ticket.delete({ where: { id: created.id } });
+      }
+    });
   });
 
   describe("Sorting (AC-14, BR-21)", () => {
@@ -472,7 +509,7 @@ describe("GET /api/tickets — My Tickets (Lab 2 Issue 9)", () => {
 
     it("should return 400 for invalid currentStatus value", async () => {
       const res = await request(app)
-        .get(`/api/tickets?currentStatus=CLOSED`)
+        .get(`/api/tickets?currentStatus=BOGUS_STATUS`)
         .set("Cookie", cookieA)
         .expect(400);
 

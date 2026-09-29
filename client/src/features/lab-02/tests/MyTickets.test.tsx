@@ -184,6 +184,45 @@ describe("MyTickets", () => {
       });
     });
 
+    it.each([
+      "NEW",
+      "OPEN",
+      "IN_PROGRESS",
+      "WAITING_FOR_REQUESTER",
+      "RESOLVED",
+      "CLOSED",
+      "REOPENED",
+      "CANCELLED",
+    ])("offers %s in Current Status filter and sends it to API (UI-05, Issue #72)", async (status) => {
+      vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+      const listSpy = vi.spyOn(api, "listTickets").mockResolvedValue({
+        data: [],
+        meta: { page: 1, pageSize: 10, totalCount: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+      });
+
+      renderWithProviders();
+      const statusSelect = screen.getByRole("combobox", { name: "Current Status" });
+      const options = Array.from(statusSelect.querySelectorAll("option")).map((o) => o.value);
+      for (const s of [
+        "NEW",
+        "OPEN",
+        "IN_PROGRESS",
+        "WAITING_FOR_REQUESTER",
+        "RESOLVED",
+        "CLOSED",
+        "REOPENED",
+        "CANCELLED",
+      ]) {
+        expect(options).toContain(s);
+      }
+
+      await userEvent.selectOptions(statusSelect, status);
+
+      await waitFor(() => {
+        expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ currentStatus: status }));
+      });
+    });
+
     it("keeps top Clear Filters beside Create Ticket and resets filters/sort without changing page size (UI-25)", async () => {
       vi.spyOn(api, "fetchCategories").mockResolvedValue([{ id: 1, name: "Hardware" }]);
       vi.spyOn(api, "listTickets").mockResolvedValue({

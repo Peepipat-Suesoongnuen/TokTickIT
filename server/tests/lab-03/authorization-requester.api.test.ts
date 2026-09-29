@@ -428,17 +428,8 @@ describe("REQUESTER role guard on cutover routes (Issue #46, BR-19)", () => {
     }
   });
 
-  it("attachments: IT_STAFF and ADMINISTRATOR get 403 FORBIDDEN on metadata/download/upload/remove", async () => {
+  it("attachments: IT_STAFF and ADMINISTRATOR get 403 FORBIDDEN on upload/remove", async () => {
     for (const cookie of [cookieStaff, cookieAdmin]) {
-      const meta = await request(app).get(`/api/attachments/${rgAttachmentId}`).set("Cookie", cookie).expect(403);
-      expect(meta.body.error.code).toBe("FORBIDDEN");
-
-      const download = await request(app)
-        .get(`/api/attachments/${rgAttachmentId}/download`)
-        .set("Cookie", cookie)
-        .expect(403);
-      expect(download.body.error.code).toBe("FORBIDDEN");
-
       const upload = await request(app)
         .post(`/api/tickets/${rgTicketId}/attachments`)
         .set("Cookie", cookie)
@@ -458,6 +449,20 @@ describe("REQUESTER role guard on cutover routes (Issue #46, BR-19)", () => {
     // Guarded fixture attachment is untouched: owner can still read it.
     const ownMeta = await request(app).get(`/api/attachments/${rgAttachmentId}`).set("Cookie", cookieOwner).expect(200);
     expect(ownMeta.body.id).toBe(rgAttachmentId);
+  });
+
+  it("attachments: IT_STAFF and ADMINISTRATOR can read metadata/download active attachment (API-15b, Issue #72)", async () => {
+    for (const cookie of [cookieStaff, cookieAdmin]) {
+      const meta = await request(app).get(`/api/attachments/${rgAttachmentId}`).set("Cookie", cookie).expect(200);
+      expect(meta.body.id).toBe(rgAttachmentId);
+      expect(meta.body).not.toHaveProperty("passwordHash");
+
+      const download = await request(app)
+        .get(`/api/attachments/${rgAttachmentId}/download`)
+        .set("Cookie", cookie)
+        .expect(200);
+      expect(download.headers["content-type"]).toBe("image/png");
+    }
   });
 });
 
