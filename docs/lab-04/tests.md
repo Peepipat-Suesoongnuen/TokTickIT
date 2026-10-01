@@ -29,7 +29,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 |---|---|---|---|---|---|---|
 | UNIT-01 | Unit | BR-005–BR-007, AC-002 | action field validation: lengths, follow-up-note iff flag, work-date bounds (empty, null, malformed, boundary, min/max) | pre-Ticket and future dates rejected; in-range accepted | `action-validation.test.ts` | Planned |
 | UNIT-02 | Unit | BR-011–BR-013, AC-010–AC-013 | gate predicate over (completed-in-cycle, open-in-cycle) incl. legacy and post-reopen cycles | blocked unless ≥1 current-cycle completion with zero non-terminal | `resolution-gate.test.ts` | Planned |
-| UNIT-03 | Unit | BR-017–BR-022, AC-014–AC-016 | dashboard aggregation: attribution splits, urgent vs recent separation, top-N, empty | counts, order, and empty outputs match contract; no time-zone math | `dashboard-metrics.test.ts` | Planned |
+| UNIT-03 | Unit | BR-017–BR-022, AC-014–AC-016 | dashboard aggregation: attribution splits, urgent vs recent separation, 30-day window edges, tie-break ordering, top-N, empty | counts, boundaries, order, and empty outputs match contract; no time-zone math | `dashboard-metrics.test.ts` | Planned |
 | UNIT-04 | Unit | BR-003, AC-004 | lifecycle transition table (all pairs incl. forbidden) | only specified transitions allowed; skip-to-complete rejected | `action-lifecycle.test.ts` | Planned |
 
 ## 3. Planned API / Integration Tests
@@ -38,23 +38,26 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-01 | API | AC-001 | Staff creates a valid action | `201` under correct Ticket; performer is auth user; `PLANNED`, version 1, current cycle, `CREATED` event | Planned |
-| API-02 | API | BR-005–BR-007, AC-002 | invalid bodies: bad lengths, note-without-flag, flag-without-note, pre-Ticket/future/malformed date, bad assignee, forged performer/status/version fields | `400` (`ACTION_DATE_OUT_OF_RANGE` for dates) or `409` per contract; no partial write | Planned |
+| API-01 | API | AC-001 | Staff creates a valid action; create on RESOLVED/CLOSED/CANCELLED Ticket | `201` under correct Ticket; performer is auth user; `PLANNED`, version 1, current cycle, `CREATED` event; non-actionable parent → `409` | Planned |
+| API-02 | API | BR-005–BR-007, BR-025, AC-002 | invalid bodies: bad lengths, note-without-flag, flag-without-note, pre-Ticket/future/malformed date, bad assignee, forged performer/status/version fields, missing `clientRequestId` | `400` (`ACTION_DATE_OUT_OF_RANGE` for dates; missing key) or `409` per contract; no partial write | Planned |
 | API-03 | API | AC-003 | edit `PLANNED`/`IN_PROGRESS` vs terminal action; actions on terminal Ticket; stale `expectedVersion`; repeated edit | edits succeed with exact version increments; terminal → `409`; stale → `409 ACTION_STATE_CHANGED` | Planned |
-| API-04 | API | AC-004 | `PLANNED → IN_PROGRESS` via update; skip-to-complete; unknown state; backward move | start succeeds + event; all others `409 INVALID_ACTION_TRANSITION` | Planned |
-| API-05 | API | AC-005 | complete without result; complete with result; cancel from both open states; mutate after terminal | result-less complete rejected; terminal afterwards; later edits `409` | Planned |
+| API-04 | API | AC-004 | `PLANNED → IN_PROGRESS` via update; skip-to-complete; backward move | start succeeds + event; skips/backwards → `409 INVALID_ACTION_TRANSITION` | Planned |
+| API-04b | API | AC-004 | unknown enum state value (no-such-state) | `400` strict contract, never `409` | Planned |
+| API-05 | API | AC-005 | complete without result; complete with result; follow-up set at completion; empty complete body; cancel from both open states; mutate after terminal | result-less complete rejected; empty body `400`; follow-up-at-complete validated; terminal afterwards; later edits `409` | Planned |
 | API-06 | API | AC-008 | inactive/Requester assignee at assign and complete; unassigned complete by eligible performer | `409 ACTION_ASSIGNEE_NOT_ELIGIBLE` where ineligible; performer path succeeds | Planned |
 | API-07 | API / concurrency | BR-024, AC-008, AC-017 | assign/complete racing Admin deactivate/demote as real overlapping DB operations | loser safe `409`; ineligible final state never commits | Planned |
+| API-07b | API / concurrency | BR-024, AC-008 | deactivate user with only COMPLETED/CANCELLED actions or actions on CLOSED tickets vs open-assigned on non-terminal Ticket | former passes (never blocks); latter → `409 USER_HAS_ACTIVE_ACTIONS` | Planned |
 | API-08 | API | AC-009 | Requester create/edit/transition/complete/cancel/history attempts; cross-owner list/history | `403` or safe `404`; owned list and history complete | Planned |
-| API-09 | API | AC-018 | double-submit same `clientRequestId`; same key on another Ticket; distinct concurrent creates | single record replayed; scope is per-Ticket; distinct creates both persist | Planned |
+| API-09 | API | BR-025, AC-018 | double-submit same key + identical intent (expect `200` + `Idempotent-Replayed`, zero new rows/events); same key + different intent; concurrent same-key inserts (unique-violation path); same key on another Ticket; missing key; distinct concurrent creates | identical → `200` replay; different intent → `409 IDEMPOTENCY_CONFLICT` + original byte-identical; concurrent same-key → exactly one logical Action; per-Ticket scope; missing → `400`; distinct both persist | Planned |
 
 ### History — same file, event rows
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-10 | API | AC-007 | event appended on create, edit, assign, transition, complete, cancel | one ordered event per mutation with actor, timestamp, type, payload, request id | Planned |
-| API-11 | API | AC-007 | route inventory for event mutation; direct update/delete attempts at ORM level rejected by contract | no update/delete event route exists; negative tests prove absence | Planned |
+| API-10 | API | AC-007 | event appended on create, edit, assign, transition, complete, cancel; multi-field update emits one event per aspect in fixed order sharing one request id | ordered events with actor, timestamp, type, payload, request id; aspect order deterministic | Planned |
+| API-11 | API | AC-007 | route inventory for event mutation (no update/delete event route; attempts yield `404`/`405`); application-layer guarantee documented (DB triggers out of scope) | absence proved at route level; guarantee level matches contract | Planned |
 | API-12 | API | AC-007 | history ordering under rapid successive mutations; actor identity on each event | deterministic `occurredAt, id` order; actors match callers | Planned |
+| API-12b | API | AC-007 | history of an Action across reopen: old events intact, order unchanged, new cycle adds no old events | original stream intact + deterministic order | Planned |
 
 ### Ticket workflow + gate + cycles — `server/tests/lab-04/ticket-workflow.api.test.ts` (To be created)
 
@@ -64,7 +67,9 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | API-14 | API | AC-010 | resolve with zero completions but no open actions | `409 RESOLUTION_REQUIRES_COMPLETED_ACTION` with `currentCycle` | Planned |
 | API-15 | API | AC-011 | resolve after current-cycle completion with zero open | succeeds per matrix | Planned |
 | API-16 | API | AC-012 | resolve legacy zero-action Ticket | rejected until one current-cycle completion (design decision under test) | Planned |
-| API-17 | API | AC-013 | reopen → new cycle; old-cycle completions do not satisfy new gate | cycle increments; history kept; gate re-armed | Planned |
+| API-17 | API | AC-013 | reopen → new cycle; old-cycle completions do not satisfy new gate; indication cleared | cycle increments exactly once; history kept; gate re-armed; `requesterResolutionIndicatedAt` cleared atomically | Planned |
+| API-25 | API / concurrency | BR-029, AC-013, AC-017 | concurrent reopens and resolve-vs-reopen races as real overlapping ops; stale reopen | exactly one cycle increment per race; loser safe `409`; stale `expectedCurrentStatus` conflicts | Planned |
+| API-25b | API / concurrency | BR-029, AC-013 | reopened transaction that rolls back MUST NOT consume a cycle number (read → n+1 → rollback → reopen again yields n+1, never n+2) | counter gapless across failed transactions | Planned |
 | API-18 | API | AC-010–AC-013 | full final matrix incl. every forbidden transition (contract-first update of Lab 3 cases) | allowed accepted; unlisted `409` | Planned |
 | API-19 | API / concurrency | BR-024, AC-017 | resolve racing concurrent action completion (real overlapping ops) | gate evaluated atomically; no bypass possible | Planned |
 | API-20 | API / concurrency | BR-023, AC-017 | stale-version concurrent edits and transitions (A reads v3, B commits v4, A submits v3) | A receives `409 ACTION_STATE_CHANGED`; final version exact | Planned |
@@ -74,8 +79,10 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
 | API-21 | API | AC-014 | requester metrics and recents incl. zero-ticket Requester; malformed auth | owned-only data; zeros with `[]`, never `404` or leakage | Planned |
-| API-22 | API | AC-015 | staff attribution metrics (`ownedByMe`, `assignedToMe`, `performedByMe`) vs direct DB queries | each metric matches its own query; no merged counting | Planned |
-| API-23 | API | AC-015 | urgent (`urgentHighPriority`) vs recent (`recentlyUpdated`) separation; drill-down link targets incl. priority sort | urgent = `HIGH`/`CRITICAL` only; links well-formed | Planned |
+| API-22 | API | AC-015 | staff attribution metrics vs direct DB queries; `performedByMe` 30×24h window edges (inclusive lower bound, single capture, skew exclusion) | each metric matches its own query; boundary completions classified correctly | Planned |
+| API-22b | API | AC-015 | `COMPLETED` event with `occurredAt` 1s after the now-capture (clock skew) MUST be excluded | upper bound enforced via single capture | Planned |
+| API-23 | API | AC-015 | urgent vs recent separation with tie-breakers; `assignedToMe` ticket-count vs `?assignee=` destination; urgent CSV filter equivalence | order deterministic; metric equals destination result count | Planned |
+| API-23b | API | AC-015 | `assignedToMe` when the assignee is deactivated mid-count: metric MUST NOT reference actions whose deactivate failed to commit | count always equals the destination query | Planned |
 | API-24 | API | AC-016 | Admin `userCounts` shape; Staff omission; Requester denial; shape scan | exact shape; no key for Staff; `403` for Requester; no PII | Planned |
 
 ### Migration / regression — `server/tests/lab-04/migration-regression.test.ts` (To be created)
@@ -83,7 +90,9 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
 | MIG-01 | Migration | BR-026, AC-019 | additive migration on Lab 3 snapshot incl. new tables, FKs, indexes, defaults, version default | Lab 1–3 rows intact; constraints hold | Planned |
-| MIG-02 | Migration / seed | BR-027–BR-028, AC-019 | clean seed, rerun idempotency, 0/1/N distribution, lifecycle/cycle variety, zero-metric fixtures | no duplicates; mutations preserved; coverage complete | Planned |
+| MIG-02 | Migration / seed | BR-027–BR-028, AC-019 | clean seed, rerun idempotency, 0/1/N distribution, lifecycle/cycle variety (owner ≠ assignee ≠ performer fixtures), zero-metric fixtures | no duplicates; mutations preserved; coverage complete | Planned |
+| MIG-03 | Migration | BR-029, AC-019 | cycle column default and deterministic backfill on Lab 3 snapshot | every existing Ticket has `resolutionCycle = 1`; NOT NULL holds; new Tickets start at 1 | Planned |
+| MIG-04 | Migration / recovery | Handout §5.2, BR-026, AC-019 | snapshot → migrate → restore via documented procedure → re-migrate on Lab 3 snapshot | Lab 1–3 data intact every time; `resolutionCycle = 1`; no destructive op outside test DB | `server/tests/lab-04/migration-regression.test.ts` | Planned |
 | REG-01 | Regression | FR-019, AC-020 | Lab 1–3 server, client, and E2E suites incl. contract-first status-test updates | green on the exact tree | existing suites | Planned |
 
 ## 4. Security / Authorization Tests
@@ -93,16 +102,17 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | SEC-01 | Security | matrix, AC-009 | role × action matrix over every new endpoint incl. ID manipulation and event paths | backend matches matrix regardless of UI | `actions-taken.api.test.ts` | Planned |
 | SEC-02 | Security | BR-017, AC-014 | cross-Requester dashboard, Ticket, and history access incl. id guessing | safe `403`/`404` with zero leakage | `requester-dashboard.api.test.ts` | Planned |
 | SEC-03 | Security | AC-020 | Internal Notes absence from every new response shape | no note field or content anywhere | notes regression + new-shape scans | Planned |
+| SEC-04 | Security | matrix + Lab 3 BR-57, AC-009 | password-gate wiring on every Lab 4 endpoint (LAP4-01–08 + both dashboards): valid session but `mustChangePassword = true` | `403` on every endpoint (only login/change/logout pass — Lab 3 baseline) | `server/tests/lab-04/actions-taken.api.test.ts` + dashboard suites | Planned |
 
 ## 5. UI Component Tests (`client/src/features/lab-04/tests/` — To be created)
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
 | UI-01 | UI | AC-014 | RequesterDashboard: cards, lists, loading, empty, failure, drill-down, keyboard | matches API; all states reachable | `RequesterDashboard.test.tsx` | Planned |
-| UI-02 | UI | AC-015, AC-016 | StaffDashboard: attribution cards, urgent vs recent, Admin counts, zero, failure, drill-down; card absent for Staff | counts exact; navigation correct | `StaffDashboard.test.tsx` | Planned |
+| UI-02 | UI | AC-015, AC-016 | StaffDashboard: attribution cards, urgent vs recent, Admin counts, zero, failure, drill-down (assignee/urgent/role); `performedByMe` card non-clickable; card absent for Staff | counts exact; navigation correct; non-clickable asserted | `StaffDashboard.test.tsx` | Planned |
 | UI-03 | UI | AC-001–AC-006, AC-008 | ActionsTaken: list, create (auto-tick), edit, start, complete, cancel, conflict and date-range feedback; history view; Requester read-only | Staff flows succeed; history read-only rendered; Requester has no controls | `ActionsTaken.test.tsx` | Planned |
 | UI-04 | UI | AC-010, AC-011, AC-013 | TicketWorkflow: gate-blocked explanation (open vs missing-completion), summary refresh, reopened-cycle presentation | blocker copy with links; success refreshes; fresh cycle shown | `TicketWorkflow.test.tsx` | Planned |
-| UI-05 | UI | drill-down contract | lists initialize filters/sort from query; User Management role init; unknown values ignored | filters match query; safe defaults otherwise | `DrillDown.test.tsx` | Planned |
+| UI-05 | UI | drill-down contract | lists initialize filters/sort from query incl. `?assignee=`, CSV `?itPriority=`, role init; unknown values ignored; metric equals destination count | filters match query; safe defaults otherwise | `DrillDown.test.tsx` | Planned |
 | STYLE-01 | Style | ui-spec §1/§5 | Zen Green continuity, status badges (`PLANNED` etc., never `OPEN`/`WORKING`), read-only vs editable | conforms | `dashboard-actions-style.test.tsx` | Planned |
 
 ## 6. E2E / Accessibility / Visual (`e2e/lab-04/` — To be created)
@@ -123,29 +133,29 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | AC-001 create | API-01, UI-03, E2E-01 |
 | AC-002 validation/dates | UNIT-01, API-02, UI-03, E2E-01 |
 | AC-003 edit | API-03, API-20, UI-03, E2E-01 |
-| AC-004 start transition | UNIT-04, API-04, UI-03, E2E-01 |
+| AC-004 start transition | UNIT-04, API-04, API-04b, UI-03, E2E-01 |
 | AC-005 complete | API-05, UI-03, E2E-01 |
 | AC-006 cancel | API-05, UI-03, E2E-01 |
-| AC-007 history | API-10–API-12, SEC-01, UI-03, E2E-01 |
-| AC-008 assign/eligibility | API-06, API-07, UI-03, E2E-01 |
-| AC-009 requester visibility | API-08, SEC-01, UI-03, E2E-01 |
+| AC-007 history | API-10–API-12, API-12b, SEC-01, UI-03, E2E-01 |
+| AC-008 assign/eligibility | API-06, API-07, API-07b, UI-03, E2E-01 |
+| AC-009 requester visibility | API-08, SEC-01, SEC-04, UI-03, E2E-01 |
 | AC-010 gate block | UNIT-02, API-13, API-14, UI-04, E2E-02 |
 | AC-011 gate pass | UNIT-02, API-15, UI-04, E2E-02 |
 | AC-012 legacy cycle | UNIT-02, API-16, E2E-02 |
-| AC-013 reopen cycle | UNIT-02, API-17, UI-04, E2E-02 |
+| AC-013 reopen cycle | UNIT-02, API-17, API-25, API-25b, UI-04, E2E-02 |
 | AC-014 requester dashboard | UNIT-03, API-21, SEC-02, UI-01, E2E-03 |
-| AC-015 staff dashboard | UNIT-03, API-22, API-23, UI-02, E2E-03 |
+| AC-015 staff dashboard | UNIT-03, API-22, API-22b, API-23, API-23b, UI-02, E2E-03 |
 | AC-016 admin counts | UNIT-03, API-24, UI-02, E2E-03 |
-| AC-017 concurrency | API-07, API-19, API-20 (real overlapping operations; sequential-only does not count) |
+| AC-017 concurrency | API-07, API-07b, API-19, API-20, API-25, API-25b (real overlapping operations; sequential-only does not count) |
 | AC-018 idempotency | API-09, UI-03, E2E-01 |
-| AC-019 migration/seed | MIG-01–MIG-02 |
+| AC-019 migration/seed | MIG-01–MIG-04 |
 | AC-020 regression | REG-01, SEC-03, A11Y-01, VISUAL-01 |
 
 Coverage rule: every AC maps to at least one automated test whose scenario directly exercises that criterion. Broad regression claims never substitute for specific boundary tests.
 
 ## 8. Planned Test-File Map by Implementation Issue
 
-| GitHub Issue (7 issues; single combined dashboards issue per owner decision) | Primary planned evidence |
+| GitHub Issue (planned sequence; numbers recorded only for opened Issues — #75 contract open, rest unopened; single combined dashboards issue per owner decision) | Primary planned evidence |
 |---|---|
 | Contract (#75) | this plan with peer review; no code |
 | Actions Taken foundation | `actions-taken.api.test.ts` (API-01–API-12), unit validation/lifecycle/gate tests, migration and seed tests, version/concurrency/idempotency proofs |

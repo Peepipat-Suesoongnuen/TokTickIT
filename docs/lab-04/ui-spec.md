@@ -19,7 +19,7 @@ All Lab 4 screens MUST reuse Lab 2/3 tokens, spacing, form states, table and car
 
 ## 4. IT Staff Dashboard (`/staff-dashboard`)
 
-- Metric cards — Owned by Me (`ownedByMe`), Assigned to Me (`assignedToMe`), Performed by Me (`performedByMe`), Unassigned (`unassigned`), Urgent High/Critical (`urgentHighPriority`), By Status (`byStatus`), By IT Priority (`byItPriority`): each card labels its attribution source explicitly (never a merged "My Work"). Drill-down: attribution cards to the matching Staff Queue filtered view; the Urgent card to the priority-sorted queue (`?sort=itPriority&order=desc`).
+- Metric cards — Owned by Me (`ownedByMe`), Assigned to Me (`assignedToMe`), Performed by Me (`performedByMe`, non-clickable by design — no performer dimension exists in queue vocabulary), Unassigned (`unassigned`), Urgent High/Critical (`urgentHighPriority`), By Status (`byStatus`), By IT Priority (`byItPriority`): each card labels its attribution source explicitly (never a merged "My Work"). Drill-down: owned/unassigned/assignee cards to the matching Staff Queue filtered views (`?owner=…`, `?assignee=…`); the Urgent card to `/staff/queue?itPriority=HIGH,CRITICAL` (dataset-identical); per-priority cards to their single value.
 - Lists kept separate: urgent tickets (`HIGH`/`CRITICAL`, top 10) and recently updated (top 8). Rows open Ticket Detail.
 - Administrators see the identical view plus one concise user-account counts card (`userCounts`): Total Users, Active Users, per-role counts; deactivated read as Total minus Active, never a separate sourced metric. Each role count drills to User Management with that role filter (`/admin/users?role=<ROLE>`). The card MUST NOT render for Staff. Zero counts render as `0`, never blank.
 - Counts MUST match the API exactly; the client MUST NOT aggregate or recompute. Loading, empty, forbidden, and failure states follow §3.
@@ -30,7 +30,7 @@ All Lab 4 screens MUST reuse Lab 2/3 tokens, spacing, form states, table and car
 - Create mode: description input, assignee picker (empty = performer accountable), work-datetime input with explicit "use current time" auto-tick, follow-up toggle revealing the required note field, attachment-notes input. The client MUST NOT trust its own clock beyond display.
 - View/Edit mode for `PLANNED`/`IN_PROGRESS` actions: Start (`PLANNED → IN_PROGRESS`), field edits, Complete (result required), Cancel (confirmed). Every save sends the displayed `expectedVersion` and refreshes it from the response. Out-of-range dates, stale versions (`ACTION_STATE_CHANGED` with Refresh), and ineligible assignees MUST surface actionable guidance.
 - History mode: per-Action event stream (actor, timestamp, type, change summary) in deterministic order, read-only.
-- Complete and Cancel are explicit confirmed actions; terminal actions render read-only. On a `CLOSED`/`CANCELLED` Ticket the entire Actions area renders read-only with no create/edit controls.
+- Complete and Cancel are explicit confirmed actions; terminal actions render read-only. On a `RESOLVED`/`CLOSED`/`CANCELLED` Ticket the entire Actions area renders read-only with no create/edit controls (further work requires Reopen).
 - Requester Detail MUST show the same items and history read-only with zero mutation controls. The API enforces this independently of rendering.
 
 ## 6. Ticket Workflow and Resolution Feedback
@@ -41,7 +41,7 @@ All Lab 4 screens MUST reuse Lab 2/3 tokens, spacing, form states, table and car
 
 ## 7. Common Application States
 
-Loading, field-level validation with first-invalid focus, success, empty/no-results, forbidden, unauthorized (redirect to Login), conflict (the `409` family with actionable copy and next action), not-found, and safe API-failure states MUST follow Lab 3 patterns. Double-submit MUST be prevented through disabled busy state plus `clientRequestId` idempotency keys. Recoverable failures MUST preserve entered form data. Console errors, broken links, placeholder text, and unfinished controls MUST NOT ship.
+Loading, field-level validation with first-invalid focus (`400` incl. `ACTION_DATE_OUT_OF_RANGE`), success, empty/no-results, forbidden (`403`), unauthorized (redirect to Login; `401`), conflict with actionable copy and next action (`ACTION_STATE_CHANGED` → Refresh; `INVALID_ACTION_TRANSITION` → read-only explanation; `RESOLUTION_BLOCKED_BY_OPEN_ACTIONS` / `RESOLUTION_REQUIRES_COMPLETED_ACTION` → Actions-tab link; `ACTION_ASSIGNEE_NOT_ELIGIBLE` → reselection; `IDEMPOTENCY_CONFLICT` → no-retry notice), not-found, and safe API-failure states MUST follow Lab 3 patterns. Double-submit MUST be prevented through disabled busy state plus `clientRequestId` idempotency keys. A replayed idempotent response (`Idempotent-Replayed`) MUST render as the original success state, never as a second creation. Recoverable failures MUST preserve entered form data. Console errors, broken links, placeholder text, and unfinished controls MUST NOT ship.
 
 ## 8. Responsive Rules (measurable)
 
@@ -60,7 +60,7 @@ Visible focus on every interactive element; full keyboard operation for cards, t
 | `/staff-dashboard` | IT Staff/Administrator (guarded) | Staff dashboard + Admin counts card (§4) |
 | `/tickets/:id` (+ Actions section) | Requester/Staff/Admin | Detail + Actions Taken area with history (§5) |
 | `/my-tickets?status=…&state=…` | Requester | My Tickets MUST initialize filters from query (drill-down support per api-spec §4) |
-| `/staff/queue?owner=…&itPriority=…&sort=…&order=…` | Staff/Admin | Staff Queue MUST initialize owner, priority, and sort from query using the implemented filter/sort vocabulary |
+| `/staff/queue?owner=…&assignee=…&itPriority=…&sort=…&order=…` | Staff/Admin | Staff Queue MUST initialize owner, assignee, priority (single or comma-separated levels), and sort from query using the implemented vocabulary |
 | `/admin/users?role=…` | Administrator | User Management MUST initialize the role filter from query |
 | existing Lab 1–3 routes | Unchanged | Regression baseline; temporary, duplicate, or obsolete elements found MUST be removed |
 
