@@ -2,7 +2,7 @@
 
 Companion to [specification.md](./specification.md). Lab 3 conventions apply unchanged: error envelope `{ "error": { "code", "message" } }` with optional Lab 2-compatible top-level `fieldErrors`; strict contracts (unknown or duplicate query parameters, invalid enum or type values, unknown JSON body fields → `400`); ISO 8601 UTC timestamps; server-side opaque sessions with 8-hour absolute expiry; exact-Origin enforcement on every state-changing request including Login; credentialed CORS allow-list; `mustChangePassword` gate. Common HTTP semantics follow Lab 3 BR-64. Only status codes the NEW Lab 4 endpoints return are specified here (`200/201/400/401/403/404/409/500`); inherited Lab 3 codes on existing endpoints (e.g. attachment `413`/`415`, rate-limit `429`) continue per the Lab 3 contract. No `422` exists in this codebase convention.
 
-> Status: NORMATIVE CONTRACT synchronized to specification.md (FR-001–FR-020, BR-001–BR-028).
+> Status: NORMATIVE CONTRACT synchronized to specification.md (FR-001–FR-020, BR-001–BR-029).
 
 ## 1. Error Codes (Lab 4)
 
