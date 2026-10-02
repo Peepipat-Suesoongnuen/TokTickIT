@@ -22,6 +22,7 @@ import type { AuthRequest, AuthUserRow } from "./auth.js";
 import authRouter from "./routes/auth.js";
 import staffRouter, { TICKET_STATUSES } from "./routes/staff.js";
 import adminRouter from "./routes/admin.js";
+import { actionsRouter } from "./routes/actions.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -101,6 +102,11 @@ app.use("/api/staff", staffRouter);
 // The router owns the ADMINISTRATOR role gate; other roles are rejected
 // with 403 before protected User detail is exposed.
 app.use("/api/admin", adminRouter);
+
+// Issue #77 (Lab 4) — Actions Taken (LAP4-01–LAP4-04, LAP4-08).
+// Mounted at /api; each route owns its role/visibility gating
+// (Requester owned-only, Staff/Admin authorized visibility).
+app.use("/api", actionsRouter);
 
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list (evolved in Lab 2)

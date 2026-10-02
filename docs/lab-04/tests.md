@@ -48,7 +48,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | API-07 | API / concurrency | BR-024, AC-008, AC-017 | assign/complete racing Admin deactivate/demote as real overlapping DB operations | loser safe `409`; ineligible final state never commits | Planned |
 | API-07b | API / concurrency | BR-024, AC-008 | deactivate user with only COMPLETED/CANCELLED actions or actions on CLOSED tickets vs open-assigned on non-terminal Ticket | former passes (never blocks); latter → `409 USER_HAS_ACTIVE_ACTIONS` | Planned |
 | API-08 | API | AC-009 | Requester create/edit/transition/complete/cancel/history attempts; cross-owner list/history | `403` or safe `404`; owned list and history complete | Planned |
-| API-09 | API | BR-025, AC-018 | double-submit same key + identical intent (expect `200` + `Idempotent-Replayed`, zero new rows/events); same key + different intent; concurrent same-key inserts (unique-violation path); same key on another Ticket; missing key; distinct concurrent creates | identical → `200` replay; different intent → `409 IDEMPOTENCY_CONFLICT` + original byte-identical; concurrent same-key → exactly one logical Action; per-Ticket scope; missing → `400`; distinct both persist | Planned |
+| API-09 | API | BR-025, AC-018 | double-submit same key + identical intent incl. asserted date (expect `200` + `Idempotent-Replayed`, zero new rows/events); auto-now retry diverges → `409`, never duplicates; same key + different intent; concurrent same-key inserts (unique-violation path); same key on another Ticket; missing key; distinct concurrent creates | identical → `200` replay; different intent → `409 IDEMPOTENCY_CONFLICT` + original byte-identical; concurrent same-key → exactly one logical Action; per-Ticket scope; missing → `400`; distinct both persist | Planned |
 
 ### History — same file, event rows
 
@@ -91,7 +91,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 |---|---|---|---|---|---|
 | MIG-01 | Migration | BR-026, AC-019 | additive migration on Lab 3 snapshot incl. new tables, FKs, indexes, defaults, version default | Lab 1–3 rows intact; constraints hold | Planned |
 | MIG-02 | Migration / seed | BR-027–BR-028, AC-019 | clean seed, rerun idempotency, 0/1/N distribution, lifecycle/cycle variety (owner ≠ assignee ≠ performer fixtures), zero-metric fixtures | no duplicates; mutations preserved; coverage complete | Planned |
-| MIG-03 | Migration | BR-029, AC-019 | cycle column default and deterministic backfill on Lab 3 snapshot | every existing Ticket has `resolutionCycle = 1`; NOT NULL holds; new Tickets start at 1 | Planned |
+| MIG-03 | Migration | BR-029, AC-019 | cycle column default and deterministic backfill on Lab 3 snapshot | every pre-existing Ticket backfilled to `resolutionCycle = 1`; `NOT NULL` holds; new Tickets start at 1 (SEED-0008 is the deliberate second-cycle seed fixture) | Planned |
 | MIG-04 | Migration / recovery | Handout §5.2, BR-026, AC-019 | snapshot → migrate → restore via documented procedure → re-migrate on Lab 3 snapshot | Lab 1–3 data intact every time; `resolutionCycle = 1`; no destructive op outside test DB | `server/tests/lab-04/migration-regression.test.ts` | Planned |
 | REG-01 | Regression | FR-019, AC-020 | Lab 1–3 server, client, and E2E suites incl. contract-first status-test updates | green on the exact tree | existing suites | Planned |
 

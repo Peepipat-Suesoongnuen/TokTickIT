@@ -9,7 +9,7 @@ import { LOCAL_INITIAL_PASSWORD } from "../migrated-credentials.js";
 // TEST_DATABASE_URL); cleans only its own SEED-* fixtures afterwards.
 describe("seed (MIG-05, MIG-06, BR-75)", () => {
   const prisma = getPrisma();
-  const SEED_TICKETS = ["SEED-0001", "SEED-0002", "SEED-0003", "SEED-0004", "SEED-0005", "SEED-0006"];
+  const SEED_TICKETS = ["SEED-0001", "SEED-0002", "SEED-0003", "SEED-0004", "SEED-0005", "SEED-0006", "SEED-0007", "SEED-0008"];
 
   const SEED_EMAILS = [
     "anucha.w@toktick.it",
@@ -42,6 +42,16 @@ describe("seed (MIG-05, MIG-06, BR-75)", () => {
   afterAll(async () => {
     await prisma.publicComment.deleteMany({ where: { content: SEED_PUBLIC_COMMENT } });
     await prisma.internalNote.deleteMany({ where: { content: SEED_INTERNAL_NOTE } });
+    // Lab 4: actions reference SEED tickets with Restrict FK — dependents first.
+    const seedActions = await prisma.actionTaken.findMany({
+      where: { ticket: { ticketNumber: { in: SEED_TICKETS } } },
+      select: { id: true },
+    });
+    const seedActionIds = seedActions.map((a) => a.id);
+    if (seedActionIds.length > 0) {
+      await prisma.actionTakenEvent.deleteMany({ where: { actionTakenId: { in: seedActionIds } } });
+      await prisma.actionTaken.deleteMany({ where: { id: { in: seedActionIds } } });
+    }
     await prisma.ticket.deleteMany({ where: { ticketNumber: { in: SEED_TICKETS } } });
   });
 

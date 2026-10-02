@@ -41,11 +41,13 @@ const USER_FIXTURES: UserFixture[] = [
 type TicketFixture = {
   ticketNumber: string;
   requesterEmail: string;
-  status: "NEW" | "OPEN" | "IN_PROGRESS" | "WAITING_FOR_REQUESTER" | "RESOLVED";
+  status: "NEW" | "OPEN" | "IN_PROGRESS" | "WAITING_FOR_REQUESTER" | "RESOLVED" | "CLOSED" | "REOPENED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   ownerEmail: string | null;
   summary: string;
   description: string;
+  // Lab 4: REOPENED seed ticket demonstrates a second resolution cycle.
+  resolutionCycle?: number;
 };
 
 const TICKET_FIXTURES: TicketFixture[] = [
@@ -102,6 +104,27 @@ const TICKET_FIXTURES: TicketFixture[] = [
     ownerEmail: null,
     summary: "Request new keyboard",
     description: "Several keys on the office keyboard no longer respond to presses.",
+  },
+  {
+    // Lab 4: CLOSED ticket with completed-action history (BR-028 coverage).
+    ticketNumber: "SEED-0007",
+    requesterEmail: "chaiwat.p@toktick.it",
+    status: "CLOSED",
+    priority: "MEDIUM",
+    ownerEmail: "staff2@toktick.it",
+    summary: "Monitor replacement request",
+    description: "Request to replace a flickering department monitor, resolved last week.",
+  },
+  {
+    // Lab 4: REOPENED ticket on its second resolution cycle (BR-028 coverage).
+    ticketNumber: "SEED-0008",
+    requesterEmail: "darika.s@toktick.it",
+    status: "REOPENED",
+    priority: "HIGH",
+    ownerEmail: "staff3@toktick.it",
+    summary: "Printer jam recurring after fix",
+    description: "The printer jam returned two days after the previous resolution.",
+    resolutionCycle: 2,
   },
 ];
 
@@ -257,6 +280,7 @@ export async function runSeed(): Promise<void> {
         requestedPriority: t.priority,
         itPriority: t.priority,
         currentStatus: t.status,
+        resolutionCycle: t.resolutionCycle ?? 1,
       },
     });
     ticketsCreated++;
@@ -297,6 +321,76 @@ export async function runSeed(): Promise<void> {
   const commentCount = await prisma.publicComment.count();
   const noteCount = await prisma.internalNote.count();
   console.log(`Seeded ${commentCount} public comments, ${noteCount} internal notes.`);
+
+  // -------------------------------------------------------------------------
+  // 6. Lab 4 — ActionTaken + ActionTakenEvent fixtures (create-if-missing,
+  //    keyed by ticketNumber + description; fixed clientRequestId per fixture
+  //    so reruns skip. SEED-0001/0006 intentionally keep ZERO actions
+  //    (legacy). CLOSED/REOPENED ticket statuses are covered by transient
+  //    test fixtures instead of seed rows to avoid disturbing Lab 2/3
+  //    list-count assertions. Reruns MUST NOT reset mutable action state.
+  // -------------------------------------------------------------------------
+  const staff1 = await prisma.user.findUniqueOrThrow({ where: { email: canonicalizeEmail("staff1@toktick.it") } });
+  const staff2 = await prisma.user.findUniqueOrThrow({ where: { email: canonicalizeEmail("staff2@toktick.it") } });
+  const staff3 = await prisma.user.findUniqueOrThrow({ where: { email: canonicalizeEmail("staff3@toktick.it") } });
+  const hour = 36e5;
+  const actionFixtures = [
+    { ticket: "SEED-0002", description: "Seed: diagnosed login failure on staff workstation", status: "PLANNED" as const, performer: staff1, assignee: staff2, result: null, followUpRequired: false, followUpNote: null, attachmentNotes: null, key: "05686a15-792b-59bd-937d-6fedffd102ba", ageH: 5 },
+    { ticket: "SEED-0003", description: "Seed: restarted application service cluster", status: "COMPLETED" as const, performer: staff1, assignee: staff2, result: "Service cluster restarted; errors cleared.", followUpRequired: false, followUpNote: null, attachmentNotes: null, key: "078acaf4-2852-5c11-9c4f-946a9d173310", ageH: 26 },
+    { ticket: "SEED-0003", description: "Seed: monitoring follow-up observation window", status: "IN_PROGRESS" as const, performer: staff2, assignee: staff3, result: null, followUpRequired: true, followUpNote: "Recheck error rate tomorrow morning.", attachmentNotes: null, key: "515a4b99-9fc0-579b-be71-a998983b9583", ageH: 4 },
+    { ticket: "SEED-0003", description: "Seed: obsolete rollback plan draft", status: "CANCELLED" as const, performer: staff3, assignee: null, result: null, followUpRequired: false, followUpNote: null, attachmentNotes: null, key: "260309c2-1311-5859-9a5e-fb3e254895fc", ageH: 30 },
+    { ticket: "SEED-0004", description: "Seed: awaiting requester log files", status: "PLANNED" as const, performer: staff3, assignee: null, result: null, followUpRequired: false, followUpNote: null, attachmentNotes: "See ticket attachment server-log-01.txt", key: "d53706af-d9ee-513f-bb28-875a39825cc8", ageH: 3 },
+    { ticket: "SEED-0005", description: "Seed: verified fix with requester on call", status: "COMPLETED" as const, performer: staff1, assignee: staff1, result: "Confirmed resolved with requester.", followUpRequired: false, followUpNote: null, attachmentNotes: null, key: "3beece21-75fd-5d26-baf7-efae9a704e37", ageH: 50 },
+    { ticket: "SEED-0007", description: "Seed: replaced monitor and verified display", status: "COMPLETED" as const, performer: staff2, assignee: staff2, result: "Monitor replaced; display verified.", followUpRequired: false, followUpNote: null, attachmentNotes: null, key: "bda27928-7dde-507c-8a7f-25ba0a7aafa1", ageH: 100 },
+    { ticket: "SEED-0008", description: "Seed: re-inspect printer after reopen", status: "PLANNED" as const, performer: staff3, assignee: staff3, result: null, followUpRequired: false, followUpNote: null, attachmentNotes: null, key: "4cd1d641-4b1a-5aa8-aeba-49d7b7274855", ageH: 2 },
+  ];
+  for (const f of actionFixtures) {
+    const t = await prisma.ticket.findUniqueOrThrow({ where: { ticketNumber: f.ticket } });
+    const existing = await prisma.actionTaken.findFirst({
+      where: { ticketId: t.id, description: f.description },
+    });
+    if (existing != null) continue;
+    const action = await prisma.actionTaken.create({
+      data: {
+        ticketId: t.id,
+        description: f.description,
+        result: f.result,
+        performedById: f.performer.id,
+        assignedToId: f.assignee?.id ?? null,
+        actionDate: new Date(Date.now() - f.ageH * hour),
+        followUpRequired: f.followUpRequired,
+        followUpNote: f.followUpNote,
+        attachmentNotes: f.attachmentNotes,
+        status: f.status,
+        cycle: t.resolutionCycle,
+        version: 1,
+        clientRequestId: f.key,
+      },
+    });
+    await prisma.actionTakenEvent.create({
+      data: {
+        actionTakenId: action.id,
+        eventType: "CREATED",
+        actorId: f.performer.id,
+        payload: { description: f.description },
+        requestId: f.key,
+      },
+    });
+    if (f.status === "COMPLETED" || f.status === "CANCELLED") {
+      await prisma.actionTakenEvent.create({
+        data: {
+          actionTakenId: action.id,
+          eventType: f.status,
+          actorId: f.performer.id,
+          payload: { status: f.status },
+          requestId: f.key,
+        },
+      });
+    }
+  }
+  const actionCount = await prisma.actionTaken.count();
+  const eventCount = await prisma.actionTakenEvent.count();
+  console.log(`Seeded ${actionCount} actions taken, ${eventCount} action events.`);
 }
 
 const invokedDirectly = (process.argv[1] ?? "").replace(/\\/g, "/").endsWith("prisma/seed.ts");
