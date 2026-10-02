@@ -193,6 +193,29 @@ function withoutDateMarker(fieldErrors: Record<string, string>): Record<string, 
   return { ...rest, actionDate: "Action date must be within [ticket date, now + 1h]." };
 }
 
+// Mutation outcomes are computed INSIDE the transaction but SENT only after
+// it commits. Sending a response from inside the callback lets a fast
+// follow-up request observe uncommitted state (read-committed snapshot taken
+// before our commit lands) — observed in CI as 404s on immediately
+// subsequent mutations. Every txn callback below returns an outcome; the
+// route sends it after `await` resolves.
+type MutationOutcome =
+  | { kind: "ok"; status: number; body: unknown; headers?: Record<string, string> }
+  | { kind: "error"; status: number; code: string; message: string; fieldErrors?: Record<string, string> };
+
+function sendOutcome(res: Response, outcome: MutationOutcome): void {
+  if (outcome.kind === "ok") {
+    for (const [k, v] of Object.entries(outcome.headers ?? {})) res.setHeader(k, v);
+    res.status(outcome.status).json(outcome.body);
+    return;
+  }
+  sendError(res, outcome.status, outcome.code, outcome.message, outcome.fieldErrors);
+}
+
+function validationOutcome(fieldErrors: Record<string, string>): MutationOutcome {
+  return { kind: "error", status: 400, code: "VALIDATION_FAILED", message: "One or more fields are invalid.", fieldErrors };
+}
+
 export const actionsRouter = Router();
 
 // ---------------------------------------------------------------------------
@@ -406,7 +429,7 @@ actionsRouter.post(
         });
       const sameIntent = (assignedId: number | null, row: Parameters<typeof rowIntentOf>[0]) =>
         normalizeCreateIntent({ ...intentFields, assignedToId: assignedId, actionDate: actionDateRaw }) === rowIntentOf(row);
-      const created = await prisma.$transaction(async (tx) => {
+      const created: MutationOutcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
         // Lock order (spec §7.3): User rows before Ticket rows. The assignee
         // row (when present) is locked FIRST so a concurrent Admin
         // deactivate/demote serializes on the same row symmetrically with
@@ -415,36 +438,30 @@ actionsRouter.post(
         if (body.assignedToId !== undefined && body.assignedToId !== null) {
           const assigneeId = parsePositiveInt(body.assignedToId);
           if (assigneeId == null) {
-            invalid(res, { assignedToId: "Assigned user must be a positive user id." });
-            return null;
+            return validationOutcome({ assignedToId: "Assigned user must be a positive user id." });
           }
           const target = await lockUserRowForUpdate(tx as never, assigneeId);
           if (!isOwnerEligible(target)) {
-            sendError(res, 409, "ACTION_ASSIGNEE_NOT_ELIGIBLE", "The assignee is not an eligible active Staff member.");
-            return null;
+            return { kind: "error", status: 409, code: "ACTION_ASSIGNEE_NOT_ELIGIBLE", message: "The assignee is not an eligible active Staff member." };
           }
           assignedToId = assigneeId;
         }
         const ticket = await lockTicketRow(tx as never, ticketId);
         if (!ticket) {
-          sendError(res, 404, "TICKET_NOT_FOUND", "Ticket not found.");
-          return null;
+          return { kind: "error", status: 404, code: "TICKET_NOT_FOUND", message: "Ticket not found." };
         }
         if (TERMINAL_TICKET_STATUSES.has(ticket.currentStatus)) {
-          sendError(res, 409, "INVALID_ACTION_TRANSITION", "Actions cannot be created on a resolved, closed, or cancelled Ticket. Reopen it first.");
-          return null;
+          return { kind: "error", status: 409, code: "INVALID_ACTION_TRANSITION", message: "Actions cannot be created on a resolved, closed, or cancelled Ticket. Reopen it first." };
         }
         const fieldErrors = validateCommonFields(body, ticket.ticketDate, now);
         if (body.followUpRequired === true && !isFollowUpNoteValid(true, body.followUpNote)) {
           fieldErrors.followUpNote = "Follow-up note (1–500 characters) is required when follow-up is required.";
         }
         if (isDateRangeError(fieldErrors)) {
-          sendError(res, 400, "ACTION_DATE_OUT_OF_RANGE", "Action date must be within [ticket date, now + 1h].", withoutDateMarker(fieldErrors));
-          return null;
+          return { kind: "error", status: 400, code: "ACTION_DATE_OUT_OF_RANGE", message: "Action date must be within [ticket date, now + 1h].", fieldErrors: withoutDateMarker(fieldErrors) };
         }
         if (Object.keys(fieldErrors).length > 0) {
-          invalid(res, fieldErrors);
-          return null;
+          return validationOutcome(fieldErrors);
         }
         const existing = await tx.actionTaken.findUnique({
           where: { ticketId_clientRequestId: { ticketId, clientRequestId: body.clientRequestId as string } },
@@ -455,12 +472,9 @@ actionsRouter.post(
         });
         if (existing) {
           if (!sameIntent(assignedToId, existing as unknown as Parameters<typeof rowIntentOf>[0])) {
-            sendError(res, 409, "IDEMPOTENCY_CONFLICT", "This idempotency key was already used with different content.");
-            return null;
+            return { kind: "error", status: 409, code: "IDEMPOTENCY_CONFLICT", message: "This idempotency key was already used with different content." };
           }
-          res.setHeader("Idempotent-Replayed", "true");
-          res.status(200).json(toActionShape(existing as unknown as ActionRow));
-          return "replayed" as const;
+          return { kind: "ok", status: 200, body: toActionShape(existing as unknown as ActionRow), headers: { "Idempotent-Replayed": "true" } };
         }
         const requestId = uuid();
         try {
@@ -492,8 +506,7 @@ actionsRouter.post(
             payload: { description: (action as { description: string }).description },
             requestId,
           });
-          res.status(201).json(toActionShape(action as unknown as ActionRow));
-          return "created" as const;
+          return { kind: "ok", status: 201, body: toActionShape(action as unknown as ActionRow) };
         } catch (e) {
           // A failed statement poisons a Postgres interactive transaction,
           // so the P2002 winner lookup MUST happen outside of it: signal
@@ -503,7 +516,7 @@ actionsRouter.post(
           }
           throw e;
         }
-      }).catch(async (e) => {
+      }).catch(async (e): Promise<MutationOutcome> => {
         if (typeof e === "object" && e !== null && (e as { __idempotencyRace?: boolean }).__idempotencyRace === true) {
           const race = e as { ticketId: number; clientRequestId: string };
           const prisma = getPrisma();
@@ -522,16 +535,13 @@ actionsRouter.post(
               ? null
               : (parsePositiveInt(body.assignedToId) ?? null);
           if (!sameIntent(parsedAssignee, winner as unknown as Parameters<typeof rowIntentOf>[0])) {
-            sendError(res, 409, "IDEMPOTENCY_CONFLICT", "This idempotency key was already used with different content.");
-            return null;
+            return { kind: "error", status: 409, code: "IDEMPOTENCY_CONFLICT", message: "This idempotency key was already used with different content." };
           }
-          res.setHeader("Idempotent-Replayed", "true");
-          res.status(200).json(toActionShape(winner as unknown as ActionRow));
-          return "replayed" as const;
+          return { kind: "ok", status: 200, body: toActionShape(winner as unknown as ActionRow), headers: { "Idempotent-Replayed": "true" } };
         }
         throw e;
       });
-      void created;
+      sendOutcome(res, created);
     } catch {
       if (!res.headersSent) internalError(res);
     }
@@ -597,11 +607,10 @@ actionsRouter.put(
       const prisma = getPrisma();
       const now = new Date();
       const requestId = uuid();
-      const result = await prisma.$transaction(async (tx) => {
+      const result: MutationOutcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
         const action = await tx.actionTaken.findUnique({ where: { id: actionId } });
         if (!action) {
-          sendError(res, 404, "ACTION_NOT_FOUND", "Action not found.");
-          return null;
+          return { kind: "error", status: 404, code: "ACTION_NOT_FOUND", message: "Action not found." };
         }
         // Lock order (spec §7.3): User row before Ticket row. Resolve and
         // lock a newly assigned user BEFORE taking the Ticket lock so the
@@ -615,13 +624,11 @@ actionsRouter.put(
           } else {
             const assigneeId = parsePositiveInt(body.assignedToId);
             if (assigneeId == null) {
-              invalid(res, { assignedToId: "Assigned user must be a positive user id or null." });
-              return null;
+              return validationOutcome({ assignedToId: "Assigned user must be a positive user id or null." });
             }
             const target = await lockUserRowForUpdate(tx as never, assigneeId);
             if (!isOwnerEligible(target)) {
-              sendError(res, 409, "ACTION_ASSIGNEE_NOT_ELIGIBLE", "The assignee is not an eligible active Staff member.");
-              return null;
+              return { kind: "error", status: 409, code: "ACTION_ASSIGNEE_NOT_ELIGIBLE", message: "The assignee is not an eligible active Staff member." };
             }
             assigneeChanged = action.assignedToId !== assigneeId;
             assignedToId = assigneeId;
@@ -629,29 +636,23 @@ actionsRouter.put(
         }
         const ticket = await lockTicketRow(tx as never, action.ticketId);
         if (!ticket) {
-          sendError(res, 404, "ACTION_NOT_FOUND", "Action not found.");
-          return null;
+          return { kind: "error", status: 404, code: "ACTION_NOT_FOUND", message: "Action not found." };
         }
         if (action.status !== "PLANNED" && action.status !== "IN_PROGRESS") {
-          sendError(res, 409, "INVALID_ACTION_TRANSITION", "Only open actions can be edited.");
-          return null;
+          return { kind: "error", status: 409, code: "INVALID_ACTION_TRANSITION", message: "Only open actions can be edited." };
         }
         if (TERMINAL_TICKET_STATUSES.has(ticket.currentStatus)) {
-          sendError(res, 409, "INVALID_ACTION_TRANSITION", "Actions on a resolved, closed, or cancelled Ticket are read-only.");
-          return null;
+          return { kind: "error", status: 409, code: "INVALID_ACTION_TRANSITION", message: "Actions on a resolved, closed, or cancelled Ticket are read-only." };
         }
         if (body.status === "IN_PROGRESS" && !isActionTransitionAllowed(action.status, "IN_PROGRESS")) {
-          sendError(res, 409, "INVALID_ACTION_TRANSITION", "Only PLANNED actions can be started.");
-          return null;
+          return { kind: "error", status: 409, code: "INVALID_ACTION_TRANSITION", message: "Only PLANNED actions can be started." };
         }
         const fieldErrors = validateCommonFields(body, ticket.ticketDate, now);
         if (isDateRangeError(fieldErrors)) {
-          sendError(res, 400, "ACTION_DATE_OUT_OF_RANGE", "Action date must be within [ticket date, now + 1h].", withoutDateMarker(fieldErrors));
-          return null;
+          return { kind: "error", status: 400, code: "ACTION_DATE_OUT_OF_RANGE", message: "Action date must be within [ticket date, now + 1h].", fieldErrors: withoutDateMarker(fieldErrors) };
         }
         if (Object.keys(fieldErrors).length > 0) {
-          invalid(res, fieldErrors);
-          return null;
+          return validationOutcome(fieldErrors);
         }
         const data: Record<string, unknown> = {};
         if (body.description !== undefined) data.description = trimValue(body.description as string);
@@ -667,8 +668,7 @@ actionsRouter.put(
         }
         if (body.status === "IN_PROGRESS") data.status = "IN_PROGRESS";
         if (Object.keys(data).length === 0) {
-          invalid(res, { body: "No updatable fields provided." });
-          return null;
+          return validationOutcome({ body: "No updatable fields provided." });
         }
         // Effective-change detection: compare against current values so a
         // no-op write emits zero events and consumes no version (BR-010).
@@ -684,8 +684,7 @@ actionsRouter.put(
           (data.attachmentNotes ?? action.attachmentNotes) !== action.attachmentNotes;
         if (!transition && !assigneeChanged && !followUpEffectiveChanged && !contentChanged) {
           if ((body.expectedVersion as number) !== action.version) {
-            sendError(res, 409, "ACTION_STATE_CHANGED", "The action changed since you loaded it. Refresh and retry.");
-            return null;
+            return { kind: "error", status: 409, code: "ACTION_STATE_CHANGED", message: "The action changed since you loaded it. Refresh and retry." };
           }
           const current = await tx.actionTaken.findUnique({
             where: { id: actionId },
@@ -694,16 +693,14 @@ actionsRouter.put(
               assignedTo: { select: { id: true, name: true } },
             },
           });
-          res.status(200).json(toActionShape(current as unknown as ActionRow));
-          return "ok" as const;
+          return { kind: "ok", status: 200, body: toActionShape(current as unknown as ActionRow) };
         }
         const updated = await tx.actionTaken.updateMany({
           where: { id: actionId, version: body.expectedVersion as number },
           data: { ...data, version: { increment: 1 } },
         });
         if (updated.count === 0) {
-          sendError(res, 409, "ACTION_STATE_CHANGED", "The action changed since you loaded it. Refresh and retry.");
-          return null;
+          return { kind: "error", status: 409, code: "ACTION_STATE_CHANGED", message: "The action changed since you loaded it. Refresh and retry." };
         }
         const aspects: AspectChange[] = [];
         if (transition) {
@@ -743,10 +740,9 @@ actionsRouter.put(
             assignedTo: { select: { id: true, name: true } },
           },
         });
-        res.status(200).json(toActionShape(fresh as unknown as ActionRow));
-        return "ok" as const;
+        return { kind: "ok", status: 200, body: toActionShape(fresh as unknown as ActionRow) };
       });
-      void result;
+      sendOutcome(res, result);
     } catch {
       if (!res.headersSent) internalError(res);
     }
@@ -783,49 +779,41 @@ async function handleFinish(req: Request, res: Response, kind: "complete" | "can
     }
     const prisma = getPrisma();
     const requestId = uuid();
-    const result = await prisma.$transaction(async (tx) => {
+    const result: MutationOutcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
       const action = await tx.actionTaken.findUnique({ where: { id: actionId } });
       if (!action) {
-        sendError(res, 404, "ACTION_NOT_FOUND", "Action not found.");
-        return null;
+        return { kind: "error", status: 404, code: "ACTION_NOT_FOUND", message: "Action not found." };
       }
       // Lock order (spec §7.3): accountable User row before Ticket row.
       const accountableId = action.assignedToId ?? action.performedById;
       const accountable = await lockUserRowForUpdate(tx as never, accountableId);
       const ticket = await lockTicketRow(tx as never, action.ticketId);
       if (!ticket) {
-        sendError(res, 404, "ACTION_NOT_FOUND", "Action not found.");
-        return null;
+        return { kind: "error", status: 404, code: "ACTION_NOT_FOUND", message: "Action not found." };
       }
       if (TERMINAL_TICKET_STATUSES.has(ticket.currentStatus)) {
-        sendError(res, 409, "INVALID_ACTION_TRANSITION", "Actions on a resolved, closed, or cancelled Ticket are read-only.");
-        return null;
+        return { kind: "error", status: 409, code: "INVALID_ACTION_TRANSITION", message: "Actions on a resolved, closed, or cancelled Ticket are read-only." };
       }
       if (kind === "complete") {
         const effectiveResult =
           body.result !== undefined ? body.result : action.result;
         if (typeof effectiveResult !== "string" || trimValue(effectiveResult).length === 0 || trimValue(effectiveResult).length > 2000) {
-          invalid(res, { result: "A non-empty result (max 2000 characters) is required to complete." });
-          return null;
+          return validationOutcome({ result: "A non-empty result (max 2000 characters) is required to complete." });
         }
         if (action.status !== "IN_PROGRESS") {
-          sendError(res, 409, "INVALID_ACTION_TRANSITION", "Only actions in progress can be completed.");
-          return null;
+          return { kind: "error", status: 409, code: "INVALID_ACTION_TRANSITION", message: "Only actions in progress can be completed." };
         }
         if (body.followUpRequired !== undefined && typeof body.followUpRequired !== "boolean") {
-          invalid(res, { followUpRequired: "followUpRequired must be a boolean." });
-          return null;
+          return validationOutcome({ followUpRequired: "followUpRequired must be a boolean." });
         }
         const followUpRequired = body.followUpRequired === undefined ? action.followUpRequired : body.followUpRequired === true;
         const followUpNote = body.followUpNote !== undefined ? body.followUpNote : action.followUpNote;
         if (!isFollowUpNoteValid(followUpRequired, followUpNote)) {
-          invalid(res, { followUpNote: "Follow-up note (1–500 characters) is required when follow-up is required." });
-          return null;
+          return validationOutcome({ followUpNote: "Follow-up note (1–500 characters) is required when follow-up is required." });
         }
         // Already locked above (spec §7.3 order); re-read not needed.
         if (!isOwnerEligible(accountable)) {
-          sendError(res, 409, "ACTION_ASSIGNEE_NOT_ELIGIBLE", "The accountable person is no longer eligible.");
-          return null;
+          return { kind: "error", status: 409, code: "ACTION_ASSIGNEE_NOT_ELIGIBLE", message: "The accountable person is no longer eligible." };
         }
         const updated = await tx.actionTaken.updateMany({
           where: { id: actionId, version: body.expectedVersion as number },
@@ -838,8 +826,7 @@ async function handleFinish(req: Request, res: Response, kind: "complete" | "can
           },
         });
         if (updated.count === 0) {
-          sendError(res, 409, "ACTION_STATE_CHANGED", "The action changed since you loaded it. Refresh and retry.");
-          return null;
+          return { kind: "error", status: 409, code: "ACTION_STATE_CHANGED", message: "The action changed since you loaded it. Refresh and retry." };
         }
         if (followUpRequired !== action.followUpRequired || (followUpNote ?? null) !== action.followUpNote) {
           await appendEvent(tx as never, {
@@ -859,16 +846,14 @@ async function handleFinish(req: Request, res: Response, kind: "complete" | "can
         });
       } else {
         if (action.status !== "PLANNED" && action.status !== "IN_PROGRESS") {
-          sendError(res, 409, "INVALID_ACTION_TRANSITION", "Only open actions can be cancelled.");
-          return null;
+          return { kind: "error", status: 409, code: "INVALID_ACTION_TRANSITION", message: "Only open actions can be cancelled." };
         }
         const updated = await tx.actionTaken.updateMany({
           where: { id: actionId, version: body.expectedVersion as number },
           data: { status: "CANCELLED", version: { increment: 1 } },
         });
         if (updated.count === 0) {
-          sendError(res, 409, "ACTION_STATE_CHANGED", "The action changed since you loaded it. Refresh and retry.");
-          return null;
+          return { kind: "error", status: 409, code: "ACTION_STATE_CHANGED", message: "The action changed since you loaded it. Refresh and retry." };
         }
         await appendEvent(tx as never, {
           actionTakenId: actionId,
@@ -885,10 +870,9 @@ async function handleFinish(req: Request, res: Response, kind: "complete" | "can
           assignedTo: { select: { id: true, name: true } },
         },
       });
-      res.status(200).json(toActionShape(fresh as unknown as ActionRow));
-      return "ok" as const;
+      return { kind: "ok", status: 200, body: toActionShape(fresh as unknown as ActionRow) };
     });
-    void result;
+    sendOutcome(res, result);
   } catch {
     if (!res.headersSent) internalError(res);
   }
