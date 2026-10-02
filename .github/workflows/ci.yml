@@ -163,19 +163,28 @@ jobs:
         run: npm ci
       - name: Create scratch database
         run: PGPASSWORD=toktickit psql -h localhost -U toktickit -d toktickit_test -c "CREATE DATABASE toktickit_migproof;"
-      - name: Deploy BASELINE migrations only (new migration hidden)
+      - name: Deploy BASELINE migrations only (new migrations hidden)
         working-directory: server
         run: |
-          # Hide the new user-migration dir so `migrate deploy` applies the
-          # Lab-2 baseline only. Restored at the start of the next step.
-          mv prisma/migrations/20260916105528_lab03_user_migration /tmp/hidden_lab03_user_migration
+          # Hide every migration newer than the Lab-2 baseline so
+          # `migrate deploy` applies the baseline only. New migration dirs
+          # must all be hidden: an unhidden newer dir would try to apply
+          # against tables that do not exist yet (P3018/42P01). Restored at
+          # the start of the next step.
+          mkdir -p /tmp/hidden_lab_migrations
+          for d in prisma/migrations/*/; do
+            case "$d" in
+              */20260815040147_add_category/*|*/20260826164540_lab02_db_increment/*) ;;
+              *) mv "$d" /tmp/hidden_lab_migrations/ ;;
+            esac
+          done
           DATABASE_URL="$MIGPROOF_DATABASE_URL" npx prisma migrate deploy
       - name: Fixtures, expected-abort deploy, clean redeploy, backfill, verify
         working-directory: server
         run: |
-          # Restore the hidden migration dir FIRST so the workspace stays
+          # Restore the hidden migration dirs FIRST so the workspace stays
           # intact for debugging even if a later command fails.
-          mv /tmp/hidden_lab03_user_migration prisma/migrations/20260916105528_lab03_user_migration
+          mv /tmp/hidden_lab_migrations/* prisma/migrations/
           DATABASE_URL="$MIGPROOF_DATABASE_URL" npx tsx prisma/migration-proof-fixtures.ts
           # Real-path MIG-02b proof: with the colliding Alice pair present,
           # `migrate deploy` MUST abort (division by zero) with no prior writes.
