@@ -38,17 +38,17 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
-| API-01 | API | AC-001 | Staff creates a valid action; create on RESOLVED/CLOSED/CANCELLED Ticket | `201` under correct Ticket; performer is auth user; `PLANNED`, version 1, current cycle, `CREATED` event; non-actionable parent → `409` | Planned |
-| API-02 | API | BR-005–BR-007, BR-025, AC-002 | invalid bodies: bad lengths, note-without-flag, flag-without-note, pre-Ticket/future/malformed date, bad assignee, forged performer/status/version fields, missing `clientRequestId` | `400` (`ACTION_DATE_OUT_OF_RANGE` for dates; missing key) or `409` per contract; no partial write | Planned |
+  | API-01 | API | AC-001 | Staff creates a valid action; create on RESOLVED/CLOSED/CANCELLED Ticket | `201` under correct Ticket; recorder is auth user; `PLANNED`, version 1, current cycle, `CREATED` event; non-actionable parent → `409` | Planned |
+  | API-02 | API | BR-005–BR-007, BR-025, AC-002 | invalid bodies: bad lengths, note-without-flag, flag-without-note, pre-Ticket/future/malformed date, bad assignee, forged recorder/status/version fields, missing `clientRequestId` | `400` (`ACTION_DATE_OUT_OF_RANGE` for dates; missing key) or `409` per contract; no partial write | Planned |
 | API-03 | API | AC-003 | edit `PLANNED`/`IN_PROGRESS` vs terminal action; actions on terminal Ticket; stale `expectedVersion`; repeated edit | edits succeed with exact version increments; terminal → `409`; stale → `409 ACTION_STATE_CHANGED` | Planned |
 | API-04 | API | AC-004 | `PLANNED → IN_PROGRESS` via update; skip-to-complete; backward move | start succeeds + event; skips/backwards → `409 INVALID_ACTION_TRANSITION` | Planned |
 | API-04b | API | AC-004 | unknown enum state value (no-such-state) | `400` strict contract, never `409` | Planned |
 | API-05 | API | AC-005 | complete without result; complete with result; follow-up set at completion; empty complete body; cancel from both open states; mutate after terminal | result-less complete rejected; empty body `400`; follow-up-at-complete validated; terminal afterwards; later edits `409` | Planned |
-| API-06 | API | AC-008 | inactive/Requester assignee at assign and complete; unassigned complete by eligible performer | `409 ACTION_ASSIGNEE_NOT_ELIGIBLE` where ineligible; performer path succeeds | Planned |
+  | API-06 | API | AC-008 | inactive/Requester assignee at assign and complete; unassigned complete by eligible recorder-accountable staff | `409 ACTION_ASSIGNEE_NOT_ELIGIBLE` where ineligible; recorder path succeeds | Planned |
 | API-07 | API / concurrency | BR-024, AC-008, AC-017 | assign/complete racing Admin deactivate/demote as real overlapping DB operations | loser safe `409`; ineligible final state never commits | Planned |
 | API-07b | API / concurrency | BR-024, AC-008 | deactivate user with only COMPLETED/CANCELLED actions or actions on CLOSED tickets vs open-assigned on non-terminal Ticket | former passes (never blocks); latter → `409 USER_HAS_ACTIVE_ACTIONS` | Planned |
 | API-08 | API | AC-009 | Requester create/edit/transition/complete/cancel/history attempts; cross-owner list/history | `403` or safe `404`; owned list and history complete | Planned |
-| API-09 | API | BR-025, AC-018 | double-submit same key + identical intent (expect `200` + `Idempotent-Replayed`, zero new rows/events); same key + different intent; concurrent same-key inserts (unique-violation path); same key on another Ticket; missing key; distinct concurrent creates | identical → `200` replay; different intent → `409 IDEMPOTENCY_CONFLICT` + original byte-identical; concurrent same-key → exactly one logical Action; per-Ticket scope; missing → `400`; distinct both persist | Planned |
+  | API-09 | API | BR-025, AC-018 | double-submit same key + identical intent incl. asserted date (expect `200` + `Idempotent-Replayed`, zero new rows/events); omitted-date retry replays the original (`200` + `Idempotent-Replayed`, never duplicates); omitted date with different other fields → `409`; same key + different intent; concurrent same-key inserts (unique-violation path); same key on another Ticket; missing key; distinct concurrent creates | identical → `200` replay; different intent → `409 IDEMPOTENCY_CONFLICT` + original byte-identical; concurrent same-key → exactly one logical Action; per-Ticket scope; missing → `400`; distinct both persist | Planned |
 
 ### History — same file, event rows
 
@@ -79,7 +79,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
 | API-21 | API | AC-014 | requester metrics and recents incl. zero-ticket Requester; malformed auth | owned-only data; zeros with `[]`, never `404` or leakage | Planned |
-| API-22 | API | AC-015 | staff attribution metrics vs direct DB queries; `performedByMe` 30×24h window edges (inclusive lower bound, single capture, skew exclusion) | each metric matches its own query; boundary completions classified correctly | Planned |
+| API-22 | API | AC-015 | staff attribution metrics vs direct DB queries; `recordedByMe` 30×24h window edges (inclusive lower bound, single capture, skew exclusion) | each metric matches its own query; boundary completions classified correctly | Planned |
 | API-22b | API | AC-015 | `COMPLETED` event with `occurredAt` 1s after the now-capture (clock skew) MUST be excluded | upper bound enforced via single capture | Planned |
 | API-23 | API | AC-015 | urgent vs recent separation with tie-breakers; `assignedToMe` ticket-count vs `?assignee=` destination; urgent CSV filter equivalence | order deterministic; metric equals destination result count | Planned |
 | API-23b | API | AC-015 | `assignedToMe` when the assignee is deactivated mid-count: metric MUST NOT reference actions whose deactivate failed to commit | count always equals the destination query | Planned |
@@ -90,8 +90,8 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
 | MIG-01 | Migration | BR-026, AC-019 | additive migration on Lab 3 snapshot incl. new tables, FKs, indexes, defaults, version default | Lab 1–3 rows intact; constraints hold | Planned |
-| MIG-02 | Migration / seed | BR-027–BR-028, AC-019 | clean seed, rerun idempotency, 0/1/N distribution, lifecycle/cycle variety (owner ≠ assignee ≠ performer fixtures), zero-metric fixtures | no duplicates; mutations preserved; coverage complete | Planned |
-| MIG-03 | Migration | BR-029, AC-019 | cycle column default and deterministic backfill on Lab 3 snapshot | every existing Ticket has `resolutionCycle = 1`; NOT NULL holds; new Tickets start at 1 | Planned |
+  | MIG-02 | Migration / seed | BR-027–BR-028, AC-019 | clean seed, rerun idempotency, 0/1/N distribution, lifecycle/cycle variety (owner ≠ assignee ≠ recorder fixtures), zero-metric fixtures | no duplicates; mutations preserved; coverage complete | Planned |
+| MIG-03 | Migration | BR-029, AC-019 | cycle column default and deterministic backfill on Lab 3 snapshot | every pre-existing Ticket backfilled to `resolutionCycle = 1`; `NOT NULL` holds; new Tickets start at 1 (SEED-0008 is the deliberate second-cycle seed fixture) | Planned |
 | MIG-04 | Migration / recovery | Handout §5.2, BR-026, AC-019 | snapshot → migrate → restore via documented procedure → re-migrate on Lab 3 snapshot | Lab 1–3 data intact every time; `resolutionCycle = 1`; no destructive op outside test DB | `server/tests/lab-04/migration-regression.test.ts` | Planned |
 | REG-01 | Regression | FR-019, AC-020 | Lab 1–3 server, client, and E2E suites incl. contract-first status-test updates | green on the exact tree | existing suites | Planned |
 
@@ -109,7 +109,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
 | UI-01 | UI | AC-014 | RequesterDashboard: cards, lists, loading, empty, failure, drill-down, keyboard | matches API; all states reachable | `RequesterDashboard.test.tsx` | Planned |
-| UI-02 | UI | AC-015, AC-016 | StaffDashboard: attribution cards, urgent vs recent, Admin counts, zero, failure, drill-down (assignee/urgent/role); `performedByMe` card non-clickable; card absent for Staff | counts exact; navigation correct; non-clickable asserted | `StaffDashboard.test.tsx` | Planned |
+| UI-02 | UI | AC-015, AC-016 | StaffDashboard: attribution cards, urgent vs recent, Admin counts, zero, failure, drill-down (assignee/urgent/role); `recordedByMe` card non-clickable; card absent for Staff | counts exact; navigation correct; non-clickable asserted | `StaffDashboard.test.tsx` | Planned |
 | UI-03 | UI | AC-001–AC-006, AC-008 | ActionsTaken: list, create (auto-tick), edit, start, complete, cancel, conflict and date-range feedback; history view; Requester read-only | Staff flows succeed; history read-only rendered; Requester has no controls | `ActionsTaken.test.tsx` | Planned |
 | UI-04 | UI | AC-010, AC-011, AC-013 | TicketWorkflow: gate-blocked explanation (open vs missing-completion), summary refresh, reopened-cycle presentation | blocker copy with links; success refreshes; fresh cycle shown | `TicketWorkflow.test.tsx` | Planned |
 | UI-05 | UI | drill-down contract | lists initialize filters/sort from query incl. `?assignee=`, CSV `?itPriority=`, role init; unknown values ignored; metric equals destination count | filters match query; safe defaults otherwise | `DrillDown.test.tsx` | Planned |

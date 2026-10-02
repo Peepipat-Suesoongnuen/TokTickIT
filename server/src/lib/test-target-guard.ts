@@ -88,3 +88,61 @@ export function assertTestTarget(env: {
   }
   return target;
 }
+
+// Lab 4 (Issue #77, D-08) — exact scratch-target identity gate for
+// destructive drills (e.g. MIG-04 recovery). The shared assertTestTarget
+// above is intentionally symmetric: it accepts ANY test-like database,
+// which cannot distinguish a dedicated scratch database from the shared
+// test database. This function adds the machine-checkable identity the
+// drill requires, without weakening the shared guard:
+//   1. target parses and is test-like (delegates to assertTestTarget);
+//   2. database name EQUALS the expected scratch name (config-sourced by the
+//      caller — never hardcoded here, so CI can parameterize it);
+//   3. target is NOT the dev database and NOT the shared test database
+//      (exact inequality on host+port+database+schema);
+//   4. host and port EQUAL the expected values (no remote test-like
+//      database qualifies by name alone).
+// Any mismatch throws before any destructive SQL may run.
+export function assertScratchTarget(env: {
+  scratchUrl: string | undefined;
+  expected: { database: string; host: string; port: number };
+  devUrl?: string | undefined;
+  sharedTestUrl?: string | undefined;
+}): DatabaseTarget {
+  const raw = typeof env.scratchUrl === "string" ? env.scratchUrl.trim() : "";
+  if (raw.length === 0) {
+    throw new Error("Scratch database URL is not set. Refusing to run destructive drill.");
+  }
+  const target = parseDatabaseTarget(raw);
+  if (!target) {
+    throw new Error("Scratch database URL is not a valid PostgreSQL connection URL. Refusing to run.");
+  }
+  if (!isTestLikeTarget(target)) {
+    throw new Error(
+      `Scratch database "${target.database}" does not look like a test database. Refusing to run.`
+    );
+  }
+  if (target.database !== env.expected.database) {
+    throw new Error(
+      `Scratch database "${target.database}" is not the expected scratch database "${env.expected.database}". Refusing to run.`
+    );
+  }
+  if (target.host !== env.expected.host.toLowerCase() || target.port !== env.expected.port) {
+    throw new Error(
+      "Scratch database host/port does not match the expected target. Refusing to run."
+    );
+  }
+  if (env.devUrl !== undefined) {
+    const dev = parseDatabaseTarget(env.devUrl);
+    if (dev && isSameTarget(target, dev)) {
+      throw new Error("Scratch target is identical to the development database. Refusing to run.");
+    }
+  }
+  if (env.sharedTestUrl !== undefined) {
+    const shared = parseDatabaseTarget(env.sharedTestUrl);
+    if (shared && isSameTarget(target, shared)) {
+      throw new Error("Scratch target is identical to the shared test database. Refusing to run.");
+    }
+  }
+  return target;
+}
