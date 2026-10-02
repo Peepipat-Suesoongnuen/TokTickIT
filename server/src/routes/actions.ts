@@ -80,7 +80,7 @@ interface ActionRow {
   ticketId: number;
   description: string;
   result: string | null;
-  performedById: number;
+  recordedById: number;
   assignedToId: number | null;
   actionDate: Date;
   followUpRequired: boolean;
@@ -91,7 +91,7 @@ interface ActionRow {
   version: number;
   createdAt: Date;
   updatedAt: Date;
-  performedBy: { id: number; name: string };
+  recordedBy: { id: number; name: string };
   assignedTo: { id: number; name: string } | null;
 }
 
@@ -101,7 +101,7 @@ function toActionShape(a: ActionRow) {
     ticketId: a.ticketId,
     description: a.description,
     result: a.result,
-    performedBy: a.performedBy,
+    recordedBy: a.recordedBy,
     assignedTo: a.assignedTo,
     actionDate: a.actionDate.toISOString(),
     followUpRequired: a.followUpRequired,
@@ -261,7 +261,7 @@ actionsRouter.get("/tickets/:id/actions", ...REQUESTER_READ_GUARD, async (req: R
       where: { ticketId },
       orderBy: [{ actionDate: "asc" }, { id: "asc" }],
       include: {
-        performedBy: { select: { id: true, name: true } },
+        recordedBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
       },
     })) as unknown as ActionRow[];
@@ -395,12 +395,17 @@ actionsRouter.post(
       const prisma = getPrisma();
       const now = new Date();
       // Intent comparison uses the single normalizeCreateIntent path for both
-      // sides (BR-025): every field including actionDate compares exactly.
-      // An auto-now retry carries a fresh instant and therefore diverges
-      // from the stored row → 409 with no duplicate ever created.
+      // sides (BR-025): every supplied field including actionDate compares
+      // exactly. An OMITTED actionDate is the canonical "server-assigned
+      // now" intent (AUTO_NOW sentinel): it matches the stored row's instant
+      // whatever it is, so a lost-response retry with the same key replays
+      // the original action (200 + Idempotent-Replayed) instead of
+      // conflicting on a freshly generated timestamp. A retry that SUPPLIES
+      // a date still compares exact instants → 409 on divergence.
       // Defined outside the transaction so the P2002 fallback (which must
       // run outside the poisoned transaction) can reuse it.
       const actionDateRaw = body.actionDate === undefined ? now : new Date(body.actionDate as string);
+      const dateOmitted = body.actionDate === undefined;
       const intentFields = {
         description: body.description,
         assignedToId: null as number | null,
@@ -428,7 +433,7 @@ actionsRouter.post(
           result: row.result,
         });
       const sameIntent = (assignedId: number | null, row: Parameters<typeof rowIntentOf>[0]) =>
-        normalizeCreateIntent({ ...intentFields, assignedToId: assignedId, actionDate: actionDateRaw }) === rowIntentOf(row);
+        normalizeCreateIntent({ ...intentFields, assignedToId: assignedId, actionDate: dateOmitted ? row.actionDate : actionDateRaw }) === rowIntentOf(row);
       const created: MutationOutcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
         // Lock order (spec §7.3): User rows before Ticket rows. The assignee
         // row (when present) is locked FIRST so a concurrent Admin
@@ -466,7 +471,7 @@ actionsRouter.post(
         const existing = await tx.actionTaken.findUnique({
           where: { ticketId_clientRequestId: { ticketId, clientRequestId: body.clientRequestId as string } },
           include: {
-            performedBy: { select: { id: true, name: true } },
+            recordedBy: { select: { id: true, name: true } },
             assignedTo: { select: { id: true, name: true } },
           },
         });
@@ -483,7 +488,7 @@ actionsRouter.post(
               ticketId,
               description: trimValue(body.description as string),
               result: body.result == null ? null : trimValue(body.result as string),
-              performedById: auth.id,
+              recordedById: auth.id,
               assignedToId,
               actionDate: actionDateRaw,
               followUpRequired: body.followUpRequired === true,
@@ -495,7 +500,7 @@ actionsRouter.post(
               clientRequestId: body.clientRequestId as string,
             },
             include: {
-              performedBy: { select: { id: true, name: true } },
+              recordedBy: { select: { id: true, name: true } },
               assignedTo: { select: { id: true, name: true } },
             },
           });
@@ -523,7 +528,7 @@ actionsRouter.post(
           const winner = await prisma.actionTaken.findUnique({
             where: { ticketId_clientRequestId: { ticketId: race.ticketId, clientRequestId: race.clientRequestId } },
             include: {
-              performedBy: { select: { id: true, name: true } },
+              recordedBy: { select: { id: true, name: true } },
               assignedTo: { select: { id: true, name: true } },
             },
           });
@@ -689,7 +694,7 @@ actionsRouter.put(
           const current = await tx.actionTaken.findUnique({
             where: { id: actionId },
             include: {
-              performedBy: { select: { id: true, name: true } },
+              recordedBy: { select: { id: true, name: true } },
               assignedTo: { select: { id: true, name: true } },
             },
           });
@@ -736,7 +741,7 @@ actionsRouter.put(
         const fresh = await tx.actionTaken.findUnique({
           where: { id: actionId },
           include: {
-            performedBy: { select: { id: true, name: true } },
+            recordedBy: { select: { id: true, name: true } },
             assignedTo: { select: { id: true, name: true } },
           },
         });
@@ -785,7 +790,7 @@ async function handleFinish(req: Request, res: Response, kind: "complete" | "can
         return { kind: "error", status: 404, code: "ACTION_NOT_FOUND", message: "Action not found." };
       }
       // Lock order (spec §7.3): accountable User row before Ticket row.
-      const accountableId = action.assignedToId ?? action.performedById;
+      const accountableId = action.assignedToId ?? action.recordedById;
       const accountable = await lockUserRowForUpdate(tx as never, accountableId);
       const ticket = await lockTicketRow(tx as never, action.ticketId);
       if (!ticket) {
@@ -866,7 +871,7 @@ async function handleFinish(req: Request, res: Response, kind: "complete" | "can
       const fresh = await tx.actionTaken.findUnique({
         where: { id: actionId },
         include: {
-          performedBy: { select: { id: true, name: true } },
+          recordedBy: { select: { id: true, name: true } },
           assignedTo: { select: { id: true, name: true } },
         },
       });

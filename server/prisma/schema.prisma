@@ -237,7 +237,7 @@ model ActionTaken {
   ticketId         Int
   description      String       @db.VarChar(1000)
   result           String?      @db.VarChar(2000)
-  performedById    Int
+  recordedById     Int
   assignedToId     Int?
   actionDate       DateTime
   followUpRequired Boolean      @default(false)
@@ -252,7 +252,7 @@ model ActionTaken {
   updatedAt DateTime @updatedAt
 
   ticket      Ticket             @relation(fields: [ticketId], references: [id], onDelete: Restrict)
-  performedBy User               @relation("ActionRecorder", fields: [performedById], references: [id])
+  recordedBy User               @relation("ActionRecorder", fields: [recordedById], references: [id])
   assignedTo  User?              @relation("ActionAssignee", fields: [assignedToId], references: [id])
   events      ActionTakenEvent[]
 

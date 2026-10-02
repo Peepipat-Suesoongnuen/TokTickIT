@@ -55,7 +55,7 @@ describe("lab-04 migration regression (MIG-01, MIG-03)", () => {
     expect(categories).toBeGreaterThan(0);
   });
 
-  it("MIG-03 deterministic backfill: every existing Ticket has resolutionCycle = 1", async () => {
+  it("MIG-03 resolutionCycle default: omitted cycle stores 1, explicit values preserved, existing rows carry 1", async () => {
     // Self-sufficient: CI uses a fresh database with no seeded rows, so this
     // test proves the column contract on its own fixture instead of assuming
     // seed data. (Backfill of pre-existing rows to 1 is enforced by the
@@ -132,7 +132,7 @@ describe("lab-04 migration regression (MIG-01, MIG-03)", () => {
     const orphans: { count: string }[] = await prisma().$queryRaw`
       SELECT COUNT(*) AS count FROM "ActionTaken" a
       LEFT JOIN "Ticket" t ON t.id = a."ticketId"
-      LEFT JOIN "User" u ON u.id = a."performedById"
+      LEFT JOIN "User" u ON u.id = a."recordedById"
       WHERE t.id IS NULL OR u.id IS NULL`;
     expect(Number(orphans[0].count)).toBe(0);
     // Rerun idempotency: a second seed creates zero new actions and never
@@ -320,7 +320,7 @@ describe("lab-04 migration regression (MIG-01, MIG-03)", () => {
       const uid = probeUser.out.trim().split("\n")[0];
       const probeKey = "11111111-1111-4111-8111-111111111111";
       const ins = await psql(scratchUrl,
-        `INSERT INTO "ActionTaken" ("ticketId","description","performedById","actionDate","status","cycle","version","clientRequestId","createdAt","updatedAt") VALUES (${tid},'probe',${uid},NOW(),'PLANNED',1,1,'${probeKey}',NOW(),NOW()) RETURNING "id";`);
+        `INSERT INTO "ActionTaken" ("ticketId","description","recordedById","actionDate","status","cycle","version","clientRequestId","createdAt","updatedAt") VALUES (${tid},'probe',${uid},NOW(),'PLANNED',1,1,'${probeKey}',NOW(),NOW()) RETURNING "id";`);
       expect(ins.code).toBe(0);
       const newId = Number(ins.out.trim().split("\n")[0]);
       expect(newId).toBeGreaterThan(Number(maxId.out.trim().split("\n")[0]));

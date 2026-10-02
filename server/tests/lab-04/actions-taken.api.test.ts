@@ -117,7 +117,7 @@ describe("Actions Taken APIs (Issue #77)", () => {
       .expect(201);
     expect(res.body.status).toBe("PLANNED");
     expect(res.body.version).toBe(1);
-    expect(res.body.performedBy.id).toBe(staffA);
+    expect(res.body.recordedBy.id).toBe(staffA);
     expect(res.body.assignedTo.id).toBe(staffB);
     expect(res.body.cycle).toBe(1);
     const events = await prisma.actionTakenEvent.findMany({ where: { actionTakenId: res.body.id } });
@@ -145,7 +145,7 @@ describe("Actions Taken APIs (Issue #77)", () => {
       { ...actionPayload(), actionDate: "1999-01-01T00:00:00.000Z" },
       { ...actionPayload(), actionDate: "2999-01-01T00:00:00.000Z" },
       { ...actionPayload(), assignedToId: 999999999 },
-      { ...actionPayload(), performedById: staffB },
+      { ...actionPayload(), recordedById: staffB },
       { ...actionPayload(), status: "COMPLETED" },
       { ...actionPayload(), clientRequestId: "not-a-uuid" },
       { ...actionPayload(), clientRequestId: undefined },
@@ -270,6 +270,14 @@ describe("Actions Taken APIs (Issue #77)", () => {
       .expect(200);
     expect(done.body.status).toBe("COMPLETED");
     expect(done.body.version).toBe(3);
+    // Recorder immutability (fix-review PR #83): a different-user completer
+    // never mutates recordedById; the completer is the COMPLETED event actor.
+    const stored = await prisma.actionTaken.findUniqueOrThrow({ where: { id } });
+    expect(stored.recordedById).toBe(staffA);
+    const completedEvent = await prisma.actionTakenEvent.findFirstOrThrow({
+      where: { actionTakenId: id, eventType: "COMPLETED" },
+    });
+    expect(completedEvent.actorId).toBe(staffB);
     await request(app)
       .put(`/api/staff/actions/${id}`)
       .set("Origin", TEST_ORIGIN)
@@ -293,7 +301,7 @@ describe("Actions Taken APIs (Issue #77)", () => {
     expect(cancelled.body.status).toBe("CANCELLED");
   });
 
-  it("API-06 inactive assignee rejected; performer-accountable path succeeds", async () => {
+  it("API-06 inactive assignee rejected; recorder-accountable path succeeds", async () => {
     const inactive = await makeUser(`a77-inactive-${RUN}@test.local`, "IT_STAFF", false);
     const ticketId = await makeTicket(reqX);
     const ineligible = await request(app)
@@ -320,7 +328,7 @@ describe("Actions Taken APIs (Issue #77)", () => {
       .post(`/api/staff/actions/${res.body.id}/complete`)
       .set("Origin", TEST_ORIGIN)
       .set("Cookie", cookieB)
-      .send({ expectedVersion: 2, result: "Done by performer-accountable path." })
+      .send({ expectedVersion: 2, result: "Done by recorder-accountable path." })
       .expect(200);
     expect(done.body.status).toBe("COMPLETED");
   });
@@ -357,16 +365,28 @@ describe("Actions Taken history, idempotency, concurrency, security (Issue #77, 
       .set("Cookie", cookieX)
       .send(actionPayload({ description: "Different intent entirely", clientRequestId: key, actionDate: stamp }))
       .expect(409);
-    // Auto-now retry (no asserted date) diverges from the stored instant:
-    // safe 409, never a duplicate.
-    const autoCount = await prisma.actionTaken.count({ where: { ticketId, clientRequestId: key } });
-    await request(app)
+    // Omitted-date retry replays the original (AUTO_NOW sentinel): same key,
+    // same other fields, no asserted date → 200 + Idempotent-Replayed,
+    // never a duplicate, never a new event.
+    const omittedReplay = await request(app)
       .post(`/api/staff/tickets/${ticketId}/actions`)
       .set("Origin", TEST_ORIGIN)
       .set("Cookie", cookieX)
       .send(actionPayload({ description: "Idempotent work item", clientRequestId: key }))
+      .expect(200);
+    expect(omittedReplay.headers["idempotent-replayed"]).toBe("true");
+    expect(omittedReplay.body.id).toBe(first.body.id);
+    expect(await prisma.actionTaken.count({ where: { ticketId, clientRequestId: key } })).toBe(1);
+    expect(await prisma.actionTakenEvent.count({ where: { actionTakenId: first.body.id } })).toBe(1);
+    // The date wildcard must not swallow real divergence: omitted date with
+    // different other fields still conflicts.
+    await request(app)
+      .post(`/api/staff/tickets/${ticketId}/actions`)
+      .set("Origin", TEST_ORIGIN)
+      .set("Cookie", cookieX)
+      .send(actionPayload({ description: "Different intent, no date", clientRequestId: key }))
       .expect(409);
-    expect(await prisma.actionTaken.count({ where: { ticketId, clientRequestId: key } })).toBe(autoCount);
+    expect(await prisma.actionTaken.count({ where: { ticketId, clientRequestId: key } })).toBe(1);
     // Same key on another ticket is a different scope.
     const other = await makeTicket(reqX);
     await request(app)
@@ -552,7 +572,7 @@ describe("Actions Taken history, idempotency, concurrency, security (Issue #77, 
         data: {
           ticketId: ft,
           description: `Frozen ${status} probe`,
-          performedById: staffX,
+          recordedById: staffX,
           assignedToId: frozen.id,
           actionDate: new Date(),
           status: "PLANNED",
