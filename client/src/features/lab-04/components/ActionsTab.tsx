@@ -172,7 +172,7 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
   return (
     <div>
       <h3 className="h6">Actions Taken</h3>
-      {terminal && <p className="form-text">This ticket is {ticketStatus} — actions are read-only.</p>}
+      {terminal && <p className="form-text">This ticket is terminal — actions are read-only. Further work requires Reopen first.</p>}
       {notice && (
         <div className="alert alert-success" role="status">
           {notice}
