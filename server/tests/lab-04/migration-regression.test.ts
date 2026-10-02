@@ -142,8 +142,8 @@ describe("lab-04 migration regression (MIG-01, MIG-03)", () => {
   });
 
   it("MIG-04 recovery: Lab 4 migration is forward-only additive with a documented restore path", async () => {
-    // The migration file itself MUST NOT drop Lab 1–3 tables or columns:
-    // recovery is restore-from-backup plus re-apply, never a DOWN migration.
+    // Phase 0 — file audit (precondition, not the proof): the migration MUST
+    // NOT drop Lab 1–3 tables or columns.
     const sqlPath = join(
       dirname(fileURLToPath(import.meta.url)),
       "../../prisma/migrations/20261001000000_lab04_actions_gate/migration.sql",
@@ -165,5 +165,174 @@ describe("lab-04 migration regression (MIG-01, MIG-03)", () => {
       SELECT COUNT(*) AS count FROM "Ticket"
       WHERE "resolutionCycle" IS NULL OR ("resolutionCycle" <> 1 AND "ticketNumber" <> 'SEED-0008')`;
     expect(Number(bad[0].count)).toBe(0);
-  });
+  }, 300000);
+
+  it("MIG-04 recovery drill: backup → destroy → observed failure → restore → verify", async () => {
+    // Real restore drill (D-07/D-08, Option A) on a DEDICATED scratch
+    // database — never dev, never the shared test database.
+    const { execFile, execFileSync } = await import("node:child_process");
+    const { createHash } = await import("node:crypto");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+    const { readFileSync: readTmp, unlinkSync } = await import("node:fs");
+    // Tool preflight: resolve real PostgreSQL client binaries (NOT npm
+    // packages — `npx psql` would fetch an unrelated package). Missing
+    // binary aborts before any destructive SQL.
+    const toolPath = (name: string): string => {
+      try {
+        return execFileSync(process.platform === "win32" ? "where" : "which", [name], { encoding: "utf8" })
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0 && !s.includes("node_modules"))[0] ?? "";
+      } catch {
+        return "";
+      }
+    };
+    const PSQL = toolPath("psql");
+    const PG_DUMP = toolPath("pg_dump");
+    const PG_RESTORE = toolPath("pg_restore");
+    expect(PSQL.length).toBeGreaterThan(0);
+    expect(PG_DUMP.length).toBeGreaterThan(0);
+    expect(PG_RESTORE.length).toBeGreaterThan(0);
+    const run = (cmd: string, args: string[], env: NodeJS.ProcessEnv): Promise<{ code: number; out: string }> =>
+      new Promise((resolve) => {
+        execFile(cmd, args, { env, timeout: 120000 }, (err, stdout, stderr) => {
+          resolve({ code: err ? (err as { code?: number }).code ?? 1 : 0, out: `${stdout ?? ""}${stderr ?? ""}` });
+        });
+      });
+    // npx is a .cmd shim on Windows and cannot run without a shell. Shell
+    // usage is confined to fixed argv[0] ("npx"/"prisma") with a validated
+    // scratch name — never interpolating untrusted input into the command.
+    const { execSync } = await import("node:child_process");
+    const testUrl = process.env.TEST_DATABASE_URL ?? "";
+    const scratchDb = process.env.MIG04_SCRATCH_DATABASE ?? "toktickit_mig04_test";
+    if (!/^[A-Za-z0-9_]+$/.test(scratchDb)) throw new Error("refusing: scratch database name failed validation");
+    const runShell = (args: string[], env: NodeJS.ProcessEnv): { code: number; out: string } => {
+      try {
+        const out = execSync(`npx ${args.map((a) => `"${a.replace(/"/g, "")}"`).join(" ")}`, {
+          env,
+          timeout: 180000,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        } as never) as string;
+        return { code: 0, out };
+      } catch (e) {
+        const err = e as { status?: number; stdout?: unknown; stderr?: unknown };
+        return { code: err.status ?? 1, out: `${err.stdout ?? ""}${err.stderr ?? ""}` };
+      }
+    };
+    const withDb = (url: string, db: string) => url.replace(/\/[^/?]*(\?|$)/, `/${db}$1`);
+    // Raw libpq tools (psql/pg_dump/pg_restore) reject Prisma's
+    // `?schema=` query parameter — strip it for tool invocations only.
+    const bareUrl = (url: string) => url.replace(/\?.*$/, "");
+    const scratchUrl = withDb(testUrl, scratchDb);
+    // Gate 0 — preflight: exact scratch identity (D-08). Any miss aborts
+    // before ANY destructive SQL.
+    const { assertScratchTarget, parseDatabaseTarget } = await import("../../src/lib/test-target-guard.js");
+    const testTarget = parseDatabaseTarget(testUrl)!;
+    const target = assertScratchTarget({
+      scratchUrl,
+      expected: { database: scratchDb, host: testTarget.host, port: testTarget.port },
+      devUrl: process.env.DATABASE_URL,
+      sharedTestUrl: testUrl,
+    });
+    expect(target.database).toBe(scratchDb);
+    const adminUrl = scratchUrl.replace(/\/[^/?]*(\?|$)/, "/postgres$1");
+    const psql = (dbUrl: string, sql: string) =>
+      run(PSQL, [bareUrl(dbUrl), "-v", "ON_ERROR_STOP=1", "-tA", "-c", sql], process.env);
+    let cleanupError: unknown = null;
+    const snapshotOf = async (dbUrl: string) => {
+      const snap: Record<string, string> = {};
+      // Raw libpq tools reject Prisma's `?schema=` parameter — always strip.
+      const plain = bareUrl(dbUrl);
+      for (const table of ["ActionTaken", "ActionTakenEvent", "Ticket"]) {
+        const r = await run(PSQL, [plain, "-v", "ON_ERROR_STOP=1", "-tA", "-c",
+          `SELECT coalesce(string_agg(row_to_json(t)::text, chr(10) ORDER BY t."id"), '') FROM (SELECT * FROM "${table}" ORDER BY "id") t`], process.env);
+        expect(r.code).toBe(0);
+        snap[table] = r.out;
+      }
+      const seq = await run(PSQL, [plain, "-v", "ON_ERROR_STOP=1", "-tA", "-c",
+        `SELECT string_agg(schemaname||'.'||sequencename||'='||last_value, ',' ORDER BY sequencename) FROM pg_sequences WHERE sequencename LIKE 'ActionTaken%'`], process.env);
+      expect(seq.code).toBe(0);
+      snap.__sequences = seq.out.trim();
+      return snap;
+    };
+    try {
+      // Gate 1 — known-good state on scratch: fresh DB + full migrate + seed.
+      await run(PSQL, [bareUrl(adminUrl), "-c", `DROP DATABASE IF EXISTS "${scratchDb}"`], process.env);
+      {
+        const r = await run(PSQL, [bareUrl(adminUrl), "-c", `CREATE DATABASE "${scratchDb}"`], process.env);
+        expect(r.code).toBe(0);
+      }
+      {
+        const r = runShell(["prisma", "migrate", "deploy"], { ...process.env, DATABASE_URL: scratchUrl });
+        expect(r.code).toBe(0);
+      }
+      {
+        // getPrisma() honours TEST_DATABASE_URL when NODE_ENV=test, which
+        // would seed the shared test DB instead of scratch. Drop NODE_ENV so
+        // the seed honours DATABASE_URL (scratch) like `migrate deploy` does.
+        const seedEnv: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL: scratchUrl };
+        delete seedEnv.NODE_ENV;
+        const r = runShell(["prisma", "db", "seed"], seedEnv);
+        expect(r.code).toBe(0);
+      }
+      const before = await snapshotOf(scratchUrl);
+      // String-length bounds are non-vacuous: an empty table snapshots to at
+      // most a single newline, so these prove Gate 1 really seeded scratch.
+      expect(before["Ticket"].length).toBeGreaterThan(10);
+      expect(before["ActionTaken"].length).toBeGreaterThan(10);
+      // Gate 2 — backup: exit code + exists + non-empty + SHA recorded.
+      const backupPath = joinPath(tmpdir(), `mig04-${Date.now()}.dump`);
+      {
+        const r = await run(PG_DUMP, ["-Fc", "-f", backupPath, bareUrl(scratchUrl)], process.env);
+        expect(r.code).toBe(0);
+      }
+      const { statSync } = await import("node:fs");
+      expect(statSync(backupPath).size).toBeGreaterThan(0);
+      const shaOf = (p: string) => createHash("sha256").update(readTmp(p)).digest("hex");
+      const recordedSha = shaOf(backupPath);
+      // Gate 3 — controlled destruction on scratch ONLY.
+      for (const [_label, sql] of [["drop-events", `DROP TABLE "ActionTakenEvent";`], ["delete-actions", `DELETE FROM "ActionTaken";`]] as const) {
+        const r = await psql(scratchUrl, sql);
+        expect(r.code).toBe(0);
+      }
+      // Gate 4 — OBSERVE the failure (asserted, never assumed).
+      const broken = await psql(scratchUrl, `SELECT COUNT(*) FROM "ActionTakenEvent";`);
+      expect(broken.code).not.toBe(0);
+      // Gate 5 — SHA re-verification immediately pre-restore; mismatch aborts.
+      expect(shaOf(backupPath)).toBe(recordedSha);
+      {
+        const r = await run(PG_RESTORE, ["-c", "--if-exists", "-d", bareUrl(scratchUrl), backupPath], process.env);
+        expect(r.code).toBe(0);
+      }
+      // Gate 6 — full verification: byte-identical rows, sequences, ledger, live read.
+      const after = await snapshotOf(scratchUrl);
+      expect(after).toEqual(before);
+      const live = await psql(scratchUrl, `SELECT COUNT(*) FROM "ActionTaken";`);
+      expect(live.code).toBe(0);
+      // Next-id probe: restored sequences MUST NOT collide or reuse ids.
+      const maxId = await psql(scratchUrl, `SELECT COALESCE(MAX("id"),0) FROM "ActionTaken";`);
+      expect(maxId.code).toBe(0);
+      const probeTicket = await psql(scratchUrl, `SELECT "id" FROM "Ticket" ORDER BY "id" LIMIT 1;`);
+      const probeUser = await psql(scratchUrl, `SELECT "id" FROM "User" WHERE "role"='IT_STAFF' AND "isActive" ORDER BY "id" LIMIT 1;`);
+      const tid = probeTicket.out.trim().split("\n")[0];
+      const uid = probeUser.out.trim().split("\n")[0];
+      const probeKey = "11111111-1111-4111-8111-111111111111";
+      const ins = await psql(scratchUrl,
+        `INSERT INTO "ActionTaken" ("ticketId","description","performedById","actionDate","status","cycle","version","clientRequestId","createdAt","updatedAt") VALUES (${tid},'probe',${uid},NOW(),'PLANNED',1,1,'${probeKey}',NOW(),NOW()) RETURNING "id";`);
+      expect(ins.code).toBe(0);
+      const newId = Number(ins.out.trim().split("\n")[0]);
+      expect(newId).toBeGreaterThan(Number(maxId.out.trim().split("\n")[0]));
+      unlinkSync(backupPath);
+    } finally {
+      // Gate 7 — cleanup reported separately; never flips the drill verdict.
+      try {
+        await run(PSQL, [bareUrl(adminUrl), "-c", `DROP DATABASE IF EXISTS "${scratchDb}"`], process.env);
+      } catch (e) {
+        cleanupError = e;
+      }
+    }
+    expect(cleanupError).toBeNull();
+  }, 300000);
 });
