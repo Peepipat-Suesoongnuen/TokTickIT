@@ -335,6 +335,7 @@ export interface StaffTicketMutation {
   itPriority: string;
   ticketOwner: { id: number; name: string; role: string } | null;
   requesterResolutionIndicatedAt: string | null;
+  resolutionCycle?: number;
   updatedAt: string;
 }
 

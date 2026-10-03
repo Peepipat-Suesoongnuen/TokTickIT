@@ -3,7 +3,7 @@ import { createTicketAction, updateTicketAction, type ActionTaken, type Eligible
 
 function toInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function toISOString(input: string): string | null {
@@ -173,6 +173,7 @@ export function ActionForm({ ticketId, owners, initialAction, onSaved, onCancel 
           <input
             id="action-form-date"
             type="datetime-local"
+            step={1}
             className="form-control"
             value={actionDate}
             onChange={(e) => setActionDate(e.target.value)}

@@ -66,6 +66,7 @@ export default function StaffTicketDetail() {
   const [reopenOwnerDraft, setReopenOwnerDraft] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionOk, setActionOk] = useState("");
+  const [gateBlock, setGateBlock] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -177,6 +178,7 @@ export default function StaffTicketDetail() {
     setSaving(true);
     setActionError("");
     setActionOk("");
+    setGateBlock("");
     try {
       await setStaffTicketStatus(
         ticketId,
@@ -188,10 +190,23 @@ export default function StaffTicketDetail() {
       );
       await load();
       setActionOk("Status updated.");
+      setGateBlock("");
     } catch (err: unknown) {
-      const e = err as { body?: { error?: { code?: string } } };
+      const e = err as { body?: { error?: { code?: string; currentCycle?: number; openActionIds?: number[] } } };
       if (e.body?.error?.code === "VALIDATION_FAILED" && statusDraft === "REOPENED") {
         setActionError("A replacement owner is required because the historical owner is no longer eligible.");
+      } else if (e.body?.error?.code === "RESOLUTION_REQUIRES_COMPLETED_ACTION") {
+        const cycle = e.body.error.currentCycle;
+        setGateBlock(
+          `No completed work${typeof cycle === "number" ? ` in cycle ${cycle}` : ""} yet — record and complete an action first.`,
+        );
+        await load();
+      } else if (e.body?.error?.code === "RESOLUTION_BLOCKED_BY_OPEN_ACTIONS") {
+        const ids = Array.isArray(e.body.error.openActionIds) ? e.body.error.openActionIds : [];
+        setGateBlock(
+          `${ids.length > 0 ? `${ids.length} open action${ids.length === 1 ? "" : "s"}` : "Open actions"} in the current cycle must finish or cancel first.`,
+        );
+        await load();
       } else {
         setActionError(failureOf(err));
       }
@@ -405,6 +420,14 @@ export default function StaffTicketDetail() {
                 </button>
               </div>
             )}
+            {gateBlock && (
+              <div className="alert alert-warning" role="alert">
+                <span>{gateBlock} </span>
+                <button type="button" className="btn btn-outline-success btn-sm" onClick={() => setTab("actions")}>
+                  Go to Actions
+                </button>
+              </div>
+            )}
             {actionOk && (
               <div className="alert alert-success" role="status">{actionOk}</div>
             )}
@@ -505,7 +528,7 @@ export default function StaffTicketDetail() {
             </div>
 
             <div className="mt-4">
-              <ActionsTab ticketId={ticketId} ticketStatus={ticket.currentStatus} mode="staff" owners={owners} />
+              <ActionsTab ticketId={ticketId} ticketStatus={ticket.currentStatus} mode="staff" owners={owners} ticketCycle={ticket.resolutionCycle ?? null} />
             </div>
           </div>
         )}
