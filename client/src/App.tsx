@@ -12,6 +12,9 @@ import AdminUsers from "./pages/AdminUsers";
 import AdminUserCreate from "./pages/AdminUserCreate";
 import AdminUserEdit from "./pages/AdminUserEdit";
 import AdminUserPassword from "./pages/AdminUserPassword";
+import RequesterDashboard from "./pages/RequesterDashboard";
+import StaffDashboard from "./pages/StaffDashboard";
+import Forbidden from "./pages/Forbidden";
 
 function GatedApp() {
   const { user, loading } = useAuth();
@@ -44,6 +47,9 @@ function GatedApp() {
       <Routes>
         {isStaffWorkspace ? (
           <>
+            <Route path="/staff-dashboard" element={<StaffDashboard />} />
+            <Route path="/dashboard" element={<Forbidden />} />
+            <Route path="/forbidden" element={<Forbidden />} />
             <Route path="/staff/queue" element={<StaffQueue />} />
             <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} />
             {isAdmin && (
@@ -59,6 +65,9 @@ function GatedApp() {
           </>
         ) : (
           <>
+            <Route path="/dashboard" element={<RequesterDashboard />} />
+            <Route path="/staff-dashboard" element={<Forbidden />} />
+            <Route path="/forbidden" element={<Forbidden />} />
             <Route path="/my-tickets" element={<MyTickets />} />
             <Route path="/create" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<TicketDetail />} />

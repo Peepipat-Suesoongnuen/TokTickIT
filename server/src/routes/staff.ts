@@ -11,6 +11,7 @@ import {
   type AuthRequest,
 } from "../auth.js";
 import { isOwnerEligible, lockUserRowForUpdate } from "../lib/owner-integrity.js";
+import { openAssignedActionSome } from "../lib/dashboard-metrics.js";
 import { isTransitionAllowed, statusRequiresOwner } from "../lib/ticket-status.js";
 import { evaluateGate } from "../lib/resolution-gate.js";
 import { isInternalNoteValid, normalizeMessageContent } from "../lib/validation.js";
@@ -65,6 +66,8 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
       "itPriority",
       "currentStatus",
       "owner",
+      "assignee",
+      "state",
       "sort",
       "order",
       "page",
@@ -84,7 +87,7 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
       }
     }
 
-    const { search, categoryId, requestedPriority, itPriority, currentStatus, owner, sort, order, page, pageSize } =
+    const { search, categoryId, requestedPriority, itPriority, currentStatus, owner, assignee, state, sort, order, page, pageSize } =
       req.query as Record<string, string | undefined>;
 
     // search (case-insensitive partial Ticket Number, Summary, Requester
@@ -114,11 +117,39 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
     if (requestedPriority !== undefined && !isPriorityValid(requestedPriority)) {
       return invalid(res, { requestedPriority: "Invalid priority." });
     }
-    if (itPriority !== undefined && !isPriorityValid(itPriority)) {
-      return invalid(res, { itPriority: "Invalid priority." });
+    // itPriority: single level (legacy) or comma-separated levels (Issue #80
+    // drill-down). Every level is strictly validated; single-value behavior
+    // is unchanged.
+    let priorityLevels: string[] | undefined;
+    if (itPriority !== undefined) {
+      priorityLevels = itPriority
+        .split(",")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      if (priorityLevels.length === 0 || !priorityLevels.every((p) => isPriorityValid(p))) {
+        return invalid(res, { itPriority: "Invalid priority." });
+      }
     }
     if (currentStatus !== undefined && !TICKET_STATUSES.has(currentStatus)) {
       return invalid(res, { currentStatus: "Invalid current status." });
+    }
+
+    // Issue #80 (D-80-09) — drill-down state sets, mirroring MyTickets
+    // (owner decision A-queue-state): open maps to the five non-terminal
+    // statuses, resolved maps to RESOLVED/CLOSED. Invalid values fail
+    // closed; combining state with currentStatus is ambiguous and rejected.
+    // Bare links without state keep the legacy unscoped vocabulary.
+    const OPEN_SET = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"];
+    const RESOLVED_SET = ["RESOLVED", "CLOSED"];
+    let stateStatuses: string[] | undefined;
+    if (state !== undefined) {
+      if (state !== "open" && state !== "resolved") {
+        return invalid(res, { state: "Invalid state." });
+      }
+      if (currentStatus !== undefined) {
+        return invalid(res, { state: "state and currentStatus are mutually exclusive." });
+      }
+      stateStatuses = state === "open" ? OPEN_SET : RESOLVED_SET;
     }
 
     // owner: `unassigned`, `me`, or a positive User ID. Filtering may target
@@ -141,6 +172,31 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
           return invalid(res, { owner: "owner must reference an existing user." });
         }
         ownerFilter = { mode: "id", id: n };
+      }
+    }
+
+    // assignee: `me` or a positive User ID. Tickets holding >=1 open Action
+    // assigned to that user, via the shared predicate (dataset-identical
+    // with assignedToMe by construction). Nonexistent IDs are invalid.
+    let assigneeId: number | undefined;
+    if (assignee !== undefined) {
+      const me = (req as AuthRequest).user;
+      if (!me) {
+        sendError(res, 401, "UNAUTHENTICATED", "Authentication required.");
+        return;
+      }
+      if (assignee === "me") {
+        assigneeId = me.id;
+      } else {
+        const n = parsePositiveInt(assignee);
+        if (n === null) {
+          return invalid(res, { assignee: "assignee must be me or a positive user id." });
+        }
+        const target = await getPrisma().user.findUnique({ where: { id: n }, select: { id: true } });
+        if (!target) {
+          return invalid(res, { assignee: "assignee must reference an existing user." });
+        }
+        assigneeId = n;
       }
     }
 
@@ -169,8 +225,11 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
     const where: Record<string, unknown> = {};
     if (cid !== undefined) where.categoryId = cid;
     if (requestedPriority !== undefined) where.requestedPriority = requestedPriority;
-    if (itPriority !== undefined) where.itPriority = itPriority;
+    if (priorityLevels !== undefined) {
+      where.itPriority = priorityLevels.length === 1 ? priorityLevels[0] : { in: priorityLevels };
+    }
     if (currentStatus !== undefined) where.currentStatus = currentStatus;
+    if (stateStatuses !== undefined) where.currentStatus = { in: stateStatuses };
     if (ownerFilter !== undefined) {
       if (ownerFilter.mode === "unassigned") {
         where.ticketOwnerId = null;
@@ -184,6 +243,9 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
       } else {
         where.ticketOwnerId = ownerFilter.id;
       }
+    }
+    if (assigneeId !== undefined) {
+      (where as Record<string, unknown>).actions = { some: openAssignedActionSome(assigneeId) };
     }
     if (searchTrim !== undefined) {
       where.OR = [

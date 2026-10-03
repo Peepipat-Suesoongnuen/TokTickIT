@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { listTickets, fetchCategories, Category, TicketListItem, TicketListMeta } from "../api";
 
 export function formatBangkok(dateStr: string): string {
@@ -27,6 +27,19 @@ import Pagination from "../components/Pagination.js";
 
 export default function MyTickets() {
   const navigate = useNavigate();
+  // Issue #80 — drill-down query-init: requester dashboard links here with
+  // ?state=open|resolved and ?status=WAITING_FOR_REQUESTER. Unknown or
+  // invalid values are ignored (defaults), never 400 client-side (C-80-07).
+  const [searchParams] = useSearchParams();
+  const initialStateFilter = (() => {
+    const v = searchParams.get("state");
+    return v === "open" || v === "resolved" ? v : "";
+  })();
+  const initialStatusFilter = (() => {
+    const v = searchParams.get("currentStatus") ?? searchParams.get("status") ?? "";
+    const allowed = new Set(["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"]);
+    return allowed.has(v) ? v : "";
+  })();
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [categoryError, setCategoryError] = useState("");
@@ -34,7 +47,8 @@ export default function MyTickets() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [priority, setPriority] = useState("");
-  const [currentStatus, setCurrentStatus] = useState("");
+  const [currentStatus, setCurrentStatus] = useState(initialStatusFilter);
+  const [stateFilter, setStateFilter] = useState(initialStateFilter);
   const [sort, setSort] = useState("updatedAt");
   const [order, setOrder] = useState("desc");
   const [page, setPage] = useState(1);
@@ -48,12 +62,13 @@ export default function MyTickets() {
   const categoryRequestSequence = useRef(0);
 
   const isInitialLoading = loading && meta === null;
-  const isFiltered = debouncedSearch !== "" || categoryId !== "" || priority !== "" || currentStatus !== "";
+  const isFiltered = debouncedSearch !== "" || categoryId !== "" || priority !== "" || currentStatus !== "" || stateFilter !== "";
   const hasResettableState =
     search.trim() !== "" ||
     categoryId !== "" ||
     priority !== "" ||
     currentStatus !== "" ||
+    stateFilter !== "" ||
     sort !== "updatedAt" ||
     order !== "desc";
 
@@ -66,7 +81,7 @@ export default function MyTickets() {
   // reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, categoryId, priority, currentStatus, sort, order, pageSize]);
+  }, [debouncedSearch, categoryId, priority, currentStatus, stateFilter, sort, order, pageSize]);
 
   const loadCategories = async () => {
     const requestSequence = ++categoryRequestSequence.current;
@@ -119,7 +134,8 @@ export default function MyTickets() {
         search: debouncedSearch || undefined,
         categoryId: categoryId ? Number(categoryId) : undefined,
         requestedPriority: priority || undefined,
-        currentStatus: currentStatus || undefined,
+        currentStatus: stateFilter !== "" ? undefined : currentStatus || undefined,
+        state: stateFilter || undefined,
         sort,
         order,
         page,
@@ -146,7 +162,7 @@ export default function MyTickets() {
     return () => {
       ticketRequestSequence.current += 1;
     };
-  }, [debouncedSearch, categoryId, priority, currentStatus, sort, order, page, pageSize]);
+  }, [debouncedSearch, categoryId, priority, currentStatus, stateFilter, sort, order, page, pageSize]);
 
   const clearFilters = () => {
     setSearch("");
@@ -154,6 +170,7 @@ export default function MyTickets() {
     setCategoryId("");
     setPriority("");
     setCurrentStatus("");
+    setStateFilter("");
     setSort("updatedAt");
     setOrder("desc");
     setPage(1);
