@@ -23,6 +23,7 @@ import authRouter from "./routes/auth.js";
 import staffRouter, { TICKET_STATUSES } from "./routes/staff.js";
 import adminRouter from "./routes/admin.js";
 import { actionsRouter } from "./routes/actions.js";
+import { dashboardRouter } from "./routes/dashboards.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -108,6 +109,11 @@ app.use("/api/admin", adminRouter);
 // (Requester owned-only, Staff/Admin authorized visibility).
 app.use("/api", actionsRouter);
 
+// Issue #80 (Lab 4) — Role dashboards (LAP4-06/07). Mounted at
+// /api/dashboard; each route owns its role gating (Requester-only vs
+// Staff/Admin, password gate included).
+app.use("/api/dashboard", dashboardRouter);
+
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list (evolved in Lab 2)
 // GET /api/categories — session-only reference data (Issue #45, PR #58
@@ -178,7 +184,7 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChanged, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
-    const allowed = new Set(["search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"]);
+    const allowed = new Set(["search", "categoryId", "requestedPriority", "currentStatus", "state", "sort", "order", "page", "pageSize"]);
     for (const k of Object.keys(req.query)) {
       if (!allowed.has(k)) {
         return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { [k]: "Unknown parameter." });
@@ -186,7 +192,7 @@ app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChange
     }
 
     // Guard: duplicate/malformed query values arrive as string[] -> 400 (BR-20 strict contract)
-    const rawParams = ["search", "categoryId", "requestedPriority", "currentStatus", "sort", "order", "page", "pageSize"] as const;
+    const rawParams = ["search", "categoryId", "requestedPriority", "currentStatus", "state", "sort", "order", "page", "pageSize"] as const;
     for (const p of rawParams) {
       const v = (req.query as Record<string, unknown>)[p];
       if (v !== undefined && typeof v !== "string") {
@@ -194,7 +200,7 @@ app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChange
       }
     }
 
-    const { search, categoryId, requestedPriority, currentStatus, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
+    const { search, categoryId, requestedPriority, currentStatus, state, sort, order, page, pageSize } = req.query as Record<string, string | undefined>;
 
     const fieldErrors: Record<string, string> = {};
 
@@ -229,6 +235,23 @@ app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChange
     // requestedPriority
     if (requestedPriority !== undefined && !isPriorityValid(requestedPriority)) {
       return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { requestedPriority: "Invalid priority." });
+    }
+
+    // Issue #80 — drill-down state sets (owner decision A): open maps to the
+    // five non-terminal statuses, resolved maps to RESOLVED/CLOSED. Invalid
+    // values fail closed; combining state with currentStatus is ambiguous
+    // and rejected.
+    const OPEN_SET = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"];
+    const RESOLVED_SET = ["RESOLVED", "CLOSED"];
+    let stateStatuses: string[] | undefined;
+    if (state !== undefined) {
+      if (state !== "open" && state !== "resolved") {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { state: "Invalid state." });
+      }
+      if (currentStatus !== undefined) {
+        return sendError(res, 400, "VALIDATION_FAILED", "One or more fields are invalid.", { state: "state and currentStatus are mutually exclusive." });
+      }
+      stateStatuses = state === "open" ? OPEN_SET : RESOLVED_SET;
     }
 
     // Issue #72: requester list accepts any of the eight Lab 3 statuses
@@ -269,6 +292,7 @@ app.get("/api/tickets", requireSession, requireActiveUser, requirePasswordChange
     if (cid !== undefined) (where as Record<string, unknown>).categoryId = cid;
     if (requestedPriority !== undefined) (where as Record<string, unknown>).requestedPriority = requestedPriority;
     if (currentStatus !== undefined) (where as Record<string, unknown>).currentStatus = currentStatus;
+    if (stateStatuses !== undefined) (where as Record<string, unknown>).currentStatus = { in: stateStatuses };
     if (searchTrim !== undefined) {
       (where as Record<string, unknown>).OR = [
         { ticketNumber: { contains: searchTrim, mode: "insensitive" } },

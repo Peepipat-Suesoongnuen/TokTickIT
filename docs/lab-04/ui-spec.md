@@ -19,7 +19,7 @@ All Lab 4 screens MUST reuse Lab 2/3 tokens, spacing, form states, table and car
 
 ## 4. IT Staff Dashboard (`/staff-dashboard`)
 
-  - Metric cards — Owned by Me (`ownedByMe`), Assigned to Me (`assignedToMe`), Recorded by Me (`recordedByMe`, non-clickable by design — no recorder dimension exists in queue vocabulary), Unassigned (`unassigned`), Urgent High/Critical (`urgentHighPriority`), By Status (`byStatus`), By IT Priority (`byItPriority`): each card labels its attribution source explicitly (never a merged "My Work"). Drill-down: owned/unassigned/assignee cards to the matching Staff Queue filtered views (`?owner=…`, `?assignee=…`); the Urgent card to `/staff/queue?itPriority=HIGH,CRITICAL` (dataset-identical); per-priority cards to their single value.
+  - Metric cards — Owned by Me (`ownedByMe`), Assigned to Me (`assignedToMe`), Recorded by Me (`recordedByMe`, non-clickable by design — no recorder dimension exists in queue vocabulary), Unassigned (`unassigned`), Urgent High/Critical (`urgentHighPriority`), By Status (`byStatus`), By IT Priority (`byItPriority`): each card labels its attribution source explicitly (never a merged "My Work"). Drill-down: owned/unassigned/assignee cards to the matching Staff Queue filtered views (`?owner=…&state=open`, `?assignee=…&state=open`); the Urgent card to `/staff/queue?itPriority=HIGH,CRITICAL&state=open` (dataset-identical: the `state=open` scope reproduces the non-terminal metric exactly); per-priority cards to their single value.
 - Lists kept separate: urgent tickets (`HIGH`/`CRITICAL`, top 10) and recently updated (top 8). Rows open Ticket Detail.
 - Administrators see the identical view plus one concise user-account counts card (`userCounts`): Total Users, Active Users, per-role counts; deactivated read as Total minus Active, never a separate sourced metric. Each role count drills to User Management with that role filter (`/admin/users?role=<ROLE>`). The card MUST NOT render for Staff. Zero counts render as `0`, never blank.
 - Counts MUST match the API exactly; the client MUST NOT aggregate or recompute. Loading, empty, forbidden, and failure states follow §3.
@@ -60,7 +60,7 @@ Visible focus on every interactive element; full keyboard operation for cards, t
 | `/staff-dashboard` | IT Staff/Administrator (guarded) | Staff dashboard + Admin counts card (§4) |
 | `/tickets/:id` (+ Actions section) | Requester/Staff/Admin | Detail + Actions Taken area with history (§5) |
 | `/my-tickets?status=…&state=…` | Requester | My Tickets MUST initialize filters from query (drill-down support per api-spec §4) |
-| `/staff/queue?owner=…&assignee=…&itPriority=…&sort=…&order=…` | Staff/Admin | Staff Queue MUST initialize owner, assignee, priority (single or comma-separated levels), and sort from query using the implemented vocabulary |
+| `/staff/queue?owner=…&assignee=…&itPriority=…&state=…&sort=…&order=…` | Staff/Admin | Staff Queue MUST initialize owner, assignee, priority (single or comma-separated levels), state (`open`/`resolved` drill-down sets), and sort from query using the implemented vocabulary |
 | `/admin/users?role=…` | Administrator | User Management MUST initialize the role filter from query |
 | existing Lab 1–3 routes | Unchanged | Regression baseline; temporary, duplicate, or obsolete elements found MUST be removed |
 

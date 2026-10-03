@@ -113,6 +113,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {staffWorkspace ? (
               <>
                 <NavLink
+                  to="/staff-dashboard"
+                  className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
+                  onClick={() => setNavOpen(false)}
+                >
+                  Dashboard
+                </NavLink>
+                <NavLink
                   to="/staff/queue"
                   className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
                   onClick={() => setNavOpen(false)}
@@ -131,6 +138,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </>
             ) : (
               <>
+                <NavLink
+                  to="/dashboard"
+                  className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
+                  onClick={() => setNavOpen(false)}
+                >
+                  Dashboard
+                </NavLink>
                 <NavLink
                   to="/my-tickets"
                   className={({ isActive }) => `lab2-nav-link ${isActive ? "active" : ""}`}
