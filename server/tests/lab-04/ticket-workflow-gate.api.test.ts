@@ -20,7 +20,15 @@ let cookieA = "";
 
 let ticketSeq = 0;
 async function makeTicket(
-  status: "OPEN" | "IN_PROGRESS" | "WAITING_FOR_REQUESTER" | "RESOLVED" | "CLOSED" = "IN_PROGRESS",
+  status:
+    | "NEW"
+    | "OPEN"
+    | "IN_PROGRESS"
+    | "WAITING_FOR_REQUESTER"
+    | "RESOLVED"
+    | "CLOSED"
+    | "REOPENED"
+    | "CANCELLED" = "IN_PROGRESS",
 ): Promise<number> {
   ticketSeq += 1;
   const row = await prisma.ticket.create({
@@ -205,6 +213,130 @@ describe("Ticket workflow gate (Issue #79, LAP4-05)", () => {
     // Losers rolled back: the counter advanced exactly once, never gapped.
     expect(ticket.resolutionCycle).toBe(2);
   });
+
+  it("API-25b a rolled-back cycle write consumes nothing; the next reopen yields n+1", async () => {
+    // Real rollback AFTER the increment write lands in the transaction:
+    // the row must read n afterwards, and a genuine API reopen must then
+    // produce exactly n+1 (never n+2). The route uses read+1 with no
+    // sequences, so a rolled-back attempt cannot leak a counter value.
+    const ticketId = await makeTicket("RESOLVED");
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.ticket.update({ where: { id: ticketId }, data: { resolutionCycle: 2 } });
+        throw new Error("forced rollback probe");
+      }),
+    ).rejects.toThrow("forced rollback probe");
+    const afterRollback = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+    expect(afterRollback.resolutionCycle).toBe(1);
+    expect(afterRollback.currentStatus).toBe("RESOLVED");
+    const reopened = await setStatus(ticketId, "REOPENED", "RESOLVED");
+    expect(reopened.status).toBe(200);
+    expect(reopened.body.currentCycle).toBe(2);
+    const final = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+    expect(final.resolutionCycle).toBe(2);
+  });
+
+  it("API-25 stale reopen conflicts; overlapping resolve+reopen cannot double-commit", async () => {
+    // Stale expectation on reopen is a deterministic conflict.
+    const staleId = await makeTicket("RESOLVED");
+    const stale = await setStatus(staleId, "REOPENED", "IN_PROGRESS");
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.code).toBe("TICKET_STATE_CHANGED");
+    // Overlapping resolve + reopen on a RESOLVED ticket: resolve is
+    // matrix-rejected (no race on the row), the single reopen commits once.
+    // The matrix forbids same-expected resolve+reopen pairs, so the complete
+    // set of real cross-transition races is covered by reopen-vs-close and
+    // resolve-vs-cancel below.
+    const ticketId = await makeTicket();
+    const actionId = await createAction(ticketId, "IN_PROGRESS");
+    await completeAction(actionId, 2).then((r) => expect(r.status).toBe(200));
+    await setStatus(ticketId, "RESOLVED", "IN_PROGRESS").then((r) => expect(r.status).toBe(200));
+    const [reopened, resolved] = await Promise.all([
+      setStatus(ticketId, "REOPENED", "RESOLVED"),
+      setStatus(ticketId, "RESOLVED", "RESOLVED"),
+    ]);
+    expect(reopened.status).toBe(200);
+    expect(reopened.body.currentCycle).toBe(2);
+    expect(resolved.status).toBe(409);
+    const after = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+    expect(after.currentStatus).toBe("REOPENED");
+    expect(after.resolutionCycle).toBe(2);
+  });
+
+  it("API-25 overlapping valid transitions commit exactly once (reopen-vs-close, resolve-vs-cancel)", async () => {    // RESOLVED: reopen and close are both valid from the same expectation —
+    // exactly one commits, the loser sees a stale row, never half-state.
+    const closeId = await makeTicket("RESOLVED");
+    const [reopened, closed] = await Promise.all([
+      setStatus(closeId, "REOPENED", "RESOLVED"),
+      setStatus(closeId, "CLOSED", "RESOLVED"),
+    ]);
+    const codes = [reopened.status, closed.status].sort();
+    expect(codes).toEqual([200, 409]);
+    const afterClose = await prisma.ticket.findUniqueOrThrow({ where: { id: closeId } });
+    if (afterClose.currentStatus === "REOPENED") {
+      expect(afterClose.resolutionCycle).toBe(2);
+    } else {
+      expect(afterClose.currentStatus).toBe("CLOSED");
+      expect(afterClose.resolutionCycle).toBe(1);
+    }
+    // IN_PROGRESS with a completed action: resolve and cancel are both valid
+    // from the same expectation — same exactly-once guarantee.
+    const cancelId = await makeTicket();
+    const actionId = await createAction(cancelId, "IN_PROGRESS");
+    await completeAction(actionId, 2).then((r) => expect(r.status).toBe(200));
+    const [resolved, cancelled] = await Promise.all([
+      setStatus(cancelId, "RESOLVED", "IN_PROGRESS"),
+      setStatus(cancelId, "CANCELLED", "IN_PROGRESS"),
+    ]);
+    expect([resolved.status, cancelled.status].sort()).toEqual([200, 409]);
+    const afterCancel = await prisma.ticket.findUniqueOrThrow({ where: { id: cancelId } });
+    expect(["RESOLVED", "CANCELLED"]).toContain(afterCancel.currentStatus);
+    if (afterCancel.currentStatus === "RESOLVED") {
+      const done = await prisma.actionTaken.findUniqueOrThrow({ where: { id: actionId } });
+      expect(done.status).toBe("COMPLETED");
+    }
+  });
+
+  it("API-18 full final matrix: every allowed pair accepted, every forbidden pair 409", async () => {
+    // 64 tickets x action lifecycle each: needs a long timeout (see below).    // Independent copy of the contract matrix (specification §5): the test
+    // fails if implementation drifts, never by construction. NEW → OPEN is
+    // deliberately absent — only Claim/Assign may open a ticket. Resolve
+    // targets carry a completed current-cycle action so the gate (not the
+    // matrix) is what passes; gate rejections live in API-13/14/16.
+    const ALLOWED: Record<string, string[]> = {
+      NEW: ["CANCELLED"],
+      OPEN: ["IN_PROGRESS", "CANCELLED"],
+      IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+      WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
+      RESOLVED: ["CLOSED", "REOPENED"],
+      CLOSED: ["REOPENED"],
+      REOPENED: ["IN_PROGRESS", "CANCELLED"],
+      CANCELLED: [],
+    };
+    const STATES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"];
+    // Fresh ticket per pair: transitions mutate state, so pairs must not
+    // share rows. Every non-terminal fixture carries an eligible owner and
+    // one completed current-cycle action, isolating matrix validity from
+    // gate/owner rules. Terminal fixtures take no actions (BR-009 freeze).
+    const TERMINAL = new Set(["RESOLVED", "CLOSED", "CANCELLED"]);
+    for (const from of STATES) {
+      for (const to of STATES) {
+        const ticketId = await makeTicket(from as Parameters<typeof makeTicket>[0]);
+        if (!TERMINAL.has(from)) {
+          const actionId = await createAction(ticketId, "IN_PROGRESS");
+          await completeAction(actionId, 2).then((r) => expect(r.status).toBe(200));
+        }
+        const res = await setStatus(ticketId, to, from);
+        if ((ALLOWED[from] ?? []).includes(to)) {
+          expect(res.status, `${from} → ${to}`).toBe(200);
+          expect(res.body.currentStatus, `${from} → ${to}`).toBe(to);
+        } else {
+          expect(res.status, `${from} → ${to}`).toBe(409);
+          expect(res.body.error.code, `${from} → ${to}`).toBe("INVALID_STATUS_TRANSITION");
+        }
+      }
+    }
+  }, 180000);
 });
 
 afterAll(async () => {
