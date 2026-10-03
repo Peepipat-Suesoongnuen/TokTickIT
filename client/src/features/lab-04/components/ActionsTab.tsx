@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listTicketActions,
   createTicketAction,
@@ -55,6 +55,19 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const recordBtnRef = useRef<HTMLButtonElement | null>(null);
+  // Focus return (ui-spec s.9): after a form/history region closes, focus
+  // moves back to the control that opened it. focusKey names either the
+  // Record button ("record") or a data-focus-key target. The effect below
+  // runs after the closing render so the target exists in the DOM.
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (focusKey === null) return;
+    const target =
+      focusKey === "record" ? recordBtnRef.current : document.querySelector<HTMLElement>(`[data-focus-key="${focusKey}"]`);
+    target?.focus();
+    setFocusKey(null);
+  }, [focusKey, showForm, editingId, historyId, actions]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -123,10 +136,12 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
     if (historyId === a.id) {
       setHistoryId(null);
       setEvents(null);
+      setFocusKey(`history-btn-${a.id}`);
       return;
     }
     setHistoryId(a.id);
     setEvents(null);
+    setFocusKey(`history-${a.id}`);
     try {
       const res =
         mode === "staff" ? await listStaffActionEvents(a.id) : await listRequesterActionEvents(ticketId, a.id);
@@ -138,6 +153,7 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
 
   async function onCreateSaved(action: ActionTaken, replayed: boolean) {
     setShowForm(false);
+    setFocusKey("record");
     await reload();
     if (replayed) {
       setNotice(`Action already recorded (replay of #${action.id}). No duplicate was created.`);
@@ -184,7 +200,12 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
         </div>
       )}
       {canMutate && !showForm && editing === null && (
-        <button type="button" className="btn btn-success btn-sm mb-2" onClick={() => setShowForm(true)}>
+        <button
+          type="button"
+          className="btn btn-success btn-sm mb-2"
+          ref={recordBtnRef}
+          onClick={() => setShowForm(true)}
+        >
           Record action
         </button>
       )}
@@ -194,7 +215,10 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
             ticketId={ticketId}
             owners={owners}
             onSaved={(a, replayed) => void onCreateSaved(a, replayed)}
-            onCancel={() => setShowForm(false)}
+            onCancel={() => {
+              setShowForm(false);
+              setFocusKey("record");
+            }}
           />
         </div>
       )}
@@ -213,7 +237,7 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
                     Start
                   </button>
                 )}
-                <button type="button" className="btn btn-outline-success btn-sm" disabled={busyId === a.id} onClick={() => setEditingId(a.id)}>
+                <button type="button" className="btn btn-outline-success btn-sm" disabled={busyId === a.id} onClick={() => setEditingId(a.id)} data-focus-key={`edit-${a.id}`}>
                   Edit
                 </button>
                 {a.status === "IN_PROGRESS" && (
@@ -226,7 +250,7 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
                     </button>
                   </>
                 )}
-                <button type="button" className="btn btn-outline-success btn-sm" onClick={() => void onToggleHistory(a)}>
+                <button type="button" className="btn btn-outline-success btn-sm" data-focus-key={`history-btn-${a.id}`} onClick={() => void onToggleHistory(a)}>
                   History
                 </button>
               </div>
@@ -238,7 +262,7 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
                 <span className="form-text">
                   #{a.id} {a.status} (v{a.version})
                 </span>
-                <button type="button" className="btn btn-outline-success btn-sm" onClick={() => void onToggleHistory(a)}>
+                <button type="button" className="btn btn-outline-success btn-sm" data-focus-key={`history-btn-${a.id}`} onClick={() => void onToggleHistory(a)}>
                   History
                 </button>
               </div>
@@ -248,7 +272,7 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
       {!canMutate &&
         list.map((a) => (
           <div key={a.id} className="mt-2">
-            <button type="button" className="btn btn-outline-success btn-sm" onClick={() => void onToggleHistory(a)}>
+            <button type="button" className="btn btn-outline-success btn-sm" data-focus-key={`history-btn-${a.id}`} onClick={() => void onToggleHistory(a)}>
               History
             </button>
           </div>
@@ -260,18 +284,24 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
             owners={owners}
             initialAction={editing}
             onSaved={(a) => {
+              const id = editing?.id;
               setEditingId(null);
+              if (id !== undefined) setFocusKey(`edit-${id}`);
               void (async () => {
                 await reload();
                 setNotice(`Action #${a.id} saved (version ${a.version}).`);
               })();
             }}
-            onCancel={() => setEditingId(null)}
+            onCancel={() => {
+              const id = editing?.id;
+              setEditingId(null);
+              if (id !== undefined) setFocusKey(`edit-${id}`);
+            }}
           />
         </div>
       )}
       {historyId !== null && (
-        <div className="mt-2" aria-label={`History for action ${historyId}`}>
+        <div className="mt-2" aria-label={`History for action ${historyId}`} data-focus-key={`history-${historyId}`} tabIndex={-1}>
           <h4 className="h6">History</h4>
           {events === null && <p className="text-secondary">Loading history…</p>}
           {events !== null && events.length === 0 && <p className="text-secondary">No events recorded.</p>}

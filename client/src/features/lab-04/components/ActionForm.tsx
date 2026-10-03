@@ -120,6 +120,14 @@ export function ActionForm({ ticketId, owners, initialAction, onSaved, onCancel 
         e.preventDefault();
         void onSubmit();
       }}
+      onKeyDown={(e) => {
+        // Inline editing has no modal trap; Escape abandons the form and
+        // returns focus via the parent onCancel path (ui-spec s.9).
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onCancel();
+        }
+      }}
     >
       {editing && initialAction && (
         <p className="form-text">
@@ -134,6 +142,7 @@ export function ActionForm({ ticketId, owners, initialAction, onSaved, onCancel 
           id="action-form-description"
           className="form-control"
           rows={3}
+          autoFocus
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />

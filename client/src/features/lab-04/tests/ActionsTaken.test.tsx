@@ -91,6 +91,26 @@ describe("Actions Taken table + badges (Issue #78, UI-03, STYLE-01)", () => {
     expect(screen.getByText("No actions taken yet.")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
+
+  it("collapses to cards on mobile with full data parity and responsive classes", async () => {
+    render(<ActionTable actions={tableRows as never} />);
+    const tableWrap = document.querySelector(".table-responsive");
+    expect(tableWrap?.className).toMatch(/d-none/);
+    expect(tableWrap?.className).toMatch(/d-md-block/);
+    const cards = document.querySelector(".actions-cards");
+    expect(cards).not.toBeNull();
+    expect(cards?.className).toMatch(/d-md-none/);
+    const cardRegion = within(cards as HTMLElement);
+    const labeled = (label: string, value: string) => (_content: string, el: Element | null) =>
+      typeof el?.className === "string" &&
+      el.className.includes("small text-secondary") &&
+      (el?.textContent ?? "").replace(/\s+/g, " ").includes(`${label}: ${value}`);
+    expect(cardRegion.getByText("Second work item")).toBeInTheDocument();
+    expect(cardRegion.getByText(labeled("Assignee", "Amy Staff"))).toBeInTheDocument();
+    expect(cardRegion.getByText("COMPLETED")).toHaveClass("badge-action-completed");
+    expect(cardRegion.getByText("Restarted service")).toBeInTheDocument();
+    expect(cardRegion.getByText(labeled("Assignee", "Recorder accountable"))).toBeInTheDocument();
+  });
 });
 
 describe("ActionForm create (Issue #78, UI-03)", () => {
@@ -487,8 +507,7 @@ describe("Detail page integration (Issue #78, UI-03)", () => {
   });
 });
 
-describe("Terminal confirmations (Issue #78, UI-03, U9)", () => {
-  function renderStaffCancel() {
+describe("Terminal confirmations (Issue #78, UI-03, U9)", () => {  function renderStaffCancel() {
     const inProgress = { ...tableRows[1], status: "IN_PROGRESS" };
     mockedApi.listTicketActions.mockResolvedValue({ actions: [inProgress] as never, meta: { count: 1 } });
     render(<ActionsTab ticketId={7} ticketStatus="IN_PROGRESS" mode="staff" owners={owners} />);
@@ -514,5 +533,36 @@ describe("Terminal confirmations (Issue #78, UI-03, U9)", () => {
     await user.click(screen.getByRole("button", { name: /^Cancel$/i }));
     expect(mockedApi.cancelTicketAction).not.toHaveBeenCalled();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+
+describe("Focus management (Issue #78, U9, ui-spec 8-9)", () => {
+  it("focuses the description on form open and returns focus to Record on cancel", async () => {
+    const user = userEvent.setup();
+    mockedApi.listTicketActions.mockResolvedValue({ actions: tableRows as never, meta: { count: 2 } });
+    render(<ActionsTab ticketId={7} ticketStatus="IN_PROGRESS" mode="staff" owners={owners} />);
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Record action/i }));
+    expect(screen.getByLabelText(/Description/i)).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: /Record action/i })).toHaveFocus();
+    expect(screen.queryByRole("form", { name: "Create action" })).not.toBeInTheDocument();
+  });
+
+  it("returns focus to the invoking control after save and after history toggle", async () => {
+    const user = userEvent.setup();
+    mockedApi.listTicketActions.mockResolvedValue({ actions: tableRows as never, meta: { count: 2 } });
+    mockedApi.createTicketAction.mockResolvedValue({ action: tableRows[1] as never, replayed: false });
+    render(<ActionsTab ticketId={7} ticketStatus="IN_PROGRESS" mode="staff" owners={owners} />);
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Record action/i }));
+    await user.type(screen.getByLabelText(/Description/i), "Restarted service");
+    await user.click(screen.getByRole("button", { name: /use current time/i }));
+    await user.click(screen.getByRole("button", { name: /^Create action$/i }));
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Record action/i })).toHaveFocus();
+    mockedApi.listStaffActionEvents.mockResolvedValue({ events: [] as never });
+    await user.click(screen.getAllByRole("button", { name: /^History$/i })[1]);
+    expect(await screen.findByLabelText("History for action 11")).toHaveFocus();
   });
 });
