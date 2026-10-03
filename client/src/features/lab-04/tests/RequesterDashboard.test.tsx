@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 const payload = {
-  metrics: { openTickets: 2, waitingForRequester: 1 },
+  metrics: { openTickets: 2, waitingForRequester: 1, recentlyResolved: 7 },
   recentlyUpdated: [
     { id: 11, ticketNumber: "2609-0101", summary: "VPN down", currentStatus: "OPEN", updatedAt: "2026-10-02T08:00:00.000Z" },
     { id: 12, ticketNumber: "2609-0102", summary: "Slow wifi", currentStatus: "IN_PROGRESS", updatedAt: "2026-10-01T08:00:00.000Z" },
@@ -46,6 +46,11 @@ describe("RequesterDashboard (Issue #80, UI-01)", () => {
     const openCard = screen.getByText("Open Tickets").closest(".card");
     expect(openCard?.textContent).toContain("2");
     expect(screen.getByRole("link", { name: /View open tickets/i })).toHaveAttribute("href", "/my-tickets?state=open");
+    // Reviewer finding 1 (FIX-REVIEW PR #86): the Recently Resolved card
+    // value MUST be the authoritative backend metric (7 here), never the
+    // bounded list length (1 row in this payload).
+    const resolvedCard = screen.getAllByText("Recently Resolved")[0].closest(".card");
+    expect(resolvedCard?.textContent).toContain("7");
     expect(screen.getByRole("link", { name: /View waiting list/i })).toHaveAttribute(
       "href",
       "/my-tickets?status=WAITING_FOR_REQUESTER",
@@ -67,7 +72,10 @@ describe("RequesterDashboard (Issue #80, UI-01)", () => {
       () => new Promise((resolve) => { resolveLoad = resolve as (value: unknown) => void; }),
     );
     renderPage();
-    expect(screen.getByText("Loading dashboard…")).toBeInTheDocument();
+    // Reviewer finding 4 (FIX-REVIEW PR #86): ui-spec §3 requires skeleton
+    // placeholders while loading, not a bare text line.
+    expect(screen.getByTestId("dashboard-skeleton")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /Loading dashboard/i })).toBeInTheDocument();
     resolveLoad(payload);
     expect(await screen.findByText("Open Tickets")).toBeInTheDocument();
     // Empty state is covered by zero-metric rendering below.
@@ -75,7 +83,7 @@ describe("RequesterDashboard (Issue #80, UI-01)", () => {
 
   it("zero metrics render zeros with lists empty, never blank", async () => {
     mockedApi.fetchRequesterDashboard.mockResolvedValue({
-      metrics: { openTickets: 0, waitingForRequester: 0 },
+      metrics: { openTickets: 0, waitingForRequester: 0, recentlyResolved: 0 },
       recentlyUpdated: [],
       recentlyResolved: [],
       links: payload.links,

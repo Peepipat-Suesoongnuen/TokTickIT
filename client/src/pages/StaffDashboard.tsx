@@ -26,7 +26,28 @@ export default function StaffDashboard() {
     void load();
   }, [load]);
 
-  if (loading && data === null) return <p className="text-secondary">Loading dashboard…</p>;
+  if (loading && data === null) {
+    // Reviewer finding 4 (FIX-REVIEW PR #86): ui-spec §3 requires skeleton
+    // placeholders while loading, not a bare text line.
+    return (
+      <div role="status" aria-label="Loading dashboard" data-testid="dashboard-skeleton">
+        <div className="row g-2 mb-3" aria-hidden="true">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="col-md-4">
+              <div className="card p-3">
+                <div className="placeholder-glow">
+                  <span className="placeholder col-6" />
+                </div>
+                <div className="placeholder-glow">
+                  <span className="placeholder col-4" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (failed && data === null) {
     return (
       <div>
@@ -96,6 +117,27 @@ export default function StaffDashboard() {
             <div className="card p-3">
               <div className="form-text">User accounts</div>
               <div className="h4 mb-2">{data.userCounts.total}</div>
+              <div className="text-secondary small mb-1">Active users: {data.userCounts.active}</div>
+              <div className="text-secondary small mb-2">
+                Deactivated: {data.userCounts.total - data.userCounts.active} (derived)
+              </div>
+              <ul className="list-group list-group-flush mb-2">
+                {Object.entries(data.userCounts.byRole).map(([role, count]) => (
+                  <li key={role} className="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <span>{role}</span>
+                    <span className="d-flex align-items-center gap-2">
+                      <span>{count}</span>
+                      <Link
+                        className="btn btn-outline-success btn-sm"
+                        to={`/admin/users?role=${role}`}
+                        aria-label={`View ${role} users`}
+                      >
+                        View
+                      </Link>
+                    </span>
+                  </li>
+                ))}
+              </ul>
               <Link className="btn btn-outline-success btn-sm" to={data.links.usersByRole} aria-label="View users">
                 View users
               </Link>
@@ -103,6 +145,40 @@ export default function StaffDashboard() {
           </div>
         )}
       </div>
+      <section aria-label="Tickets by status" className="card p-3 mb-3">
+        <h3 className="h6">By Status</h3>
+        {Object.keys(data.metrics.byStatus).length === 0 ? (
+          <p className="text-secondary mb-0">Nothing here yet.</p>
+        ) : (
+          <ul className="list-group">
+            {Object.entries(data.metrics.byStatus).map(([status, count]) => (
+              <li key={status} className="list-group-item d-flex justify-content-between align-items-center">
+                <Link to={`/staff/queue?currentStatus=${status}`} aria-label={`View ${status} tickets`}>
+                  {status}
+                </Link>
+                <span className="text-secondary small">{count}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section aria-label="Tickets by IT priority" className="card p-3 mb-3">
+        <h3 className="h6">By IT Priority</h3>
+        {Object.keys(data.metrics.byItPriority).length === 0 ? (
+          <p className="text-secondary mb-0">Nothing here yet.</p>
+        ) : (
+          <ul className="list-group">
+            {Object.entries(data.metrics.byItPriority).map(([priority, count]) => (
+              <li key={priority} className="list-group-item d-flex justify-content-between align-items-center">
+                <Link to={`/staff/queue?itPriority=${priority}&state=open`} aria-label={`View ${priority} tickets`}>
+                  {priority}
+                </Link>
+                <span className="text-secondary small">{count}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <section aria-label="Recently updated tickets" className="card p-3 mb-3">
         <h3 className="h6">Recently Updated</h3>
         {data.recentlyUpdated.length === 0 ? (

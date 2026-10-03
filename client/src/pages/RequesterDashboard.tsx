@@ -26,7 +26,28 @@ export default function RequesterDashboard() {
     void load();
   }, [load]);
 
-  if (loading && data === null) return <p className="text-secondary">Loading dashboard…</p>;
+  if (loading && data === null) {
+    // Reviewer finding 4 (FIX-REVIEW PR #86): ui-spec §3 requires skeleton
+    // placeholders while loading, not a bare text line.
+    return (
+      <div role="status" aria-label="Loading dashboard" data-testid="dashboard-skeleton">
+        <div className="row g-2 mb-3" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="col-md-4">
+              <div className="card p-3">
+                <div className="placeholder-glow">
+                  <span className="placeholder col-6" />
+                </div>
+                <div className="placeholder-glow">
+                  <span className="placeholder col-4" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (failed && data === null) {
     return (
       <div>
@@ -44,7 +65,7 @@ export default function RequesterDashboard() {
   const cards = [
     { label: "Open Tickets", value: data.metrics.openTickets, link: data.links.openTickets, linkLabel: "View open tickets" },
     { label: "Waiting for You", value: data.metrics.waitingForRequester, link: data.links.waitingForRequester, linkLabel: "View waiting list" },
-    { label: "Recently Resolved", value: data.recentlyResolved.length, link: data.links.recentlyResolved, linkLabel: "View resolved tickets" },
+    { label: "Recently Resolved", value: data.metrics.recentlyResolved, link: data.links.recentlyResolved, linkLabel: "View resolved tickets" },
   ];
 
   const empty = data.metrics.openTickets === 0 && data.recentlyUpdated.length === 0 && data.recentlyResolved.length === 0;

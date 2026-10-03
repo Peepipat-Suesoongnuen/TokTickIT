@@ -714,7 +714,7 @@ export interface RequesterDashboardTicket {
 }
 
 export interface RequesterDashboard {
-  metrics: { openTickets: number; waitingForRequester: number };
+  metrics: { openTickets: number; waitingForRequester: number; recentlyResolved: number };
   recentlyUpdated: RequesterDashboardTicket[];
   recentlyResolved: RequesterDashboardTicket[];
   links: { openTickets: string; waitingForRequester: string; recentlyResolved: string };

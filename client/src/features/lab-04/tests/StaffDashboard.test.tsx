@@ -79,16 +79,51 @@ describe("StaffDashboard (Issue #80, UI-02)", () => {
     expect(card?.textContent).toContain("1");
   });
 
-  it("hides Admin user-counts card for Staff, shows it for Admin", async () => {
+  it("hides the Admin user-counts card for Staff", async () => {
     mockedApi.fetchStaffDashboard.mockResolvedValue(staffPayload as never);
-    const { unmount } = renderPage();
+    renderPage();
     await screen.findByText("Owned by me");
     expect(screen.queryByText("User accounts")).toBeNull();
-    unmount();
+  });
+
+  it("renders byStatus and byItPriority metric groups with exact values (finding 2)", async () => {
+    mockedApi.fetchStaffDashboard.mockResolvedValue(staffPayload as never);
+    renderPage();
+    expect(await screen.findByText("By Status")).toBeInTheDocument();
+    expect(screen.getByText("By IT Priority")).toBeInTheDocument();
+    const statusGroup = screen.getByText("By Status").closest("section");
+    expect(statusGroup?.textContent).toContain("OPEN");
+    expect(statusGroup?.textContent).toContain("5");
+    const priorityGroup = screen.getByText("By IT Priority").closest("section");
+    expect(priorityGroup?.textContent).toContain("CRITICAL");
+    expect(priorityGroup?.textContent).toContain("1");
+    // Per-priority drill-down uses the single value within the open scope.
+    expect(screen.getByRole("link", { name: /View HIGH tickets/i })).toHaveAttribute(
+      "href",
+      "/staff/queue?itPriority=HIGH&state=open",
+    );
+  });
+
+  it("renders full Admin userCounts with per-role drill-down (finding 3)", async () => {
     mockedApi.fetchStaffDashboard.mockResolvedValue(adminPayload as never);
     renderPage();
     expect(await screen.findByText("User accounts")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View users/i })).toHaveAttribute("href", "/admin/users?role=IT_STAFF");
+    const card = screen.getByText("User accounts").closest(".card");
+    expect(card?.textContent).toContain("10");
+    expect(card?.textContent).toContain("9");
+    expect(screen.getByText(/REQUESTER/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View REQUESTER users/i })).toHaveAttribute(
+      "href",
+      "/admin/users?role=REQUESTER",
+    );
+    expect(screen.getByRole("link", { name: /View IT_STAFF users/i })).toHaveAttribute(
+      "href",
+      "/admin/users?role=IT_STAFF",
+    );
+    expect(screen.getByRole("link", { name: /View ADMINISTRATOR users/i })).toHaveAttribute(
+      "href",
+      "/admin/users?role=ADMINISTRATOR",
+    );
   });
 
   it("renders urgent vs recent as separated lists with keyboard-operable rows", async () => {
@@ -98,6 +133,18 @@ describe("StaffDashboard (Issue #80, UI-02)", () => {
     expect(screen.getByText("Urgent Tickets")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /2609-0201/ })).toHaveAttribute("href", "/staff/tickets/21");
     expect(screen.getByRole("link", { name: /2609-0203/ })).toHaveAttribute("href", "/staff/tickets/23");
+  });
+
+  it("renders skeleton placeholders while loading (finding 4)", async () => {
+    let resolveLoad!: (value: unknown) => void;
+    mockedApi.fetchStaffDashboard.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveLoad = resolve as (value: unknown) => void; }),
+    );
+    renderPage();
+    expect(screen.getByTestId("dashboard-skeleton")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /Loading dashboard/i })).toBeInTheDocument();
+    resolveLoad(staffPayload);
+    expect(await screen.findByText("Owned by me")).toBeInTheDocument();
   });
 
   it("shows inline error with retry on API failure", async () => {

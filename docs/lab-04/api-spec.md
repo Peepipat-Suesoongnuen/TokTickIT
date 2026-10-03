@@ -94,13 +94,13 @@ Shared Action shape: `{ id, ticketId, description, result, recordedBy: { id, nam
 - Success `200`:
 ```json
 {
-  "metrics": { "openTickets": 0, "waitingForRequester": 0 },
+  "metrics": { "openTickets": 0, "waitingForRequester": 0, "recentlyResolved": 0 },
   "recentlyUpdated": [ { "id", "ticketNumber", "summary", "currentStatus", "updatedAt" } ],
   "recentlyResolved": [ { "id", "ticketNumber", "summary", "currentStatus", "updatedAt" } ],
   "links": { "openTickets": "/my-tickets?state=open", "waitingForRequester": "/my-tickets?status=WAITING_FOR_REQUESTER", "recentlyResolved": "/my-tickets?state=resolved" }
 }
 ```
-- `recentlyUpdated`: owned, top 5 ordered `updatedAt DESC, id DESC`. `recentlyResolved`: owned `RESOLVED`/`CLOSED`, top 5 ordered `updatedAt DESC, id DESC`. Empty → `[]` with zero metrics, never `404`.
+- `recentlyUpdated`: owned, top 5 ordered `updatedAt DESC, id DESC`. `recentlyResolved`: owned `RESOLVED`/`CLOSED`, top 5 ordered `updatedAt DESC, id DESC`. `metrics.recentlyResolved` is the authoritative full-dataset count of owned `RESOLVED`/`CLOSED` tickets (the card value source; the list is a bounded top-5 view of the same dataset). Empty → `[]` with zero metrics, never `404`.
 - Drill-down contract: `MyTickets` MUST initialize filters from `?status=` (any of the eight Ticket statuses) and `?state=open|resolved` (open = five non-terminal states; resolved = `RESOLVED`/`CLOSED`); unknown values are ignored with filters at default.
 
 ### LAP4-07 IT Staff — `GET /api/dashboard/staff`

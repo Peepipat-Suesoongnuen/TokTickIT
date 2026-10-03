@@ -121,6 +121,23 @@ describe("Requester dashboard (Issue #80, LAP4-06)", () => {
     for (const t of [...res.body.recentlyUpdated, ...res.body.recentlyResolved]) {
       expect(Object.keys(t).sort()).toEqual(["currentStatus", "id", "summary", "ticketNumber", "updatedAt"]);
     }
+    // Reviewer finding 1 (FIX-REVIEW PR #86): the Recently Resolved card
+    // value MUST be an authoritative backend metric, never derived from the
+    // bounded top-5 list. With 7 owned resolved tickets the list truncates
+    // to 5 while the metric reports the full dataset size.
+    for (let i = 0; i < 4; i++) {
+      await makeTicket(reqA, { currentStatus: "RESOLVED" });
+    }
+    const full = await request(app)
+      .get("/api/dashboard/requester")
+      .set("Origin", TEST_ORIGIN)
+      .set("Cookie", cookieA)
+      .expect(200);
+    expect(full.body.metrics.recentlyResolved).toBe(7);
+    expect(full.body.recentlyResolved).toHaveLength(5);
+    expect(full.body.metrics.recentlyResolved).toBe(
+      await prisma.ticket.count({ where: { requesterId: reqA, currentStatus: { in: ["RESOLVED", "CLOSED"] } } }),
+    );
   });
 
   it("API-21 zero-ticket requester gets zeros and empty lists, never 404", async () => {
@@ -132,7 +149,7 @@ describe("Requester dashboard (Issue #80, LAP4-06)", () => {
       .set("Origin", TEST_ORIGIN)
       .set("Cookie", cookieFresh)
       .expect(200);
-    expect(res.body.metrics).toEqual({ openTickets: 0, waitingForRequester: 0 });
+    expect(res.body.metrics).toEqual({ openTickets: 0, waitingForRequester: 0, recentlyResolved: 0 });
     expect(res.body.recentlyUpdated).toEqual([]);
     expect(res.body.recentlyResolved).toEqual([]);
   });
@@ -164,7 +181,7 @@ describe("Requester dashboard (Issue #80, LAP4-06)", () => {
     // B owns exactly the one foreign fixture ticket.
     expect(bNumbers).toHaveLength(1);
     expect(seen).toEqual(bNumbers);
-    expect(res.body.metrics).toEqual({ openTickets: 1, waitingForRequester: 0 });
+    expect(res.body.metrics).toEqual({ openTickets: 1, waitingForRequester: 0, recentlyResolved: 0 });
   });
 });
 

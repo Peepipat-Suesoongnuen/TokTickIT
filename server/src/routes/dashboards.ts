@@ -63,9 +63,14 @@ dashboardRouter.get("/requester", ...REQUESTER_GUARD, async (req: Request, res: 
       return;
     }
     const owned = { requesterId: auth.id };
-    const [openTickets, waitingForRequester] = await Promise.all([
+    const [openTickets, waitingForRequester, resolvedCount] = await Promise.all([
       getPrisma().ticket.count({ where: { ...owned, currentStatus: { in: OPEN_STATUSES } } }),
       getPrisma().ticket.count({ where: { ...owned, currentStatus: "WAITING_FOR_REQUESTER" } }),
+      // Reviewer finding 1 (FIX-REVIEW PR #86): authoritative full-dataset
+      // count of owned RESOLVED/CLOSED tickets. The recentlyResolved list
+      // below is a bounded top-5 view of this same dataset; the card value
+      // MUST come from this count, never from the list length.
+      getPrisma().ticket.count({ where: { ...owned, currentStatus: { in: ["RESOLVED", "CLOSED"] } } }),
     ]);
     const [recentlyUpdated, recentlyResolved] = await Promise.all([
       getPrisma().ticket.findMany({
@@ -82,7 +87,7 @@ dashboardRouter.get("/requester", ...REQUESTER_GUARD, async (req: Request, res: 
       }),
     ]);
     res.status(200).json({
-      metrics: { openTickets, waitingForRequester },
+      metrics: { openTickets, waitingForRequester, recentlyResolved: resolvedCount },
       recentlyUpdated,
       recentlyResolved,
       links: {
