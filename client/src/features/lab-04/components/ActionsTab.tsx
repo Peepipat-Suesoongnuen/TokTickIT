@@ -37,12 +37,15 @@ export interface ActionsTabProps {
   ticketStatus: string;
   mode: "staff" | "requester";
   owners: EligibleOwner[];
+  ticketCycle?: number | null;
 }
 
 // Issue #78 — Actions Taken area for Ticket Detail (staff mutate + read,
 // requester read-only). Server owns authorization; the UI renders the
 // contract states and never invents transitions.
-export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabProps) {
+// Issue #79 — optional Cycle chip (hidden when the ticket payload carries
+// no cycle, never stale).
+export function ActionsTab({ ticketId, ticketStatus, mode, owners, ticketCycle }: ActionsTabProps) {
   const terminal = TERMINAL_TICKETS.includes(ticketStatus);
   const canMutate = mode === "staff" && !terminal;
   const [actions, setActions] = useState<ActionTaken[] | null>(null);
@@ -187,7 +190,9 @@ export function ActionsTab({ ticketId, ticketStatus, mode, owners }: ActionsTabP
 
   return (
     <div>
-      <h3 className="h6">Actions Taken</h3>
+      <h3 className="h6">
+        Actions Taken{typeof ticketCycle === "number" && <span className="badge badge-cycle ms-2">Cycle {ticketCycle}</span>}
+      </h3>
       {terminal && <p className="form-text">This ticket is terminal — actions are read-only. Further work requires Reopen first.</p>}
       {notice && (
         <div className="alert alert-success" role="status">

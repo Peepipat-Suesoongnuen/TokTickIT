@@ -138,7 +138,7 @@ describe("ActionForm create (Issue #78, UI-03)", () => {
     expect(ticketId).toBe(7);
     expect(payload.description).toBe("Restarted service");
     expect(typeof payload.actionDate).toBe("string");
-    expect(payload.actionDate as string).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(payload.actionDate as string).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     expect(typeof payload.clientRequestId).toBe("string");
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
@@ -430,8 +430,7 @@ describe("ActionsTab requester mode (Issue #78, UI-03)", () => {
   });
 });
 
-describe("Detail page integration (Issue #78, UI-03)", () => {
-  const staffDetail = {
+describe("Detail page integration (Issue #78, UI-03)", () => {  const staffDetail = {
     id: 101,
     ticketNumber: "2609-0101",
     summary: "VPN down",
@@ -564,5 +563,84 @@ describe("Focus management (Issue #78, U9, ui-spec 8-9)", () => {
     mockedApi.listStaffActionEvents.mockResolvedValue({ events: [] as never });
     await user.click(screen.getAllByRole("button", { name: /^History$/i })[1]);
     expect(await screen.findByLabelText("History for action 11")).toHaveFocus();
+  });
+});
+
+describe("Workflow gate UI (Issue #79, UI-04)", () => {
+  const gateDetail = {
+    id: 101,
+    ticketNumber: "2609-0101",
+    summary: "VPN down",
+    description: "Cannot connect.",
+    requestedPriority: "HIGH",
+    itPriority: "HIGH",
+    currentStatus: "IN_PROGRESS",
+    ticketDate: "2026-09-12T08:00:00.000Z",
+    requester: { id: 5, name: "Alice Example", email: "alice@example.com" },
+    category: { id: 3, name: "Network" },
+    relatedSystem: { id: 1, name: "Email" },
+    ticketOwner: { id: 17, name: "Bob Staff", role: "IT_STAFF" },
+    requesterResolutionIndicatedAt: null,
+    resolutionCycle: 2,
+    updatedAt: "2026-09-12T12:00:00.000Z",
+    attachments: [],
+  };
+
+  function renderStaffGate() {
+    mockedApi.getStaffTicketDetail.mockResolvedValue(gateDetail as never);
+    mockedApi.listEligibleOwners.mockResolvedValue({ data: owners });
+    mockedApi.listTicketComments.mockResolvedValue({ data: [] });
+    mockedApi.listTicketNotes.mockResolvedValue({ data: [] });
+    mockedApi.listTicketActions.mockResolvedValue({ actions: [], meta: { count: 0 } });
+    render(
+      <MemoryRouter initialEntries={["/staff/tickets/101"]}>
+        <Routes>
+          <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows the current cycle chip in the Actions Taken section", async () => {
+    renderStaffGate();
+    expect(await screen.findByRole("heading", { name: "Ticket 2609-0101" })).toBeInTheDocument();
+    expect(await screen.findByText("Cycle 2")).toBeInTheDocument();
+  });
+
+  it("maps gate-blocked resolve to copy plus an Actions-activating link", async () => {
+    const user = userEvent.setup();
+    renderStaffGate();
+    expect(await screen.findByRole("heading", { name: "Ticket 2609-0101" })).toBeInTheDocument();
+    mockedApi.setStaffTicketStatus.mockRejectedValueOnce({
+      status: 409,
+      body: { error: { code: "RESOLUTION_REQUIRES_COMPLETED_ACTION", currentCycle: 2, message: "No completed work." } },
+    });
+    const statusSelect = screen.getByLabelText("Current Status");
+    await user.selectOptions(statusSelect, "RESOLVED");
+    expect(statusSelect).toHaveValue("RESOLVED");
+    const updateButton = screen.getByRole("button", { name: /^Update Status$/i });
+    expect(updateButton).toBeEnabled();
+    await user.click(updateButton);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no completed work/i);
+    await user.click(screen.getByRole("button", { name: /Go to Actions/i }));
+    expect(screen.getByRole("tab", { name: "Ticket Actions" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("maps open-action blocks to copy naming the count", async () => {
+    const user = userEvent.setup();
+    renderStaffGate();
+    expect(await screen.findByRole("heading", { name: "Ticket 2609-0101" })).toBeInTheDocument();
+    mockedApi.setStaffTicketStatus.mockRejectedValueOnce({
+      status: 409,
+      body: { error: { code: "RESOLUTION_BLOCKED_BY_OPEN_ACTIONS", openActionIds: [9], message: "Still open." } },
+    });
+    const statusSelect = screen.getByLabelText("Current Status");
+    await user.selectOptions(statusSelect, "RESOLVED");
+    expect(statusSelect).toHaveValue("RESOLVED");
+    const updateButton = screen.getByRole("button", { name: /^Update Status$/i });
+    expect(updateButton).toBeEnabled();
+    await user.click(updateButton);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/open action/i);
   });
 });

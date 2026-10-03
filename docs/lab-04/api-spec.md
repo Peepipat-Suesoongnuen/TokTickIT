@@ -83,6 +83,7 @@ Shared Action shape: `{ id, ticketId, description, result, recordedBy: { id, nam
   2. zero non-terminal Actions with `ActionTaken.cycle == Ticket.resolutionCycle`, else `409 RESOLUTION_BLOCKED_BY_OPEN_ACTIONS` with `{ openActionIds }`.
 - Reopen (`RESOLVED`/`CLOSED → REOPENED`) reads `Ticket.resolutionCycle` under row lock and increments it in the same conditional transaction as the status change (`WHERE id AND currentStatus = expected AND resolutionCycle = read`; zero rows → `409 TICKET_STATE_CHANGED`), exactly once per committed reopen with no gaps from rolled-back transactions (specification §7.3); the success response includes the new `currentCycle`. Previous-cycle Actions keep their states as history and MUST NOT satisfy the new gate. Reopen atomically clears `requesterResolutionIndicatedAt`. No reason text is required.
 - Zero-action Tickets (including legacy) fail check (1) and MUST complete an Action first. Existing Lab 3 status tests that resolve such Tickets MUST be updated contract-first (tracked in tests.md).
+- Cycle visibility (Issue #79, reviewer sign-off required): `GET /api/staff/tickets/:id` detail and all staff ticket-mutation responses additionally carry `resolutionCycle` (current Ticket cycle, integer); reopen success carries both `resolutionCycle` and the new `currentCycle`. Additive fields only; all other shapes unchanged.
 
 ## 4. Dashboards
 

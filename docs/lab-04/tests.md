@@ -59,7 +59,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | API-12 | API | AC-007 | history ordering under rapid successive mutations; actor identity on each event | deterministic `occurredAt, id` order; actors match callers | Planned |
 | API-12b | API | AC-007 | history of an Action across reopen: old events intact, order unchanged, new cycle adds no old events | original stream intact + deterministic order | Planned |
 
-### Ticket workflow + gate + cycles — `server/tests/lab-04/ticket-workflow.api.test.ts` (To be created)
+### Ticket workflow + gate + cycles — `server/tests/lab-04/ticket-workflow-gate.api.test.ts` (API-13–API-19, API-25/25b; API-20 lives in `actions-taken.api.test.ts`)
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
@@ -160,7 +160,7 @@ Coverage rule: every AC maps to at least one automated test whose scenario direc
 | Contract (#75) | this plan with peer review; no code |
 | Actions Taken foundation | `actions-taken.api.test.ts` (API-01–API-12), unit validation/lifecycle/gate tests, migration and seed tests, version/concurrency/idempotency proofs |
 | Actions Taken UI | `ActionsTaken.test.tsx`, `dashboard-actions-style.test.tsx` |
-| Ticket workflow + gate + cycles | `ticket-workflow.api.test.ts` (API-13–API-20), `TicketWorkflow.test.tsx` |
+| Ticket workflow + gate + cycles | `ticket-workflow-gate.api.test.ts` (API-13–API-19, API-25/25b; API-20 in `actions-taken.api.test.ts`), `TicketWorkflow.test.tsx` |
 | Role dashboards (combined) | `requester-dashboard.api.test.ts`, `staff-dashboard.api.test.ts`, both dashboard UI tests, `DrillDown.test.tsx` |
 | Final hardening | E2E, accessibility, visual, perf-smoke suites, REG-01, SEC-03, screenshots under `artifacts/lab-04/screenshots/` |
 | Release | exact staging and main full-suite verification with the submission PDF |
