@@ -372,7 +372,7 @@ async function staffGet<T>(path: string): Promise<T> {
   return body as T;
 }
 
-async function staffMutate<T>(path: string, method: "POST" | "PATCH", payload: Record<string, unknown>): Promise<T> {
+async function staffMutate<T>(path: string, method: "POST" | "PUT" | "PATCH", payload: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -609,4 +609,89 @@ export async function setInitialPassword(userId: number, initialPassword: string
     const body = await res.json().catch(() => null);
     throw { status: res.status, body } satisfies StaffApiFailure;
   }
+}
+
+// Issue #78 — Actions Taken (LAP4-01-04/08). Shapes mirror api-spec §2:
+// recordedBy is the immutable recorder (never the performer/completer).
+export interface ActionPerson {
+  id: number;
+  name: string;
+}
+
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  description: string;
+  result: string | null;
+  recordedBy: ActionPerson;
+  assignedTo: ActionPerson | null;
+  actionDate: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  cycle: number;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActionEvent {
+  id: number;
+  actionTakenId: number;
+  eventType: string;
+  actor: ActionPerson;
+  occurredAt: string;
+  payload: Record<string, unknown>;
+  requestId: string;
+}
+
+export interface CreateActionPayload {
+  description: string;
+  clientRequestId: string;
+  assignedToId?: number | null;
+  actionDate?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+  result?: string | null;
+}
+
+export async function listTicketActions(ticketId: number): Promise<{ actions: ActionTaken[]; meta: { count: number } }> {
+  return staffGet<{ actions: ActionTaken[]; meta: { count: number } }>(`/api/tickets/${ticketId}/actions`);
+}
+
+export async function createTicketAction(
+  ticketId: number,
+  payload: CreateActionPayload,
+): Promise<{ action: ActionTaken; replayed: boolean }> {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return { action: body as ActionTaken, replayed: res.headers.get("Idempotent-Replayed") === "true" };
+}
+
+export async function updateTicketAction(actionId: number, payload: Record<string, unknown>): Promise<ActionTaken> {
+  return staffMutate<ActionTaken>(`/api/staff/actions/${actionId}`, "PUT", payload);
+}
+
+export async function completeTicketAction(actionId: number, payload: Record<string, unknown>): Promise<ActionTaken> {
+  return staffMutate<ActionTaken>(`/api/staff/actions/${actionId}/complete`, "POST", payload);
+}
+
+export async function cancelTicketAction(actionId: number, payload: Record<string, unknown>): Promise<ActionTaken> {
+  return staffMutate<ActionTaken>(`/api/staff/actions/${actionId}/cancel`, "POST", payload);
+}
+
+export async function listStaffActionEvents(actionId: number): Promise<{ events: ActionEvent[] }> {
+  return staffGet<{ events: ActionEvent[] }>(`/api/staff/actions/${actionId}/events`);
+}
+
+export async function listRequesterActionEvents(ticketId: number, actionId: number): Promise<{ events: ActionEvent[] }> {
+  return staffGet<{ events: ActionEvent[] }>(`/api/tickets/${ticketId}/actions/${actionId}/events`);
 }

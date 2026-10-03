@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { getTicketDetail, downloadAttachment, removeAttachment, uploadAttachment, listTicketComments, postTicketComment, markProblemResolved, TicketComment } from "../api";
 import AttachmentSection, { Attachment, formatBangkok } from "../components/AttachmentSection";
 import { PriorityBadge, StatusBadge } from "../components/Badges.js";
+import { ActionsTab } from "../features/lab-04/components/ActionsTab.js";
 import { MessageTimeline, MessageComposer } from "../components/Communication.js";
 
 interface TicketDetailData {
@@ -306,6 +307,9 @@ export default function TicketDetail() {
                   {resolveError}
                 </div>
               )}
+              <div className="mt-4">
+                <ActionsTab ticketId={ticket.id} ticketStatus={ticket.currentStatus} mode="requester" owners={[]} />
+              </div>
             </div>
           )}
         </div>

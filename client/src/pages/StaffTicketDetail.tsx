@@ -18,6 +18,7 @@ import {
   TicketNote,
 } from "../api";
 import { PriorityBadge, StatusBadge } from "../components/Badges.js";
+import { ActionsTab } from "../features/lab-04/components/ActionsTab.js";
 import { MessageTimeline, MessageComposer } from "../components/Communication.js";
 import { formatBangkok } from "./MyTickets.js";
 
@@ -501,6 +502,10 @@ export default function StaffTicketDetail() {
                   Update Status
                 </button>
               </div>
+            </div>
+
+            <div className="mt-4">
+              <ActionsTab ticketId={ticketId} ticketStatus={ticket.currentStatus} mode="staff" owners={owners} />
             </div>
           </div>
         )}
