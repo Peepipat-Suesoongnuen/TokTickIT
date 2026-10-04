@@ -92,3 +92,35 @@ test("E2E-01 staff full action flow with requester read-only check", async ({ pa
 
   expect(pageFaults).toEqual([]);
 });
+
+test("E2E-01 (AC-006) staff cancels an action with history proof", async ({ page }) => {
+  const pageFaults = trackPageFaults(page);
+  page.on("dialog", (dialog) => void dialog.accept());
+
+  await login(page, REQ_EMAIL);
+  const ticketNumber = await createTicketViaUI(page, "E2E lab-04 action cancel journey");
+  await logout(page);
+
+  await login(page, STAFF_EMAIL);
+  await openStaffTicket(page, ticketNumber);
+  await page.getByRole("tab", { name: "Ticket Actions" }).click();
+  await page.getByRole("button", { name: "Claim Ticket" }).click();
+  await expect(page.getByText("Ticket claimed.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Record action" }).click();
+  await page.locator("#action-form-description").fill("E2E lab-04: action bound for cancel.");
+  await page.getByRole("button", { name: "Use current time" }).click();
+  await page.getByRole("button", { name: "Create action" }).click();
+  await expect(page.getByText("Action recorded.")).toBeVisible();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByText("Action started.")).toBeVisible();
+
+  // Cancel is terminal and confirmed; the row and history prove it.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByText("Action cancelled.")).toBeVisible();
+  await expect(page.getByLabel("CANCELLED").first()).toBeVisible();
+  await page.getByRole("button", { name: "History" }).first().click();
+  await expect(page.locator("[aria-label^='History for action']")).toContainText("CANCELLED");
+
+  expect(pageFaults).toEqual([]);
+});

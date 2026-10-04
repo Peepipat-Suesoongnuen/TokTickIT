@@ -17,6 +17,9 @@ import { loginAs, TEST_ORIGIN } from "../helpers/auth-test.js";
 // a match always means a leaked field, never fixture content.
 const PASSWORD = "Lab4-NotesAbs-81!";
 const RUN = `a81n-${Date.now().toString(36)}`;
+// Unique sentinel seeded as a REAL InternalNote: absence below proves no
+// content leak through any field name, not just known keys.
+const SENTINEL = `SEC03-SENTINEL-${RUN}-absent-everywhere`;
 
 const prisma = getPrisma();
 let reqId = 0;
@@ -31,6 +34,10 @@ function scanShape(label: string, body: unknown): void {
   expect(blob, `${label} leaks an internal-note key`).not.toMatch(/internalnotes?/i);
   expect(blob, `${label} leaks an internal_note key`).not.toMatch(/internal_note/i);
   expect(blob, `${label} carries a notes collection`).not.toMatch(/"notes"\s*:/);
+  // Reviewer finding 1 (FIX-REVIEW PR #87): key scans alone cannot catch
+  // note content smuggled through a differently-named field. Every scanned
+  // shape must also exclude the seeded sentinel below.
+  expect(blob, `${label} leaks seeded note content`).not.toContain(SENTINEL);
 }
 
 beforeAll(async () => {
@@ -55,6 +62,34 @@ beforeAll(async () => {
 });
 
 describe("Internal Notes absence from new response shapes (Issue #81, SEC-03)", () => {
+  it("positive control: the seeded sentinel IS detectable via its legitimate carrier", async () => {
+    const ticket = await prisma.ticket.create({
+      data: {
+        ticketNumber: `81${RUN.slice(-6)}-9001`,
+        requesterId: reqId,
+        categoryId,
+        relatedSystemId,
+        summary: `SEC-03 control fixture ${RUN}`,
+        description: "SEC-03 control description body.",
+        requestedPriority: "LOW",
+        itPriority: "LOW",
+        currentStatus: "OPEN",
+      },
+      select: { id: true },
+    });
+    await prisma.internalNote.create({
+      data: { ticketId: ticket.id, authorId: staffId, content: SENTINEL },
+    });
+    const res = await request(app)
+      .get(`/api/staff/tickets/${ticket.id}/internal-notes`)
+      .set("Origin", TEST_ORIGIN)
+      .set("Cookie", cookieStaff)
+      .expect(200);
+    // If THIS fails, the seeding/detectability chain is broken and every
+    // absence claim below is vacuous — never the other way around.
+    expect(JSON.stringify(res.body)).toContain(SENTINEL);
+  });
+
   it("dashboard payloads carry no note fields", async () => {
     const reqDash = await request(app)
       .get("/api/dashboard/requester")
@@ -94,6 +129,11 @@ describe("Internal Notes absence from new response shapes (Issue #81, SEC-03)", 
     scanShape("action create", created.body);
     const actionId = created.body.id as number;
 
+    // Seed a REAL Internal Note carrying the sentinel on this ticket.
+    await prisma.internalNote.create({
+      data: { ticketId: ticket.id, authorId: staffId, content: SENTINEL },
+    });
+
     const updated = await request(app)
       .put(`/api/staff/actions/${actionId}`)
       .set("Origin", TEST_ORIGIN)
@@ -128,6 +168,9 @@ describe("Internal Notes absence from new response shapes (Issue #81, SEC-03)", 
 
 afterAll(async () => {
   const prefix = `81${RUN.slice(-6)}-`;
+  const ticketIds = (
+    await prisma.ticket.findMany({ where: { ticketNumber: { startsWith: prefix } }, select: { id: true } })
+  ).map((t) => t.id);
   const actions = await prisma.actionTaken.findMany({
     where: { ticket: { ticketNumber: { startsWith: prefix } } },
     select: { id: true },
@@ -136,6 +179,9 @@ afterAll(async () => {
   if (actionIds.length > 0) {
     await prisma.actionTakenEvent.deleteMany({ where: { actionTakenId: { in: actionIds } } });
     await prisma.actionTaken.deleteMany({ where: { id: { in: actionIds } } });
+  }
+  if (ticketIds.length > 0) {
+    await prisma.internalNote.deleteMany({ where: { ticketId: { in: ticketIds } } });
   }
   await prisma.ticket.deleteMany({ where: { ticketNumber: { startsWith: prefix } } });
   await prisma.session.deleteMany({ where: { user: { email: { endsWith: `${RUN}@test.local` } } } });

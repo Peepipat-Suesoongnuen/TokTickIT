@@ -50,27 +50,44 @@ async function tabTo(page: import("@playwright/test").Page, name: RegExp, maxTab
   throw new Error(`keyboard: never reached ${name} within ${maxTabs} tabs`);
 }
 
-async function assertVisibleFocus(page: import("@playwright/test").Page, steps = 25): Promise<void> {
-  const invisible: unknown[] = [];
-  for (let i = 0; i < steps; i++) {
+// Reviewer finding 3 (FIX-REVIEW PR #87): a fixed step cap cannot prove
+// "every interactive element". This sweep tabs a FULL cycle — until focus
+// returns to the starting element (400-tab safety bound) — collecting every
+// focused control, then asserts each kept a visible indicator.
+async function assertFullCycleFocus(page: import("@playwright/test").Page, label: string): Promise<void> {
+  // Identity includes visible text: distinct controls sharing tag+class
+  // (e.g. repeated link styles) must NOT alias each other, or the cycle
+  // would break early and under-cover the page (audit catch on v1).
+  const start = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body) return "";
+    const text = ((el.textContent ?? "").trim().slice(0, 40));
+    return `${el.tagName}#${el.id}.${typeof el.className === "string" ? el.className.split(" ")[0] : ""}|${text}`;
+  });
+  const seen: string[] = [];
+  const invisible: string[] = [];
+  for (let i = 0; i < 400; i++) {
     await page.keyboard.press("Tab");
     const state = await page.evaluate(() => {
-      const el = document.activeElement;
+      const el = document.activeElement as HTMLElement | null;
       if (!el || el === document.body) return null;
       const style = getComputedStyle(el);
-      const tagged =
-        el.tagName +
-        "#" +
-        (el.id || "") +
-        "." +
-        (typeof el.className === "string" ? el.className.split(" ")[0] : "");
+      const text = ((el.textContent ?? "").trim().slice(0, 40));
+      const tagged = `${el.tagName}#${el.id}.${typeof el.className === "string" ? el.className.split(" ")[0] : ""}|${text}`;
       return { tagged, outline: style.outlineStyle, ring: style.boxShadow };
     });
-    if (state && state.outline === "none" && (!state.ring || state.ring === "none")) {
+    if (state === null) continue;
+    if (seen.length > 0 && state.tagged === seen[0]) break;
+    seen.push(state.tagged);
+    if (state.outline === "none" && (!state.ring || state.ring === "none")) {
       invisible.push(state.tagged);
     }
   }
-  expect(invisible, "focusable elements without a visible indicator").toEqual([]);
+  expect(seen.length, `${label}: full keyboard cycle visits controls`).toBeGreaterThan(0);
+  expect(invisible, `${label}: focusable elements without a visible indicator`).toEqual([]);
+  // Evidence transparency: how many distinct controls the cycle covered.
+  // eslint-disable-next-line no-console
+  console.log(`${label}: full-cycle focus sweep covered ${seen.length} controls, 0 invisible`);
 }
 
 test("A11Y-01 keyboard-only dashboard, action, history, and dialog flows", async ({ page }) => {
@@ -121,10 +138,14 @@ test("A11Y-01 keyboard-only dashboard, action, history, and dialog flows", async
   });
   expect(focusedInside, "focus moves into the opened history region").toBe(true);
 
-  // Visible focus indicators across the dashboard.
+  // Full-cycle sweep on the ticket actions view as well.
+  await assertFullCycleFocus(page, "ticket actions view");
+
+  // Full-cycle visible-focus sweep on the dashboard: every focusable
+  // control, not an arbitrary step cap.
   await page.goto("/staff-dashboard");
   await expect(page.getByText("Owned by me")).toBeVisible();
-  await assertVisibleFocus(page);
+  await assertFullCycleFocus(page, "staff dashboard");
 
   expect(pageFaults).toEqual([]);
 });
