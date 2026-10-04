@@ -90,6 +90,8 @@ test("A11Y-01 keyboard-only dashboard, action, history, and dialog flows", async
   await tabTo(page, /View owned tickets/i);
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/staff\/queue\?owner=me/);
+  // Destination content, not just URL (same SPA-swap race as E2E-03).
+  await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
 
   // Keyboard-only tab operation back on the detail page.
   await page.goto("/staff/queue");

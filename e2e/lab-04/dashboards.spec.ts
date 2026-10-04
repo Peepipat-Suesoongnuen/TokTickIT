@@ -70,12 +70,17 @@ test("E2E-03 dashboards drill down into exact datasets with ownership held", asy
   await expect(page.getByText("Open Tickets", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: /View open tickets/i }).click();
   await expect(page).toHaveURL(/\/my-tickets\?state=open/);
+  // Wait for the destination content, not just the URL: SPA navigation
+  // swaps the URL instantly while the dashboard is still mounted, so row
+  // assertions would race the unmount (CI strict-violation, FIX-BUILD).
+  await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
   await expect(page.getByRole("link", { name: ticketA })).toBeVisible();
   await expect(page.getByText(ticketB)).toHaveCount(0);
   // Resolved drill-down lands on an empty owned set (never foreign rows).
   await page.goto("/dashboard");
   await page.getByRole("link", { name: /View resolved tickets/i }).click();
   await expect(page).toHaveURL(/\/my-tickets\?state=resolved/);
+  await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
   await expect(page.getByText(ticketB)).toHaveCount(0);
   await logout(page);
 
@@ -85,14 +90,17 @@ test("E2E-03 dashboards drill down into exact datasets with ownership held", asy
   await expect(page.getByText("Owned by me")).toBeVisible();
   await page.getByRole("link", { name: /View urgent tickets/i }).click();
   await expect(page).toHaveURL(/itPriority=HIGH%2CCRITICAL|itPriority=HIGH,CRITICAL/);
+  await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
   await expect(page.getByRole("link", { name: ticketA })).toBeVisible();
   await page.goto("/staff-dashboard");
   await page.getByRole("link", { name: /View assigned tickets/i }).click();
   await expect(page).toHaveURL(/assignee=me/);
+  await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
   await expect(page.getByRole("link", { name: ticketA })).toBeVisible();
   await page.goto("/staff-dashboard");
   await page.getByRole("link", { name: /View owned tickets/i }).click();
   await expect(page).toHaveURL(/owner=me/);
+  await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
   await expect(page.getByRole("link", { name: ticketA })).toBeVisible();
   await logout(page);
 
