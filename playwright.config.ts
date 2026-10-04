@@ -10,6 +10,21 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "list",
   globalSetup: "./e2e/lab-02/global-setup.ts",
+  // Issue #81 (D-81-04, AC-020 determinism): lab-04 specs never retry —
+  // a pass-on-retry would hide a flake. Lab-02/03 keep the existing
+  // CI-only single retry untouched.
+  projects: [
+    {
+      name: "lab-04",
+      testDir: "./e2e/lab-04",
+      retries: 0,
+    },
+    {
+      name: "lab-02-03",
+      testDir: "./e2e",
+      testIgnore: ["**/lab-04/**"],
+    },
+  ],
   use: {
     baseURL: "http://127.0.0.1:5174",
     viewport: { width: 1440, height: 900 },
