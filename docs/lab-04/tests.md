@@ -93,7 +93,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
   | MIG-02 | Migration / seed | BR-027–BR-028, AC-019 | clean seed, rerun idempotency, 0/1/N distribution, lifecycle/cycle variety (owner ≠ assignee ≠ recorder fixtures), zero-metric fixtures | no duplicates; mutations preserved; coverage complete | Planned |
 | MIG-03 | Migration | BR-029, AC-019 | cycle column default and deterministic backfill on Lab 3 snapshot | every pre-existing Ticket backfilled to `resolutionCycle = 1`; `NOT NULL` holds; new Tickets start at 1 (SEED-0008 is the deliberate second-cycle seed fixture) | Planned |
 | MIG-04 | Migration / recovery | Handout §5.2, BR-026, AC-019 | snapshot → migrate → restore via documented procedure → re-migrate on Lab 3 snapshot | Lab 1–3 data intact every time; `resolutionCycle = 1`; no destructive op outside test DB | `server/tests/lab-04/migration-regression.test.ts` | Planned |
-| REG-01 | Regression | FR-019, AC-020 | Lab 1–3 server, client, and E2E suites incl. contract-first status-test updates | green on the exact tree | existing suites | Planned |
+| REG-01 | Regression | FR-019, AC-020 | Lab 1–3 server, client, and E2E suites incl. contract-first status-test updates | green on the exact tree | existing suites | LOCALLY VERIFIED |
 
 ## 4. Security / Authorization Tests
 
@@ -101,7 +101,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 |---|---|---|---|---|---|---|
 | SEC-01 | Security | matrix, AC-009 | role × action matrix over every new endpoint incl. ID manipulation and event paths | backend matches matrix regardless of UI | `actions-taken.api.test.ts` | Planned |
 | SEC-02 | Security | BR-017, AC-014 | cross-Requester dashboard, Ticket, and history access incl. id guessing | safe `403`/`404` with zero leakage | `requester-dashboard.api.test.ts` | Planned |
-| SEC-03 | Security | AC-020 | Internal Notes absence from every new response shape | no note field or content anywhere | notes regression + new-shape scans | Planned |
+| SEC-03 | Security | AC-020 | Internal Notes absence from every new response shape | no note field or content anywhere | notes regression + new-shape scans | LOCALLY VERIFIED |
 | SEC-04 | Security | matrix + Lab 3 BR-57, AC-009 | password-gate wiring on every Lab 4 endpoint (LAP4-01–08 + both dashboards): valid session but `mustChangePassword = true` | `403` on every endpoint (only login/change/logout pass — Lab 3 baseline) | `server/tests/lab-04/actions-taken.api.test.ts` + dashboard suites | Planned |
 
 ## 5. UI Component Tests (`client/src/features/lab-04/tests/` — To be created)
@@ -119,12 +119,12 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
-| E2E-01 | E2E | AC-001–AC-009 | staff full action flow (create → start → edit → complete → history) with requester read-only check | consistent with API state end to end | `actions-taken-flow.spec.ts` | Planned |
+| E2E-01 | E2E | AC-001–AC-009 | staff full action flow (create → start → edit → complete → history) with requester read-only check | consistent with API state end to end | `actions-taken-flow.spec.ts` | LOCALLY VERIFIED |
 | E2E-02 | E2E | AC-010–AC-013 | blocked resolve → complete → resolve → close → reopen → resolve-again journey | gate visible, passes, re-arms | `ticket-resolution.spec.ts` | Planned |
 | E2E-03 | E2E | AC-014–AC-016 | both dashboards with drill-down into filtered lists; ownership held | correct scope and navigation | `dashboards.spec.ts` | Planned |
-| A11Y-01 | E2E / accessibility | ui-spec §9 | keyboard-only dashboard, action, and history flows | reachable and operable; focus visible; dialogs trap with Escape and focus return; labels correct | `accessibility.spec.ts` | Planned |
-| VISUAL-01 | Responsive / visual | ui-spec §8 | 1440/900/375 screenshots of all major Lab 4 screens | no clipping, overlap, or page horizontal scroll; continuity held | `visual-states.spec.ts` | Planned |
-| PERF-01 | Perf-smoke | contract §9 | dashboard API and UI response measured on seeded data | numbers recorded; no tuning claims made | `dashboard-perf.spec.ts` | Planned |
+| A11Y-01 | E2E / accessibility | ui-spec §9 | keyboard-only dashboard, action, and history flows | reachable and operable; focus visible; dialogs trap with Escape and focus return; labels correct | `accessibility.spec.ts` | LOCALLY VERIFIED |
+| VISUAL-01 | Responsive / visual | ui-spec §8 | 1440/900/375 screenshots of all major Lab 4 screens | no clipping, overlap, or page horizontal scroll; continuity held | `visual-states.spec.ts` | LOCALLY VERIFIED |
+| PERF-01 | Perf-smoke | contract §9 | dashboard API and UI response measured on seeded data | numbers recorded; no tuning claims made | `dashboard-perf.spec.ts` | LOCALLY VERIFIED |
 
 ## 7. Acceptance-Criterion Traceability Matrix
 

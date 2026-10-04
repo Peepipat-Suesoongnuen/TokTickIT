@@ -24,24 +24,29 @@ toktickit/
 │       ├── styles/                 # Lab 2 Zen Green theme (+ Lab 3 extensions)
 │       └── features/
 │           ├── lab-02/tests/       # UI/component/style tests
-│           └── lab-03/tests/       # Lab 3 UI/component tests
+│           ├── lab-03/tests/       # Lab 3 UI/component tests
+│           └── lab-04/tests/       # Lab 4 dashboards/drill-down/actions UI tests
 ├── server/
 │   ├── prisma/                      # Prisma schema, migrations, seed
 │   ├── src/                         # Express app + helpers (+ auth/staff/admin routes)
 │   ├── tests/
 │   │   ├── lab-02/                  # API/integration tests
-│   │   └── lab-03/                  # Auth/session/queue/workflow/admin/concurrency tests
+│   │   ├── lab-03/                  # Auth/session/queue/workflow/admin/concurrency tests
+│   │   └── lab-04/                  # Actions/workflow/dashboards/notes-absence/migration tests
 │   └── uploads/                     # Runtime attachment storage (ignored)
 ├── e2e/
 │   ├── lab-02/                      # Playwright requester flow + visual states
-│   └── lab-03/                      # Auth, staff, communication, admin, security, regression, a11y, visual specs
+│   ├── lab-03/                      # Auth, staff, communication, admin, security, regression, a11y, visual specs
+│   └── lab-04/                      # Actions flow, resolution journey, dashboards drill-down, a11y, visual, perf-smoke specs
 ├── artifacts/
 │   ├── lab-02/screenshots/          # Responsive/visual evidence
-│   └── lab-03/screenshots/          # Lab 3 evidence by role/screen/state
+│   ├── lab-03/screenshots/          # Lab 3 evidence by role/screen/state
+│   └── lab-04/                      # Lab 4 screenshots/ + perf-smoke numbers
 ├── docs/
 │   ├── lab-01/
 │   ├── lab-02/                      # specification/api/ui/tests/reviewer/ai-use
-│   └── lab-03/                      # specification/api-spec/ui-spec/tests/reviewer/ai-use
+│   ├── lab-03/                      # specification/api-spec/ui-spec/tests/reviewer/ai-use
+│   └── lab-04/                      # specification/api-spec/ui-spec/tests (Lab 4 engineering contract)
 ├── playwright.config.ts
 ├── package.json                     # Root Playwright scripts
 └── README.md
@@ -196,7 +201,7 @@ $env:DATABASE_URL=$env:TEST_DATABASE_URL
 npm run test:e2e
 ```
 
-The Playwright global setup applies migrations/seeding to the isolated test database. Responsive and visual screenshots are written under `artifacts/lab-02/screenshots/` (Lab 2) and `artifacts/lab-03/screenshots/` (Lab 3, by role/screen/state).
+The Playwright global setup applies migrations/seeding to the isolated test database. Responsive and visual screenshots are written under `artifacts/lab-02/screenshots/` (Lab 2), `artifacts/lab-03/screenshots/` (Lab 3, by role/screen/state), and `artifacts/lab-04/screenshots/` (Lab 4: `staff-dashboard/`, `requester-dashboard/`, `actions-taken/` at 1440/900/375). Dashboard perf-smoke numbers land in `artifacts/lab-04/perf/dashboard-smoke.json` (measure-only, no thresholds).
 
 ### Typecheck/build checks used before PR handoff
 
