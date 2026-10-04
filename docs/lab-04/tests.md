@@ -120,8 +120,8 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
 | E2E-01 | E2E | AC-001–AC-009 | staff full action flow (create → start → edit → complete → history) with requester read-only check | consistent with API state end to end | `actions-taken-flow.spec.ts` | LOCALLY VERIFIED |
-| E2E-02 | E2E | AC-010–AC-013 | blocked resolve → complete → resolve → close → reopen → resolve-again journey | gate visible, passes, re-arms | `ticket-resolution.spec.ts` | Planned |
-| E2E-03 | E2E | AC-014–AC-016 | both dashboards with drill-down into filtered lists; ownership held | correct scope and navigation | `dashboards.spec.ts` | Planned |
+| E2E-02 | E2E | AC-010–AC-013 | blocked resolve → complete → resolve → close → reopen → resolve-again journey | gate visible, passes, re-arms | `ticket-resolution.spec.ts` | LOCALLY VERIFIED |
+| E2E-03 | E2E | AC-014–AC-016 | both dashboards with drill-down into filtered lists; ownership held | correct scope and navigation | `dashboards.spec.ts` | LOCALLY VERIFIED |
 | A11Y-01 | E2E / accessibility | ui-spec §9 | keyboard-only dashboard, action, and history flows | reachable and operable; focus visible; dialogs trap with Escape and focus return; labels correct | `accessibility.spec.ts` | LOCALLY VERIFIED |
 | VISUAL-01 | Responsive / visual | ui-spec §8 | 1440/900/375 screenshots of all major Lab 4 screens | no clipping, overlap, or page horizontal scroll; continuity held | `visual-states.spec.ts` | LOCALLY VERIFIED |
 | PERF-01 | Perf-smoke | contract §9 | dashboard API and UI response measured on seeded data | numbers recorded; no tuning claims made | `dashboard-perf.spec.ts` | LOCALLY VERIFIED |
