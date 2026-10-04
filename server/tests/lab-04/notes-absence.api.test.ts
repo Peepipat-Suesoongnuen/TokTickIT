@@ -163,6 +163,23 @@ describe("Internal Notes absence from new response shapes (Issue #81, SEC-03)", 
       .set("Cookie", cookieStaff)
       .expect(200);
     scanShape("action events", events.body);
+
+    // Reviewer finding 3 (FIX-REVIEW PR #87 round 3): the cancel response is
+    // its own new shape and was never scanned. A second action is cancelled
+    // (E2E cancel coverage does not substitute for this payload scan).
+    const doomed = await request(app)
+      .post(`/api/staff/tickets/${ticket.id}/actions`)
+      .set("Origin", TEST_ORIGIN)
+      .set("Cookie", cookieStaff)
+      .send({ description: `SEC-03 doomed action ${RUN}`, clientRequestId: randomUUID() })
+      .expect(201);
+    const cancelled = await request(app)
+      .post(`/api/staff/actions/${doomed.body.id as number}/cancel`)
+      .set("Origin", TEST_ORIGIN)
+      .set("Cookie", cookieStaff)
+      .send({ expectedVersion: 1 })
+      .expect(200);
+    scanShape("action cancel", cancelled.body);
   });
 });
 

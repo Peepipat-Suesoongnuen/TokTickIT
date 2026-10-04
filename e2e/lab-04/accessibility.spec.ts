@@ -50,44 +50,94 @@ async function tabTo(page: import("@playwright/test").Page, name: RegExp, maxTab
   throw new Error(`keyboard: never reached ${name} within ${maxTabs} tabs`);
 }
 
-// Reviewer finding 3 (FIX-REVIEW PR #87): a fixed step cap cannot prove
-// "every interactive element". This sweep tabs a FULL cycle — until focus
-// returns to the starting element (400-tab safety bound) — collecting every
-// focused control, then asserts each kept a visible indicator.
+// Reviewer findings 1+2 (FIX-REVIEW PR #87 round 3): the v1 sweep computed
+// a `start` it never used, broke on first-repeat identity (not proven
+// return-to-start), and accepted any outline/box-shadow as proof.
+// This version guarantees, by construction:
+// - DOM-node identity via expando marks (no two distinct elements alias;
+//   identity collision is impossible, not merely unlikely).
+// - Termination ONLY on refocus of the marked starting element; the 400-tab
+//   bound is an explicit FAIL (cycle never closed), never a silent break.
+// - Visible-focus proof requires outline-width > 0 plus a non-transparent
+//   outline color. Decorative pre-existing box-shadows never count.
 async function assertFullCycleFocus(page: import("@playwright/test").Page, label: string): Promise<void> {
-  // Identity includes visible text: distinct controls sharing tag+class
-  // (e.g. repeated link styles) must NOT alias each other, or the cycle
-  // would break early and under-cover the page (audit catch on v1).
-  const start = await page.evaluate(() => {
-    const el = document.activeElement as HTMLElement | null;
-    if (!el || el === document.body) return "";
-    const text = ((el.textContent ?? "").trim().slice(0, 40));
-    return `${el.tagName}#${el.id}.${typeof el.className === "string" ? el.className.split(" ")[0] : ""}|${text}`;
+  await page.evaluate(() => {
+    document.querySelectorAll("*").forEach((e) => {
+      delete (e as unknown as Record<string, unknown>).__sweepSeen;
+      delete (e as unknown as Record<string, unknown>).__sweepStart;
+    });
   });
-  const seen: string[] = [];
+  await page.keyboard.press("Tab");
+  const started: boolean = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body) return false;
+    (el as unknown as Record<string, unknown>).__sweepStart = true;
+    (el as unknown as Record<string, unknown>).__sweepSeen = true;
+    return true;
+  });
+  expect(started, `${label}: keyboard focus enters the page`).toBe(true);
+  let terminatedByReturn = false;
+  let visited = 1;
   const invisible: string[] = [];
+  // The starting element counts as visited: prove its indicator too.
+  const startStyle = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el) return null;
+    const style = getComputedStyle(el);
+    return { outline: style.outlineStyle, width: style.outlineWidth, color: style.outlineColor };
+  });
+  if (startStyle && !hasFocusIndicator(startStyle)) invisible.push("start-element");
   for (let i = 0; i < 400; i++) {
     await page.keyboard.press("Tab");
     const state = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;
       if (!el || el === document.body) return null;
+      const rec = el as unknown as Record<string, unknown>;
+      if (rec.__sweepStart === true) return { returned: true as boolean, tagged: "", ok: true };
+      if (rec.__sweepSeen === true) {
+        // A repeat that is NOT the start element: DOM churn replaced nodes
+        // mid-sweep, so closure is unprovable on this pass.
+        return { returned: false, tagged: "", ok: false, churned: true };
+      }
+      rec.__sweepSeen = true;
       const style = getComputedStyle(el);
-      const text = ((el.textContent ?? "").trim().slice(0, 40));
-      const tagged = `${el.tagName}#${el.id}.${typeof el.className === "string" ? el.className.split(" ")[0] : ""}|${text}`;
-      return { tagged, outline: style.outlineStyle, ring: style.boxShadow };
+      const tagged = `${el.tagName}#${el.id}`;
+      return { returned: false, tagged, ok: true, churned: false, outline: style.outlineStyle, width: style.outlineWidth, color: style.outlineColor };
     });
     if (state === null) continue;
-    if (seen.length > 0 && state.tagged === seen[0]) break;
-    seen.push(state.tagged);
-    if (state.outline === "none" && (!state.ring || state.ring === "none")) {
-      invisible.push(state.tagged);
+    if (state.returned) {
+      terminatedByReturn = true;
+      break;
     }
+    if (state.churned) break;
+    visited += 1;
+    if (!hasFocusIndicator(state)) invisible.push(state.tagged);
   }
-  expect(seen.length, `${label}: full keyboard cycle visits controls`).toBeGreaterThan(0);
-  expect(invisible, `${label}: focusable elements without a visible indicator`).toEqual([]);
+  expect(terminatedByReturn, `${label}: cycle closed by returning to the starting element`).toBe(true);
+  expect(invisible, `${label}: focusable elements without a real visible indicator`).toEqual([]);
   // Evidence transparency: how many distinct controls the cycle covered.
   // eslint-disable-next-line no-console
-  console.log(`${label}: full-cycle focus sweep covered ${seen.length} controls, 0 invisible`);
+  console.log(`${label}: full-cycle focus sweep covered ${visited} controls, 0 invisible`);
+}
+
+function hasFocusIndicator(state: { outline?: string; width?: string; color?: string }): boolean {
+  if (!state.outline || state.outline === "none") return false;
+  const width = Number.parseFloat(state.width ?? "0");
+  if (!Number.isFinite(width) || width <= 0) return false;
+  return !isTransparentColor(state.color ?? "");
+}
+
+function isTransparentColor(color: string): boolean {
+  const c = color.trim().toLowerCase();
+  if (c === "transparent") return true;
+  const rgba = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/);
+  if (rgba) {
+    const alpha = rgba[4] === undefined ? 1 : Number.parseFloat(rgba[4]);
+    return alpha <= 0;
+  }
+  const hex = c.match(/^#([0-9a-f]{8})$/);
+  if (hex) return Number.parseInt(hex[1].slice(6, 8), 16) === 0;
+  return false;
 }
 
 test("A11Y-01 keyboard-only dashboard, action, history, and dialog flows", async ({ page }) => {

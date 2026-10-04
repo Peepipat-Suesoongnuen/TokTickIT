@@ -1,9 +1,9 @@
 {
-  "measuredAt": "2026-10-04T11:40:24.383Z",
+  "measuredAt": "2026-10-04T16:10:34.059Z",
   "dataset": "shared toktickit_test seeded baseline plus dedicated e2e-lab04-perf users",
   "notes": "measure-only smoke; no thresholds asserted, no tuning claims",
-  "api_requester_dashboard_ms": 20,
-  "ui_requester_dashboard_ms": 311,
-  "api_staff_dashboard_ms": 24,
-  "ui_staff_dashboard_ms": 309
+  "api_requester_dashboard_ms": 9,
+  "ui_requester_dashboard_ms": 167,
+  "api_staff_dashboard_ms": 13,
+  "ui_staff_dashboard_ms": 179
 }
