@@ -192,9 +192,9 @@ The PostgreSQL test database stays separate from development data through `TEST_
 
 | Test group | Current result | Evidence / limitation |
 |---|---|---|
-| E2E-01, A11Y-01, VISUAL-01, PERF-01 | LOCALLY VERIFIED | Feature-branch local evidence summarized in [baseline verification](../../artifacts/lab-04/evidence/baseline-verification.md) and [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md). |
-| E2E-02, E2E-03 | LOCALLY VERIFIED | Targeted Playwright run on 2026-10-30: `ticket-resolution.spec.ts` and `dashboards.spec.ts`, 2 passed. |
-| REG-01, SEC-03 | LOCALLY VERIFIED | Feature-branch local evidence; exact final-main verification remains pending. |
+| E2E-01, A11Y-01, VISUAL-01, PERF-01 | LOCALLY VERIFIED — `baseline-verification.md` E-05 + `visual-a11y-checklist.md`, 2026-10-30 | Feature-branch local evidence summarized in [baseline verification](../../artifacts/lab-04/evidence/baseline-verification.md) and [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md). |
+| E2E-02, E2E-03 | LOCALLY VERIFIED — targeted Playwright command, 2026-10-30 | Targeted Playwright run: `ticket-resolution.spec.ts` and `dashboards.spec.ts`, 2 passed. |
+| REG-01, SEC-03 | LOCALLY VERIFIED — `baseline-verification.md` E-02/E-03/E-06, 2026-10-30 | Feature-branch local evidence; exact final-main verification remains pending. |
 | Remaining planned test rows | Planned or previously recorded local evidence | Check each row and its linked artifact before making any stronger claim. |
 | Exact final-main suite and hosted CI | Pending | Requires the later release and merge gates in the approved plan. |
 
