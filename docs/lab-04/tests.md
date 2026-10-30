@@ -195,8 +195,8 @@ The PostgreSQL test database stays separate from development data through `TEST_
 | E2E-01, A11Y-01, VISUAL-01, PERF-01 | LOCALLY VERIFIED — `baseline-verification.md` E-05 + `visual-a11y-checklist.md`, 2026-10-30 | Feature-branch local evidence summarized in [baseline verification](../../artifacts/lab-04/evidence/baseline-verification.md) and [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md). |
 | E2E-02, E2E-03 | LOCALLY VERIFIED — targeted Playwright command, 2026-10-30 | Targeted Playwright run: `ticket-resolution.spec.ts` and `dashboards.spec.ts`, 2 passed. |
 | REG-01, SEC-03 | LOCALLY VERIFIED — `baseline-verification.md` E-02/E-03/E-06, 2026-10-30 | Feature-branch local evidence; exact final-main verification remains pending. |
-| Remaining planned test rows | Planned or previously recorded local evidence | Check each row and its linked artifact before making any stronger claim. |
-| Exact final-main suite and hosted CI | Pending | Requires the later release and merge gates in the approved plan. |
+| Remaining planned test rows | PLANNED — §§2–6; the individual rows remain Planned | Check each row and its linked artifact before making any stronger claim. |
+| Exact final-main suite and hosted CI | PLANNED — release and final-main gates have not been reached (E-16–E-17) | Requires the later release and merge gates in the approved plan. |
 
 Statuses used: `SPECIFIED` (the plan-time state), `IMPLEMENTED`, `LOCALLY VERIFIED`, `CI VERIFIED`, `EVIDENCE CAPTURED`, `APPROVED`, and `MERGED`. Each non-`Planned` cell uses the grammar `<LEVEL> — <citation>`; for example, `LOCALLY VERIFIED — <command>, <date>`. The test-row status and release-level evidence ledger are separate tracks: the ledger begins at `IMPLEMENTED` (E-01), while `Planned` is the plan-time `SPECIFIED` state. Only final-main evidence advances final-status claims. The words `PASS`, `100% COMPLETE`, and `DONE` MUST NOT appear as verdicts without supporting evidence.
 

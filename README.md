@@ -235,11 +235,10 @@ Hosted CI runs server, client, E2E, and migration-proof jobs on push/pull-reques
 
 ## Lab 4 Release Evidence
 
-Lab 4 release documentation and evidence are maintained in the following locations:
+Lab 4 release evidence is maintained in the following locations:
 
 - Test plan and acceptance-criterion traceability: [`docs/lab-04/tests.md`](docs/lab-04/tests.md)
-- Submission source: [`docs/lab-04/submission.html`](docs/lab-04/submission.html) and [`docs/lab-04/submission.md`](docs/lab-04/submission.md)
-- Rendered submission PDF: [`artifacts/lab-04/submission/SE-Lab4-67070507207.pdf`](artifacts/lab-04/submission/SE-Lab4-67070507207.pdf)
+- Owner-managed submission PDF: [`artifacts/lab-04/submission/SE-Lab4-67070507207.pdf`](artifacts/lab-04/submission/SE-Lab4-67070507207.pdf)
 - Verification records and evidence ledger: [`artifacts/lab-04/evidence/`](artifacts/lab-04/evidence/)
 
-The submission is finalized only after exact-head release and final-main evidence is available. Local test results are identified separately from hosted CI and merged-release results.
+The owner prepares the single submission PDF. No separate Answer Part 1–9 files are maintained in `docs/lab-04/`. The submission is finalized only after exact-head release and final-main evidence is available. Local test results are identified separately from hosted CI and merged-release results.
