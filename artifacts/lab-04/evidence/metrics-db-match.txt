@@ -1,0 +1,19 @@
+
+ RUN  v2.1.9 C:/kmutt2026/01-2026/Software_Engineer/TokTickIT/server
+
+ ✓ tests/lab-04/staff-dashboard.api.test.ts > Staff dashboard (Issue #80, LAP4-07) > API-22 attribution metrics match direct DB queries
+ ✓ tests/lab-04/staff-dashboard.api.test.ts > Staff dashboard (Issue #80, LAP4-07) > API-22b future/skew completions are excluded from recordedByMe
+ ✓ tests/lab-04/staff-dashboard.api.test.ts > Staff dashboard (Issue #80, LAP4-07) > API-23c queue ?state= scopes drill-down sets (D-80-09)
+ ✓ tests/lab-04/staff-dashboard.api.test.ts > Staff dashboard (Issue #80, LAP4-07) > API-23 urgent vs recent separation; assignedToMe equals ?assignee= destination
+ ✓ tests/lab-04/staff-dashboard.api.test.ts > Staff dashboard (Issue #80, LAP4-07) > API-23b blocked deactivate never tears the assignedToMe count 351ms
+ ✓ tests/lab-04/staff-dashboard.api.test.ts > Staff dashboard (Issue #80, LAP4-07) > API-24 Admin userCounts shape; Staff omission; Requester denial; no PII
+ ✓ tests/lab-04/staff-dashboard.api.test.ts > Staff dashboard (Issue #80, LAP4-07) > SEC-04 password gate wiring on both dashboards
+ ✓ tests/lab-04/requester-dashboard.api.test.ts > Requester dashboard (Issue #80, LAP4-06) > API-21 requester metrics and recents are owned-only with exact links
+ ✓ tests/lab-04/requester-dashboard.api.test.ts > Requester dashboard (Issue #80, LAP4-06) > API-21 zero-ticket requester gets zeros and empty lists, never 404
+ ✓ tests/lab-04/requester-dashboard.api.test.ts > Requester dashboard (Issue #80, LAP4-06) > API-21 malformed auth is rejected without leakage
+ ✓ tests/lab-04/requester-dashboard.api.test.ts > Requester dashboard (Issue #80, LAP4-06) > SEC-02 cross-requester dashboard access leaks nothing
+
+ Test Files  2 passed (2)
+      Tests  11 passed (11)
+   Start at  16:28:29
+   Duration  1.73s (transform 151ms, setup 0ms, collect 417ms, tests 1.06s, environment 0ms, prepare 63ms)
