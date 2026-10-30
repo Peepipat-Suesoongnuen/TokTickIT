@@ -13,7 +13,7 @@ Append-only record. Pins identify the tree or run the evidence proves; recording
 | E-07 | Multi-action and history captures | EVIDENCE CAPTURED | `DOC_SHA=bef9fb22c82de0e60a5a5381006a5b331c9d3713` | `screenshots/actions-taken/multiple-actions.png`; `screenshots/actions-taken/history.png`; test in `e2e/lab-04/visual-states.spec.ts` |
 | E-08 | Dashboard metric-to-DB run | EVIDENCE CAPTURED | `RC_SHA` | `metrics-db-match.txt` and `metrics-db-match.md`; 2 files / 11 tests passed |
 | E-09 | §10 visual checklist and visual/a11y review | EVIDENCE CAPTURED | `DOC_SHA=bef9fb22c82de0e60a5a5381006a5b331c9d3713` | `visual-a11y-checklist.md`; five §10 boxes ticked with citations |
-| E-10 | Evidence commit + hash binding | EVIDENCE CAPTURED | `DOC_SHA=bef9fb22c82de0e60a5a5381006a5b331c9d3713` | Verified `git hash-object` against commit blobs for history/multiple-actions screenshots, metrics output/summary, and evidence ledger; hashes match |
+| E-10 | Evidence commit + hash binding | EVIDENCE CAPTURED | `DOC_SHA=bef9fb22c82de0e60a5a5381006a5b331c9d3713` | `git hash-object` matched the `DOC_SHA` commit blobs for the history/multiple-actions screenshots and metrics output/summary. The ledger blob itself is not claimed to be hash-bound by this row; its later wording is a correction to the record, not part of the pinned `DOC_SHA` tree. |
 | E-11 | Feature PR CI 4/4 | PLANNED | `DOC_SHA` | Awaiting PR head CI |
 | E-12 | Artifacts present in CI-verified tree | PLANNED | `DOC_SHA` | Awaiting tree check |
 | E-13 | Feature PR approval | PLANNED | `DOC_SHA` | Awaiting peer review |
