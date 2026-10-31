@@ -4,7 +4,7 @@ Companion to [specification.md](./specification.md), [api-spec.md](./api-spec.md
 
 **Final-status rule:** every row starts `Planned`. `Final = Pass` is allowed only after the corresponding automated evidence passes on the exact final `main` release tree. Retry or flaky outcomes are reported truthfully. Forbidden words in this plan's verdicts: `PASS` without evidence, `100% COMPLETE`, `DONE`.
 
-**Path convention:** `server/tests/lab-04/*` and `e2e/lab-04/*` are To be created. `client/src/features/lab-04/tests/*` is To be created (mirroring the Lab 3 layout). Existing suites are named by their current paths.
+**Path convention:** Paths below identify planned or existing test targets. Verify the current repository before creating a test file; do not treat a planned path as evidence that a test exists.
 
 ## 1. Test Strategy
 
@@ -23,7 +23,7 @@ Companion to [specification.md](./specification.md), [api-spec.md](./api-spec.md
 
 Security-sensitive behavior is proved at the backend boundary. A hidden button or route is NOT authorization evidence.
 
-## 2. Planned Unit Tests (`server/src/lib/__tests__/` — To be created unless noted)
+## 2. Planned Unit Tests (`server/src/lib/__tests__/`)
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
@@ -34,7 +34,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 
 ## 3. Planned API / Integration Tests
 
-### Actions Taken — `server/tests/lab-04/actions-taken.api.test.ts` (To be created)
+### Actions Taken — `server/tests/lab-04/actions-taken.api.test.ts`
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
@@ -74,7 +74,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | API-19 | API / concurrency | BR-024, AC-017 | resolve racing concurrent action completion (real overlapping ops) | gate evaluated atomically; no bypass possible | Planned |
 | API-20 | API / concurrency | BR-023, AC-017 | stale-version concurrent edits and transitions (A reads v3, B commits v4, A submits v3) | A receives `409 ACTION_STATE_CHANGED`; final version exact | Planned |
 
-### Dashboards — `server/tests/lab-04/requester-dashboard.api.test.ts`, `staff-dashboard.api.test.ts` (To be created)
+### Dashboards — `server/tests/lab-04/requester-dashboard.api.test.ts`, `staff-dashboard.api.test.ts`
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
@@ -85,7 +85,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | API-23b | API | AC-015 | `assignedToMe` when the assignee is deactivated mid-count: metric MUST NOT reference actions whose deactivate failed to commit | count always equals the destination query | Planned |
 | API-24 | API | AC-016 | Admin `userCounts` shape; Staff omission; Requester denial; shape scan | exact shape; no key for Staff; `403` for Requester; no PII | Planned |
 
-### Migration / regression — `server/tests/lab-04/migration-regression.test.ts` (To be created)
+### Migration / regression — `server/tests/lab-04/migration-regression.test.ts`
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Final |
 |---|---|---|---|---|---|
@@ -93,7 +93,7 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
   | MIG-02 | Migration / seed | BR-027–BR-028, AC-019 | clean seed, rerun idempotency, 0/1/N distribution, lifecycle/cycle variety (owner ≠ assignee ≠ recorder fixtures), zero-metric fixtures | no duplicates; mutations preserved; coverage complete | Planned |
 | MIG-03 | Migration | BR-029, AC-019 | cycle column default and deterministic backfill on Lab 3 snapshot | every pre-existing Ticket backfilled to `resolutionCycle = 1`; `NOT NULL` holds; new Tickets start at 1 (SEED-0008 is the deliberate second-cycle seed fixture) | Planned |
 | MIG-04 | Migration / recovery | Handout §5.2, BR-026, AC-019 | snapshot → migrate → restore via documented procedure → re-migrate on Lab 3 snapshot | Lab 1–3 data intact every time; `resolutionCycle = 1`; no destructive op outside test DB | `server/tests/lab-04/migration-regression.test.ts` | Planned |
-| REG-01 | Regression | FR-019, AC-020 | Lab 1–3 server, client, and E2E suites incl. contract-first status-test updates | green on the exact tree | existing suites | LOCALLY VERIFIED |
+| REG-01 | Regression | FR-019, AC-020 | Lab 1–3 server, client, and E2E suites incl. contract-first status-test updates | green on the exact tree | existing suites | LOCALLY VERIFIED — baseline verification record, 2026-10-30 |
 
 ## 4. Security / Authorization Tests
 
@@ -101,10 +101,10 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 |---|---|---|---|---|---|---|
 | SEC-01 | Security | matrix, AC-009 | role × action matrix over every new endpoint incl. ID manipulation and event paths | backend matches matrix regardless of UI | `actions-taken.api.test.ts` | Planned |
 | SEC-02 | Security | BR-017, AC-014 | cross-Requester dashboard, Ticket, and history access incl. id guessing | safe `403`/`404` with zero leakage | `requester-dashboard.api.test.ts` | Planned |
-| SEC-03 | Security | AC-020 | Internal Notes absence from every new response shape | no note field or content anywhere | notes regression + new-shape scans | LOCALLY VERIFIED |
+| SEC-03 | Security | AC-020 | Internal Notes absence from every new response shape | no note field or content anywhere | notes regression + new-shape scans | LOCALLY VERIFIED — baseline verification record, 2026-10-30 |
 | SEC-04 | Security | matrix + Lab 3 BR-57, AC-009 | password-gate wiring on every Lab 4 endpoint (LAP4-01–08 + both dashboards): valid session but `mustChangePassword = true` | `403` on every endpoint (only login/change/logout pass — Lab 3 baseline) | `server/tests/lab-04/actions-taken.api.test.ts` + dashboard suites | Planned |
 
-## 5. UI Component Tests (`client/src/features/lab-04/tests/` — To be created)
+## 5. UI Component Tests (`client/src/features/lab-04/tests/`)
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
@@ -115,16 +115,16 @@ Security-sensitive behavior is proved at the backend boundary. A hidden button o
 | UI-05 | UI | drill-down contract | lists initialize filters/sort from query incl. `?assignee=`, CSV `?itPriority=`, role init; unknown values ignored; metric equals destination count | filters match query; safe defaults otherwise | `DrillDown.test.tsx` | Planned |
 | STYLE-01 | Style | ui-spec §1/§5 | Zen Green continuity, status badges (`PLANNED` etc., never `OPEN`/`WORKING`), read-only vs editable | conforms | `dashboard-actions-style.test.tsx` | Planned |
 
-## 6. E2E / Accessibility / Visual (`e2e/lab-04/` — To be created)
+## 6. E2E / Accessibility / Visual (`e2e/lab-04/`)
 
 | ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
-| E2E-01 | E2E | AC-001–AC-009 | staff full action flow (create → start → edit → complete → history) with requester read-only check | consistent with API state end to end | `actions-taken-flow.spec.ts` | LOCALLY VERIFIED |
-| E2E-02 | E2E | AC-010–AC-013 | blocked resolve → complete → resolve → close → reopen → resolve-again journey | gate visible, passes, re-arms | `ticket-resolution.spec.ts` | Planned |
-| E2E-03 | E2E | AC-014–AC-016 | both dashboards with drill-down into filtered lists; ownership held | correct scope and navigation | `dashboards.spec.ts` | Planned |
-| A11Y-01 | E2E / accessibility | ui-spec §9 | keyboard-only dashboard, action, and history flows | reachable and operable; focus visible; dialogs trap with Escape and focus return; labels correct | `accessibility.spec.ts` | LOCALLY VERIFIED |
-| VISUAL-01 | Responsive / visual | ui-spec §8 | 1440/900/375 screenshots of all major Lab 4 screens | no clipping, overlap, or page horizontal scroll; continuity held | `visual-states.spec.ts` | LOCALLY VERIFIED |
-| PERF-01 | Perf-smoke | contract §9 | dashboard API and UI response measured on seeded data | numbers recorded; no tuning claims made | `dashboard-perf.spec.ts` | LOCALLY VERIFIED |
+| E2E-01 | E2E | AC-001–AC-009 | staff full action flow (create → start → edit → complete → history) with requester read-only check | consistent with API state end to end | `actions-taken-flow.spec.ts` | LOCALLY VERIFIED — baseline verification record, 2026-10-30 |
+| E2E-02 | E2E | AC-010–AC-013 | blocked resolve → complete → resolve → close → reopen → resolve-again journey | gate visible, passes, re-arms | `ticket-resolution.spec.ts` | LOCALLY VERIFIED — Playwright targeted run, 2026-10-30 |
+| E2E-03 | E2E | AC-014–AC-016 | both dashboards with drill-down into filtered lists; ownership held | correct scope and navigation | `dashboards.spec.ts` | LOCALLY VERIFIED — Playwright targeted run, 2026-10-30 |
+| A11Y-01 | E2E / accessibility | ui-spec §9 | keyboard-only dashboard, action, and history flows | reachable and operable; focus visible; dialogs trap with Escape and focus return; labels correct | `accessibility.spec.ts` | LOCALLY VERIFIED — visual/a11y checklist, 2026-10-30 |
+| VISUAL-01 | Responsive / visual | ui-spec §8 | 1440/900/375 screenshots of all major Lab 4 screens | no clipping, overlap, or page horizontal scroll; continuity held | `visual-states.spec.ts` | LOCALLY VERIFIED — visual/a11y checklist, 2026-10-30 |
+| PERF-01 | Perf-smoke | contract §9 | dashboard API and UI response measured on seeded data | numbers recorded; no tuning claims made | `dashboard-perf.spec.ts` | LOCALLY VERIFIED — baseline verification record, 2026-10-30 |
 
 ## 7. Acceptance-Criterion Traceability Matrix
 
@@ -155,7 +155,7 @@ Coverage rule: every AC maps to at least one automated test whose scenario direc
 
 ## 8. Planned Test-File Map by Implementation Issue
 
-| GitHub Issue (planned sequence; numbers recorded only for opened Issues — #75 contract open, rest unopened; single combined dashboards issue per owner decision) | Primary planned evidence |
+| GitHub Issue (planned sequence; #75 is the contract issue; implementation issue references are recorded when confirmed; dashboards are combined per owner decision) | Primary planned evidence |
 |---|---|
 | Contract (#75) | this plan with peer review; no code |
 | Actions Taken foundation | `actions-taken.api.test.ts` (API-01–API-12), unit validation/lifecycle/gate tests, migration and seed tests, version/concurrency/idempotency proofs |
@@ -182,15 +182,37 @@ The PostgreSQL test database stays separate from development data through `TEST_
 
 ## 10. Responsive and Visual Checklist
 
-- [ ] Dashboards and the Actions area at 1440/900/375: cards wrap, tables collapse to cards on mobile, no clipping, overlap, or horizontal page scroll.
-- [ ] Lifecycle states (`PLANNED`/`IN_PROGRESS`/`COMPLETED`/`CANCELLED`) distinguishable without color-only cues; follow-up flag explicit; history visually append-only.
-- [ ] Gate-blocker copy readable with links to the Actions tab.
-- [ ] Loading, empty, forbidden, conflict, and failure states distinct; focus, keyboard, and dialog behaviors work.
-- [ ] Screenshots under `artifacts/lab-04/screenshots/{staff-dashboard,requester-dashboard,actions-taken}/`; paths are recorded only after the files exist.
+- [x] Dashboards and the Actions area at 1440/900/375: cards wrap, tables collapse to cards on mobile, no clipping, overlap, or horizontal page scroll. Evidence: VISUAL-01 Playwright + ActionsTaken mobile-card test; [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md).
+- [x] Lifecycle states (`PLANNED`/`IN_PROGRESS`/`COMPLETED`/`CANCELLED`) distinguishable without color-only cues; follow-up flag explicit; history visually append-only. Evidence: ActionsTaken lifecycle/follow-up tests; [multiple-actions.png](../../artifacts/lab-04/screenshots/actions-taken/multiple-actions.png), [history.png](../../artifacts/lab-04/screenshots/actions-taken/history.png); [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md).
+- [x] Gate-blocker copy readable with links to the Actions tab. Evidence: E2E-02, gate-blocked UI test, and `actions-taken/gate-blocked.png`; [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md).
+- [x] Loading, empty, forbidden, conflict, and failure states distinct; focus, keyboard, and dialog behaviors work. Evidence: ActionsTaken state tests and A11Y-01; [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md).
+- [x] Screenshots under `artifacts/lab-04/screenshots/{staff-dashboard,requester-dashboard,actions-taken}/`; paths are recorded only after the files exist. Evidence: existing dashboard/action shots plus `actions-taken/multiple-actions.png` and `actions-taken/history.png`; [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md).
 
 ## 11. Final Results
 
-Not yet available. Statuses used: `SPECIFIED` (planned here), `IMPLEMENTED`, `LOCALLY VERIFIED`, `CI VERIFIED`, `EVIDENCE CAPTURED`, `APPROVED`, `MERGED`. Evidence levels (feature-branch local → exact-head hosted CI → post-merge staging → exact final-main) are recorded truthfully; only final-main evidence advances status. The words `PASS`, `100% COMPLETE`, and `DONE` MUST NOT appear as verdicts without supporting evidence.
+| Test group | Current result | Evidence / limitation |
+|---|---|---|
+| E2E-01, A11Y-01, VISUAL-01, PERF-01 | LOCALLY VERIFIED — `baseline-verification.md` E-05 + `visual-a11y-checklist.md`, 2026-10-30 | Feature-branch local evidence summarized in [baseline verification](../../artifacts/lab-04/evidence/baseline-verification.md) and [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md). |
+| E2E-02, E2E-03 | LOCALLY VERIFIED — targeted Playwright command, 2026-10-30 | Targeted Playwright run: `ticket-resolution.spec.ts` and `dashboards.spec.ts`, 2 passed. |
+| REG-01, SEC-03 | LOCALLY VERIFIED — `baseline-verification.md` E-02/E-03/E-06, 2026-10-30 | Feature-branch local evidence; exact final-main verification remains pending. |
+| Remaining planned test rows | PLANNED — §§2–6; the individual rows remain Planned | Check each row and its linked artifact before making any stronger claim. |
+| Exact final-main suite and hosted CI | PLANNED — release and final-main gates have not been reached (E-16–E-17) | Requires the later release and merge gates in the approved plan. |
+
+Statuses used: `SPECIFIED` (the plan-time state), `IMPLEMENTED`, `LOCALLY VERIFIED`, `CI VERIFIED`, `EVIDENCE CAPTURED`, `APPROVED`, and `MERGED`. Each non-`Planned` cell uses the grammar `<LEVEL> — <citation>`; for example, `LOCALLY VERIFIED — <command>, <date>`. The test-row status and release-level evidence ledger are separate tracks: the ledger begins at `IMPLEMENTED` (E-01), while `Planned` is the plan-time `SPECIFIED` state. Only final-main evidence advances final-status claims. The words `PASS`, `100% COMPLETE`, and `DONE` MUST NOT appear as verdicts without supporting evidence.
+
+### Submission Part index
+
+| Part | Primary evidence |
+|---|---|
+| 1 | [Reviewer and release record](./reviewer.md) |
+| 2 | [Lab 4 specification](./specification.md) |
+| 3 | This test plan, final results, and [evidence ledger](../../artifacts/lab-04/evidence/evidence-ledger.md) |
+| 4 | [AI use and reflection](./ai-use.md) |
+| 5 | [Metric-vs-DB evidence](../../artifacts/lab-04/evidence/metrics-db-match.md) |
+| 6 | [Actions Taken screenshots](../../artifacts/lab-04/screenshots/actions-taken/) |
+| 7 | Actions workflow, lifecycle, and history tests listed in §§3–6 |
+| 8 | Requester dashboard and ownership tests listed in §§3–6 |
+| 9 | [UI specification](./ui-spec.md) and [visual/a11y checklist](../../artifacts/lab-04/evidence/visual-a11y-checklist.md) |
 
 ## 12. Known Deferred / Out-of-Scope Tests
 

@@ -14,6 +14,7 @@ import {
   createTicketViaUI,
   login,
   logout,
+  openStaffTicket,
   setupUser,
   trackPageFaults,
 } from "./helpers";
@@ -186,6 +187,66 @@ test("VISUAL-01 actions-taken staff view, requester read-only view, gate-blocked
   await expect(page.getByRole("button", { name: "History" }).first()).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 900 });
   await shot(page, "actions-taken", "requester-readonly", "actions-taken requester view");
+
+  expect(pageFaults).toEqual([]);
+});
+
+test("VISUAL-01 one ticket shows multiple terminal actions and their history", async ({ page }) => {
+  const pageFaults = trackPageFaults(page);
+  page.on("dialog", (dialog) => void dialog.accept());
+
+  await login(page, REQ_EMAIL);
+  const ticketNumber = await createTicketViaUI(page, "E2E lab-04 multiple actions and history capture");
+  await logout(page);
+
+  await login(page, STAFF_EMAIL);
+  await openStaffTicket(page, ticketNumber);
+  await page.getByRole("tab", { name: "Ticket Actions" }).click();
+  await page.getByRole("button", { name: "Claim Ticket" }).click();
+  await expect(page.getByText("Ticket claimed.")).toBeVisible();
+
+  const completedDescription = "E2E lab-04 multiple-action completed work";
+  await page.getByRole("button", { name: "Record action" }).click();
+  await page.locator("#action-form-description").fill(completedDescription);
+  await page.locator("#action-form-result").fill("Completed work for the multi-action capture.");
+  await page.getByRole("button", { name: "Use current time" }).click();
+  await page.getByRole("button", { name: "Create action" }).click();
+  await expect(page.getByText("Action recorded.")).toBeVisible();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByText("Action started.")).toBeVisible();
+  await page.getByRole("button", { name: "Complete", exact: true }).click();
+  await expect(page.getByText("Action completed.")).toBeVisible();
+
+  const cancelledDescription = "E2E lab-04 multiple-action cancelled work";
+  await page.getByRole("button", { name: "Record action" }).click();
+  await page.locator("#action-form-description").fill(cancelledDescription);
+  await page.getByRole("button", { name: "Use current time" }).click();
+  await page.getByRole("button", { name: "Create action" }).click();
+  await expect(page.getByText("Action recorded.")).toBeVisible();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByText("Action started.")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByText("Action cancelled.")).toBeVisible();
+
+  await expect(page.getByRole("cell", { name: completedDescription })).toBeVisible();
+  await expect(page.getByRole("cell", { name: cancelledDescription })).toBeVisible();
+  await expect(page.getByLabel("COMPLETED").first()).toBeVisible();
+  await expect(page.getByLabel("CANCELLED").first()).toBeVisible();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await checkNoOverflow(page, "multiple actions on one ticket @ desktop");
+  await page.screenshot({ path: path.join(SHOTS, "actions-taken", "multiple-actions.png"), fullPage: true });
+
+  const cancelledHistoryButton = page
+    .getByText(/#\d+ CANCELLED/)
+    .locator("xpath=..")
+    .getByRole("button", { name: "History" });
+  await cancelledHistoryButton.click();
+  const history = page.locator("[aria-label^='History for action']");
+  await expect(history).toBeVisible();
+  await expect(history).toContainText("CANCELLED");
+  await history.scrollIntoViewIfNeeded();
+  await shot(page, "actions-taken", "history", "cancelled action history");
 
   expect(pageFaults).toEqual([]);
 });
