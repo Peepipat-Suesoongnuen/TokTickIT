@@ -65,10 +65,22 @@ async function main(): Promise<void> {
       // FK-safe cleanup: tickets that reference this user as requester or
       // operational owner go first (attachments/comments/notes cascade via
       // the ticket); sessions cascade via the user row (schema onDelete).
+      // Lab 4: ActionTaken rows Restrict ticket deletes, so remove action
+      // events then actions before their tickets.
       const owned = await prisma.user.findUnique({ where: { email }, select: { id: true } });
       if (owned) {
+        const ticketScope = { OR: [{ requesterId: owned.id }, { ticketOwnerId: owned.id }] };
+        const actions = await prisma.actionTaken.findMany({
+          where: { ticket: ticketScope },
+          select: { id: true },
+        });
+        const actionIds = actions.map((a) => a.id);
+        if (actionIds.length > 0) {
+          await prisma.actionTakenEvent.deleteMany({ where: { actionTakenId: { in: actionIds } } });
+          await prisma.actionTaken.deleteMany({ where: { id: { in: actionIds } } });
+        }
         await prisma.ticket.deleteMany({
-          where: { OR: [{ requesterId: owned.id }, { ticketOwnerId: owned.id }] },
+          where: ticketScope,
         });
       }
       await prisma.user.deleteMany({ where: { email } });

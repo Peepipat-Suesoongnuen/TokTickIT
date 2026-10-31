@@ -24,24 +24,29 @@ toktickit/
 │       ├── styles/                 # Lab 2 Zen Green theme (+ Lab 3 extensions)
 │       └── features/
 │           ├── lab-02/tests/       # UI/component/style tests
-│           └── lab-03/tests/       # Lab 3 UI/component tests
+│           ├── lab-03/tests/       # Lab 3 UI/component tests
+│           └── lab-04/tests/       # Lab 4 dashboards/drill-down/actions UI tests
 ├── server/
 │   ├── prisma/                      # Prisma schema, migrations, seed
 │   ├── src/                         # Express app + helpers (+ auth/staff/admin routes)
 │   ├── tests/
 │   │   ├── lab-02/                  # API/integration tests
-│   │   └── lab-03/                  # Auth/session/queue/workflow/admin/concurrency tests
+│   │   ├── lab-03/                  # Auth/session/queue/workflow/admin/concurrency tests
+│   │   └── lab-04/                  # Actions/workflow/dashboards/notes-absence/migration tests
 │   └── uploads/                     # Runtime attachment storage (ignored)
 ├── e2e/
 │   ├── lab-02/                      # Playwright requester flow + visual states
-│   └── lab-03/                      # Auth, staff, communication, admin, security, regression, a11y, visual specs
+│   ├── lab-03/                      # Auth, staff, communication, admin, security, regression, a11y, visual specs
+│   └── lab-04/                      # Actions flow, resolution journey, dashboards drill-down, a11y, visual, perf-smoke specs
 ├── artifacts/
 │   ├── lab-02/screenshots/          # Responsive/visual evidence
-│   └── lab-03/screenshots/          # Lab 3 evidence by role/screen/state
+│   ├── lab-03/screenshots/          # Lab 3 evidence by role/screen/state
+│   └── lab-04/                      # Lab 4 screenshots/ + perf-smoke numbers
 ├── docs/
 │   ├── lab-01/
 │   ├── lab-02/                      # specification/api/ui/tests/reviewer/ai-use
-│   └── lab-03/                      # specification/api-spec/ui-spec/tests/reviewer/ai-use
+│   ├── lab-03/                      # specification/api-spec/ui-spec/tests/reviewer/ai-use
+│   └── lab-04/                      # specification/api-spec/ui-spec/tests (Lab 4 engineering contract)
 ├── playwright.config.ts
 ├── package.json                     # Root Playwright scripts
 └── README.md
@@ -196,7 +201,7 @@ $env:DATABASE_URL=$env:TEST_DATABASE_URL
 npm run test:e2e
 ```
 
-The Playwright global setup applies migrations/seeding to the isolated test database. Responsive and visual screenshots are written under `artifacts/lab-02/screenshots/` (Lab 2) and `artifacts/lab-03/screenshots/` (Lab 3, by role/screen/state).
+The Playwright global setup applies migrations/seeding to the isolated test database. Responsive and visual screenshots are written under `artifacts/lab-02/screenshots/` (Lab 2), `artifacts/lab-03/screenshots/` (Lab 3, by role/screen/state), and `artifacts/lab-04/screenshots/` (Lab 4: `staff-dashboard/`, `requester-dashboard/`, `actions-taken/` at 1440/900/375). Dashboard perf-smoke numbers land in `artifacts/lab-04/perf/dashboard-smoke.json` (measure-only, no thresholds).
 
 ### Typecheck/build checks used before PR handoff
 
@@ -227,3 +232,13 @@ Hosted CI runs server, client, E2E, and migration-proof jobs on push/pull-reques
 | server | `npm test` | Run Vitest + Supertest |
 | root | `npm run test:e2e` | Run Playwright E2E + responsive/visual tests |
 | root | `npm run test:e2e:headed` | Run Playwright with a visible browser |
+
+## Lab 4 Release Evidence
+
+Lab 4 release evidence is maintained in the following locations:
+
+- Test plan and acceptance-criterion traceability: [`docs/lab-04/tests.md`](docs/lab-04/tests.md)
+- Owner-managed submission PDF (future owner-supplied artifact): `artifacts/lab-04/submission/SE-Lab4-67070507207.pdf`
+- Verification records and evidence ledger: [`artifacts/lab-04/evidence/`](artifacts/lab-04/evidence/)
+
+The owner prepares the single submission PDF. No separate Answer Part 1–9 files are maintained in `docs/lab-04/`. The submission is finalized only after exact-head release and final-main evidence is available. Local test results are identified separately from hosted CI and merged-release results.

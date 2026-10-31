@@ -69,6 +69,7 @@ export interface ListTicketsParams {
   categoryId?: number;
   requestedPriority?: string;
   currentStatus?: string;
+  state?: string;
   sort?: string;
   order?: string;
   page?: number;
@@ -140,6 +141,7 @@ export async function listTickets(params: ListTicketsParams): Promise<ListTicket
   if (params.categoryId !== undefined) qs.set("categoryId", String(params.categoryId));
   if (params.requestedPriority !== undefined) qs.set("requestedPriority", params.requestedPriority);
   if (params.currentStatus !== undefined) qs.set("currentStatus", params.currentStatus);
+  if (params.state !== undefined) qs.set("state", params.state);
   if (params.sort !== undefined) qs.set("sort", params.sort);
   if (params.order !== undefined) qs.set("order", params.order);
   if (params.page !== undefined) qs.set("page", String(params.page));
@@ -295,6 +297,8 @@ export interface StaffQueueParams {
   itPriority?: string;
   currentStatus?: string;
   owner?: string;
+  assignee?: string;
+  state?: string;
   sort?: string;
   order?: string;
   page?: number;
@@ -335,6 +339,7 @@ export interface StaffTicketMutation {
   itPriority: string;
   ticketOwner: { id: number; name: string; role: string } | null;
   requesterResolutionIndicatedAt: string | null;
+  resolutionCycle?: number;
   updatedAt: string;
 }
 
@@ -372,7 +377,7 @@ async function staffGet<T>(path: string): Promise<T> {
   return body as T;
 }
 
-async function staffMutate<T>(path: string, method: "POST" | "PATCH", payload: Record<string, unknown>): Promise<T> {
+async function staffMutate<T>(path: string, method: "POST" | "PUT" | "PATCH", payload: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -392,6 +397,8 @@ export async function listStaffTickets(params: StaffQueueParams): Promise<StaffQ
   if (params.itPriority !== undefined) qs.set("itPriority", params.itPriority);
   if (params.currentStatus !== undefined) qs.set("currentStatus", params.currentStatus);
   if (params.owner !== undefined) qs.set("owner", params.owner);
+  if (params.assignee !== undefined) qs.set("assignee", params.assignee);
+  if (params.state !== undefined) qs.set("state", params.state);
   if (params.sort !== undefined) qs.set("sort", params.sort);
   if (params.order !== undefined) qs.set("order", params.order);
   if (params.page !== undefined) qs.set("page", String(params.page));
@@ -609,4 +616,154 @@ export async function setInitialPassword(userId: number, initialPassword: string
     const body = await res.json().catch(() => null);
     throw { status: res.status, body } satisfies StaffApiFailure;
   }
+}
+
+// Issue #78 — Actions Taken (LAP4-01-04/08). Shapes mirror api-spec §2:
+// recordedBy is the immutable recorder (never the performer/completer).
+export interface ActionPerson {
+  id: number;
+  name: string;
+}
+
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  description: string;
+  result: string | null;
+  recordedBy: ActionPerson;
+  assignedTo: ActionPerson | null;
+  actionDate: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  cycle: number;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActionEvent {
+  id: number;
+  actionTakenId: number;
+  eventType: string;
+  actor: ActionPerson;
+  occurredAt: string;
+  payload: Record<string, unknown>;
+  requestId: string;
+}
+
+export interface CreateActionPayload {
+  description: string;
+  clientRequestId: string;
+  assignedToId?: number | null;
+  actionDate?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+  result?: string | null;
+}
+
+export async function listTicketActions(ticketId: number): Promise<{ actions: ActionTaken[]; meta: { count: number } }> {
+  return staffGet<{ actions: ActionTaken[]; meta: { count: number } }>(`/api/tickets/${ticketId}/actions`);
+}
+
+export async function createTicketAction(
+  ticketId: number,
+  payload: CreateActionPayload,
+): Promise<{ action: ActionTaken; replayed: boolean }> {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, body } satisfies StaffApiFailure;
+  return { action: body as ActionTaken, replayed: res.headers.get("Idempotent-Replayed") === "true" };
+}
+
+export async function updateTicketAction(actionId: number, payload: Record<string, unknown>): Promise<ActionTaken> {
+  return staffMutate<ActionTaken>(`/api/staff/actions/${actionId}`, "PUT", payload);
+}
+
+export async function completeTicketAction(actionId: number, payload: Record<string, unknown>): Promise<ActionTaken> {
+  return staffMutate<ActionTaken>(`/api/staff/actions/${actionId}/complete`, "POST", payload);
+}
+
+export async function cancelTicketAction(actionId: number, payload: Record<string, unknown>): Promise<ActionTaken> {
+  return staffMutate<ActionTaken>(`/api/staff/actions/${actionId}/cancel`, "POST", payload);
+}
+
+export async function listStaffActionEvents(actionId: number): Promise<{ events: ActionEvent[] }> {
+  return staffGet<{ events: ActionEvent[] }>(`/api/staff/actions/${actionId}/events`);
+}
+
+export async function listRequesterActionEvents(ticketId: number, actionId: number): Promise<{ events: ActionEvent[] }> {
+  return staffGet<{ events: ActionEvent[] }>(`/api/tickets/${ticketId}/actions/${actionId}/events`);
+}
+
+// Issue #80 — Role dashboards (LAP4-06/07). Shapes mirror api-spec §4;
+// all numbers arrive backend-calculated, never aggregated client-side.
+export interface RequesterDashboardTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: string;
+  updatedAt: string;
+}
+
+export interface RequesterDashboard {
+  metrics: { openTickets: number; waitingForRequester: number; recentlyResolved: number };
+  recentlyUpdated: RequesterDashboardTicket[];
+  recentlyResolved: RequesterDashboardTicket[];
+  links: { openTickets: string; waitingForRequester: string; recentlyResolved: string };
+}
+
+export interface StaffDashboardTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: string;
+  owner: { id: number; name: string } | null;
+  updatedAt: string;
+}
+
+export interface StaffDashboardUrgentTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  itPriority: string;
+  currentStatus: string;
+  updatedAt: string;
+}
+
+export interface StaffDashboard {
+  metrics: {
+    ownedByMe: number;
+    assignedToMe: number;
+    recordedByMe: number;
+    unassigned: number;
+    urgentHighPriority: number;
+    byStatus: Record<string, number>;
+    byItPriority: Record<string, number>;
+  };
+  recentlyUpdated: StaffDashboardTicket[];
+  urgentTickets: StaffDashboardUrgentTicket[];
+  userCounts?: { total: number; active: number; byRole: Record<string, number> };
+  links: {
+    ownedByMe: string;
+    assignedToMe: string;
+    unassigned: string;
+    urgentHighPriority: string;
+    usersByRole: string;
+  };
+}
+
+export async function fetchRequesterDashboard(): Promise<RequesterDashboard> {
+  return staffGet<RequesterDashboard>("/api/dashboard/requester");
+}
+
+export async function fetchStaffDashboard(): Promise<StaffDashboard> {
+  return staffGet<StaffDashboard>("/api/dashboard/staff");
 }

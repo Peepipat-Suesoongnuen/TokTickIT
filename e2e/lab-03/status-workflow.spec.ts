@@ -94,6 +94,19 @@ test("E2E-04 formal lifecycle with close confirmation and reopen", async ({ page
   await moveTo("IN_PROGRESS");
   await moveTo("WAITING_FOR_REQUESTER");
   await moveTo("IN_PROGRESS");
+  // Lab 4 gate (BR-011): resolve requires a current-cycle completion —
+  // record and complete one action through the Actions Taken UI first.
+  await page.getByRole("button", { name: "Record action" }).click();
+  const actionForm = page.getByRole("form", { name: "Create action" });
+  await actionForm.getByLabel("Description").fill("E2E gate evidence work");
+  await actionForm.getByLabel("Result (optional at creation)").fill("E2E gate evidence done.");
+  await page.getByRole("button", { name: "Use current time" }).click();
+  await page.getByRole("button", { name: "Create action" }).click();
+  await expect(page.getByText("Action recorded.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Start" }).click();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Complete" }).click();
+  await expect(page.getByText("Action completed.", { exact: true })).toBeVisible();
   await moveTo("RESOLVED");
   // CLOSED requires a confirmation dialog (accepted here).
   await moveTo("CLOSED", true);

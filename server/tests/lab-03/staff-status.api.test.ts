@@ -131,6 +131,17 @@ describe("Staff IT Priority and status workflow (Issue #48, AC-10/11)", () => {
   });
 
   afterAll(async () => {
+    // Lab 4 gate evidence actions reference these tickets (Restrict FK):
+    // delete dependents first, scoped to this file's fixtures.
+    const actions = await prisma.actionTaken.findMany({
+      where: { ticket: { requesterId } },
+      select: { id: true },
+    });
+    const actionIds = actions.map((a) => a.id);
+    if (actionIds.length > 0) {
+      await prisma.actionTakenEvent.deleteMany({ where: { actionTakenId: { in: actionIds } } });
+      await prisma.actionTaken.deleteMany({ where: { id: { in: actionIds } } });
+    }
     await prisma.ticket.deleteMany({ where: { requesterId } });
     await prisma.user.deleteMany({
       where: { email: { in: [EMAIL_STAFF, EMAIL_ADMIN, EMAIL_REQUESTER, EMAIL_INACTIVE] } },
@@ -199,6 +210,30 @@ describe("Staff IT Priority and status workflow (Issue #48, AC-10/11)", () => {
     expect(back.status).toBe(200);
     expect(back.body.currentStatus).toBe("IN_PROGRESS");
     expect(back.body.ticketOwner).toMatchObject({ id: staffId });
+    // Lab 4 gate (BR-011): resolve requires a current-cycle completion.
+    // A bare resolve now fails closed before any work exists.
+    const bare = await setStatus(id, "RESOLVED", "IN_PROGRESS", cookieStaff);
+    expect(bare.status).toBe(409);
+    expect(bare.body.error.code).toBe("RESOLUTION_REQUIRES_COMPLETED_ACTION");
+    const { randomUUID: uuid } = await import("node:crypto");
+    const created = await request(app)
+      .post(`/api/staff/tickets/${id}/actions`)
+      .set("Cookie", cookieStaff)
+      .set("Origin", ORIGIN)
+      .send({ description: "Gate evidence work", clientRequestId: uuid() })
+      .expect(201);
+    await request(app)
+      .put(`/api/staff/actions/${created.body.id}`)
+      .set("Cookie", cookieStaff)
+      .set("Origin", ORIGIN)
+      .send({ expectedVersion: 1, status: "IN_PROGRESS" })
+      .expect(200);
+    await request(app)
+      .post(`/api/staff/actions/${created.body.id}/complete`)
+      .set("Cookie", cookieStaff)
+      .set("Origin", ORIGIN)
+      .send({ expectedVersion: 2, result: "Gate evidence complete." })
+      .expect(200);
     await setStatus(id, "RESOLVED", "IN_PROGRESS", cookieStaff).then((r) => expect(r.status).toBe(200));
     const closed = await setStatus(id, "CLOSED", "RESOLVED", cookieStaff);
     expect(closed.status).toBe(200);

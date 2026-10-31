@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { listUsers, ManagedUser } from "../api";
 import { UserRoleBadge, UserStatusBadge } from "../components/Badges.js";
 
@@ -11,9 +11,16 @@ import { UserRoleBadge, UserStatusBadge } from "../components/Badges.js";
 // on in the follow-up issue instead.)
 export default function AdminUsers() {
   const navigate = useNavigate();
+  // Issue #80 — drill-down query-init (ui-spec:64): the Admin counts card
+  // links here with ?role=<ROLE>. Unknown values are ignored (C-80-07).
+  const [searchParams] = useSearchParams();
+  const initialRole = (() => {
+    const v = searchParams.get("role") ?? "";
+    return v === "REQUESTER" || v === "IT_STAFF" || v === "ADMINISTRATOR" ? v : "";
+  })();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState(initialRole);
   const [data, setData] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

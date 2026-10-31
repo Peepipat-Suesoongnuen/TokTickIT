@@ -57,3 +57,22 @@ export function UserStatusBadge({ active }: { active: boolean }) {
     </span>
   );
 }
+
+// Issue #78 — Action lifecycle badges (STYLE-01): one distinct bordered
+// class per Action status. The word OPEN never appears as an Action status.
+// Text itself is the non-color cue alongside the bordered class.
+const ACTION_STATUS_CLASS: Record<string, string> = {
+  PLANNED: "badge-action-planned",
+  IN_PROGRESS: "badge-action-in-progress",
+  COMPLETED: "badge-action-completed",
+  CANCELLED: "badge-action-cancelled",
+};
+
+export function ActionStatusBadge({ value }: { value: string }) {
+  const cls = ACTION_STATUS_CLASS[value] ?? "";
+  return (
+    <span className={`badge ${cls}`} title={value} aria-label={value}>
+      {value}
+    </span>
+  );
+}

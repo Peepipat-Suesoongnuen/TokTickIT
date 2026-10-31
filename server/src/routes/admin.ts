@@ -300,6 +300,24 @@ adminRouter.patch(
           if (openTickets > 0) {
             return { kind: "has-tickets" } as const;
           }
+          // Lab 4 (Issue #77, BR-024): an eligibility-changing update must
+          // also fail while the target owns open assigned Actions Taken.
+          // Predicate: assignedToId = target AND status in
+          // (PLANNED, IN_PROGRESS) AND parent Ticket not
+          // RESOLVED/CLOSED/CANCELLED (frozen tickets hold no actionable
+          // work). `COMPLETED`/`CANCELLED` Actions never block.
+          // Evaluated under the same row locks in this transaction,
+          // symmetrically with the assign/complete eligibility revalidation.
+          const openActions = await tx.actionTaken.count({
+            where: {
+              assignedToId: id,
+              status: { in: ["PLANNED", "IN_PROGRESS"] },
+              ticket: { currentStatus: { notIn: ["RESOLVED", "CLOSED", "CANCELLED"] } },
+            },
+          });
+          if (openActions > 0) {
+            return { kind: "has-actions" } as const;
+          }
         }
 
         // BR-43: the last active Administrator invariant. The locked set
@@ -332,6 +350,9 @@ adminRouter.patch(
       }
       if (outcome.kind === "has-tickets") {
         return sendError(res, 409, "USER_HAS_ACTIVE_TICKETS", "Reassign this user's active tickets before changing the role or deactivating the account.");
+      }
+      if (outcome.kind === "has-actions") {
+        return sendError(res, 409, "USER_HAS_ACTIVE_ACTIONS", "Reassign this user's open actions before changing the role or deactivating the account.");
       }
       if (outcome.kind === "last-admin") {
         return sendError(res, 409, "LAST_ACTIVE_ADMINISTRATOR", "At least one active Administrator must remain.");

@@ -11,7 +11,9 @@ import {
   type AuthRequest,
 } from "../auth.js";
 import { isOwnerEligible, lockUserRowForUpdate } from "../lib/owner-integrity.js";
+import { openAssignedActionSome } from "../lib/dashboard-metrics.js";
 import { isTransitionAllowed, statusRequiresOwner } from "../lib/ticket-status.js";
+import { evaluateGate } from "../lib/resolution-gate.js";
 import { isInternalNoteValid, normalizeMessageContent } from "../lib/validation.js";
 
 // Issue #48 (Lab 3) — IT Staff Ticket workspace (api-spec §§8–11).
@@ -64,6 +66,8 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
       "itPriority",
       "currentStatus",
       "owner",
+      "assignee",
+      "state",
       "sort",
       "order",
       "page",
@@ -83,7 +87,7 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
       }
     }
 
-    const { search, categoryId, requestedPriority, itPriority, currentStatus, owner, sort, order, page, pageSize } =
+    const { search, categoryId, requestedPriority, itPriority, currentStatus, owner, assignee, state, sort, order, page, pageSize } =
       req.query as Record<string, string | undefined>;
 
     // search (case-insensitive partial Ticket Number, Summary, Requester
@@ -113,11 +117,39 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
     if (requestedPriority !== undefined && !isPriorityValid(requestedPriority)) {
       return invalid(res, { requestedPriority: "Invalid priority." });
     }
-    if (itPriority !== undefined && !isPriorityValid(itPriority)) {
-      return invalid(res, { itPriority: "Invalid priority." });
+    // itPriority: single level (legacy) or comma-separated levels (Issue #80
+    // drill-down). Every level is strictly validated; single-value behavior
+    // is unchanged.
+    let priorityLevels: string[] | undefined;
+    if (itPriority !== undefined) {
+      priorityLevels = itPriority
+        .split(",")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      if (priorityLevels.length === 0 || !priorityLevels.every((p) => isPriorityValid(p))) {
+        return invalid(res, { itPriority: "Invalid priority." });
+      }
     }
     if (currentStatus !== undefined && !TICKET_STATUSES.has(currentStatus)) {
       return invalid(res, { currentStatus: "Invalid current status." });
+    }
+
+    // Issue #80 (D-80-09) — drill-down state sets, mirroring MyTickets
+    // (owner decision A-queue-state): open maps to the five non-terminal
+    // statuses, resolved maps to RESOLVED/CLOSED. Invalid values fail
+    // closed; combining state with currentStatus is ambiguous and rejected.
+    // Bare links without state keep the legacy unscoped vocabulary.
+    const OPEN_SET = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"];
+    const RESOLVED_SET = ["RESOLVED", "CLOSED"];
+    let stateStatuses: string[] | undefined;
+    if (state !== undefined) {
+      if (state !== "open" && state !== "resolved") {
+        return invalid(res, { state: "Invalid state." });
+      }
+      if (currentStatus !== undefined) {
+        return invalid(res, { state: "state and currentStatus are mutually exclusive." });
+      }
+      stateStatuses = state === "open" ? OPEN_SET : RESOLVED_SET;
     }
 
     // owner: `unassigned`, `me`, or a positive User ID. Filtering may target
@@ -140,6 +172,31 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
           return invalid(res, { owner: "owner must reference an existing user." });
         }
         ownerFilter = { mode: "id", id: n };
+      }
+    }
+
+    // assignee: `me` or a positive User ID. Tickets holding >=1 open Action
+    // assigned to that user, via the shared predicate (dataset-identical
+    // with assignedToMe by construction). Nonexistent IDs are invalid.
+    let assigneeId: number | undefined;
+    if (assignee !== undefined) {
+      const me = (req as AuthRequest).user;
+      if (!me) {
+        sendError(res, 401, "UNAUTHENTICATED", "Authentication required.");
+        return;
+      }
+      if (assignee === "me") {
+        assigneeId = me.id;
+      } else {
+        const n = parsePositiveInt(assignee);
+        if (n === null) {
+          return invalid(res, { assignee: "assignee must be me or a positive user id." });
+        }
+        const target = await getPrisma().user.findUnique({ where: { id: n }, select: { id: true } });
+        if (!target) {
+          return invalid(res, { assignee: "assignee must reference an existing user." });
+        }
+        assigneeId = n;
       }
     }
 
@@ -168,8 +225,11 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
     const where: Record<string, unknown> = {};
     if (cid !== undefined) where.categoryId = cid;
     if (requestedPriority !== undefined) where.requestedPriority = requestedPriority;
-    if (itPriority !== undefined) where.itPriority = itPriority;
+    if (priorityLevels !== undefined) {
+      where.itPriority = priorityLevels.length === 1 ? priorityLevels[0] : { in: priorityLevels };
+    }
     if (currentStatus !== undefined) where.currentStatus = currentStatus;
+    if (stateStatuses !== undefined) where.currentStatus = { in: stateStatuses };
     if (ownerFilter !== undefined) {
       if (ownerFilter.mode === "unassigned") {
         where.ticketOwnerId = null;
@@ -183,6 +243,9 @@ staffRouter.get("/tickets", ...STAFF_GUARD, async (req: Request, res: Response) 
       } else {
         where.ticketOwnerId = ownerFilter.id;
       }
+    }
+    if (assigneeId !== undefined) {
+      (where as Record<string, unknown>).actions = { some: openAssignedActionSome(assigneeId) };
     }
     if (searchTrim !== undefined) {
       where.OR = [
@@ -273,6 +336,7 @@ interface MutationTicket {
   itPriority: string;
   ticketOwner: { id: number; name: string; role: string } | null;
   requesterResolutionIndicatedAt: Date | null;
+  resolutionCycle: number;
   updatedAt: Date;
 }
 
@@ -287,6 +351,7 @@ async function readMutationTicket(id: number): Promise<MutationTicket | null> {
       itPriority: true,
       owner: { select: { id: true, name: true, role: true } },
       requesterResolutionIndicatedAt: true,
+      resolutionCycle: true,
       updatedAt: true,
     },
   });
@@ -299,6 +364,7 @@ async function readMutationTicket(id: number): Promise<MutationTicket | null> {
     itPriority: t.itPriority,
     ticketOwner: t.owner,
     requesterResolutionIndicatedAt: t.requesterResolutionIndicatedAt,
+    resolutionCycle: t.resolutionCycle,
     updatedAt: t.updatedAt,
   };
 }
@@ -330,10 +396,10 @@ staffRouter.get("/tickets/:id", ...STAFF_GUARD, async (req: Request, res: Respon
         requestedPriority: true,
         itPriority: true,
         currentStatus: true,
-        owner: { select: { id: true, name: true, role: true } },
+                owner: { select: { id: true, name: true, role: true } },
         requesterResolutionIndicatedAt: true,
-        attachments: {
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        resolutionCycle: true,
+        attachments: {          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: {
             id: true,
             originalFilename: true,
@@ -365,6 +431,7 @@ staffRouter.get("/tickets/:id", ...STAFF_GUARD, async (req: Request, res: Respon
       currentStatus: ticket.currentStatus,
       ticketOwner: ticket.owner,
       requesterResolutionIndicatedAt: ticket.requesterResolutionIndicatedAt,
+      resolutionCycle: ticket.resolutionCycle,
       attachments: ticket.attachments,
       createdAt: ticket.createdAt,
       updatedAt: ticket.updatedAt,
@@ -610,6 +677,7 @@ staffRouter.patch(
             id: true,
             ticketOwnerId: true,
             currentStatus: true,
+            resolutionCycle: true,
             requesterResolutionIndicatedAt: true,
           },
         });
@@ -646,22 +714,56 @@ staffRouter.patch(
           effectiveOwnerId = current.ticketOwnerId;
         }
 
+        // Lab 4 gate (BR-011/BR-012): User-row locks above come first per the
+        // §7.3 order (User → Ticket → ActionTaken → ActionTakenEvent). Take
+        // the Ticket row lock here so the gate snapshot below is atomic with
+        // the transition against concurrent action creates (which lock the
+        // Ticket row before inserting).
+        await tx.$queryRaw`SELECT "id" FROM "Ticket" WHERE "id" = ${id} FOR UPDATE`;
+
+        // Resolution gate: the current-cycle check runs inside the same
+        // transaction as the transition (LAP4-05). evaluateGate is the
+        // single home of the rule (UNIT-02); this handler only maps it.
+        if (next === "RESOLVED") {
+          const gateRows = await tx.actionTaken.findMany({
+            where: { ticketId: id, cycle: current.resolutionCycle },
+            select: { id: true, status: true, cycle: true },
+          });
+          const verdict = evaluateGate(gateRows, current.resolutionCycle);
+          if (!verdict.ok && verdict.reason === "NO_COMPLETED_ACTION") {
+            return { kind: "gate-empty", currentCycle: current.resolutionCycle } as const;
+          }
+          if (!verdict.ok) {
+            return { kind: "gate-open", openActionIds: verdict.openActionIds } as const;
+          }
+        }
+
         const data: Record<string, unknown> = { currentStatus: next };
+        let newCycle: number | null = null;
         if (effectiveOwnerId !== current.ticketOwnerId) {
           data.ticketOwnerId = effectiveOwnerId;
         }
         if (next === "REOPENED") {
           // Any Reopen clears the Requester resolution indication (BR-05).
           data.requesterResolutionIndicatedAt = null;
+          // BR-029: read+1 under the row lock above, committed through the
+          // conditional write below — no sequences, so rolled-back attempts
+          // consume nothing (API-25b).
+          data.resolutionCycle = current.resolutionCycle + 1;
+          newCycle = current.resolutionCycle + 1;
         }
         const updated = await tx.ticket.updateMany({
-          where: { id, currentStatus: expected },
+          where: {
+            id,
+            currentStatus: expected,
+            ...(next === "REOPENED" ? { resolutionCycle: current.resolutionCycle } : {}),
+          },
           data: data as never,
         });
         if (updated.count === 0) {
           return { kind: "stale" } as const;
         }
-        return { kind: "ok" } as const;
+        return { kind: "ok", newCycle } as const;
       });
 
       if (outcome.kind === "missing") {
@@ -676,8 +778,26 @@ staffRouter.patch(
       if (outcome.kind === "owner-required") {
         return invalid(res, { ownerId: "A replacement owner is required because the historical owner is no longer eligible." });
       }
+      if (outcome.kind === "gate-empty") {
+        return res.status(409).json({
+          error: {
+            code: "RESOLUTION_REQUIRES_COMPLETED_ACTION",
+            message: "This ticket has no completed work in the current cycle. Complete at least one action first.",
+            currentCycle: outcome.currentCycle,
+          },
+        });
+      }
+      if (outcome.kind === "gate-open") {
+        return res.status(409).json({
+          error: {
+            code: "RESOLUTION_BLOCKED_BY_OPEN_ACTIONS",
+            message: "This ticket still has open actions in the current cycle.",
+            openActionIds: outcome.openActionIds,
+          },
+        });
+      }
       const ticket = await readMutationTicket(id);
-      res.status(200).json(ticket);
+      res.status(200).json(outcome.newCycle === null ? ticket : { ...ticket, currentCycle: outcome.newCycle });
     } catch (err) {
       sendError(res, 500, "INTERNAL_ERROR", "An unexpected error occurred. Please try again.");
     }

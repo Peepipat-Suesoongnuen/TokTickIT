@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   listStaffTickets,
   fetchCategories,
@@ -46,17 +46,68 @@ function splitDateTime(dateStr: string): [string, string] {
 
 export default function StaffQueue() {
   const navigate = useNavigate();
+  // Issue #80 — drill-down query-init: dashboard cards link here with
+  // ?owner= / ?assignee= / ?itPriority= / ?status= / ?sort= / ?order=.
+  // Unknown or invalid values are ignored (defaults), never 400 (C-80-07).
+  const [searchParams] = useSearchParams();
+  const initialParam = (names: string[]): string => {
+    for (const n of names) {
+      const v = searchParams.get(n);
+      if (v !== null && v !== "") return v;
+    }
+    return "";
+  };
+  const initialOwner = (() => {
+    const v = initialParam(["owner"]);
+    if (v === "me" || v === "unassigned") return v;
+    if (/^[1-9]\d*$/.test(v)) return v;
+    return "";
+  })();
+  const initialAssignee = (() => {
+    const v = initialParam(["assignee"]);
+    if (v === "me") return v;
+    if (/^[1-9]\d*$/.test(v)) return v;
+    return "";
+  })();
+  const initialItPriority = (() => {
+    const v = initialParam(["itPriority"]);
+    if (v === "") return "";
+    const levels = v.split(",").map((p) => p.trim()).filter((p) => p.length > 0);
+    if (levels.length === 0 || !levels.every((p) => PRIORITIES.includes(p))) return "";
+    return levels.join(",");
+  })();
+  const initialStatus = (() => {
+    const v = initialParam(["currentStatus", "status"]);
+    return STATUSES.includes(v) ? v : "";
+  })();
+  // Issue #80 (D-80-09) — drill-down state sets, mirroring MyTickets:
+  // ?state=open|resolved scopes the queue to the dashboard metric's
+  // dataset. Unknown values are ignored (defaults), never 400 (C-80-07).
+  const initialStateFilter = (() => {
+    const v = initialParam(["state"]);
+    return v === "open" || v === "resolved" ? v : "";
+  })();
+  const initialSort = (() => {
+    const v = initialParam(["sort"]);
+    return (SORTABLE as readonly (readonly string[])[]).some(([f]) => f === v) ? (v as SortField) : "";
+  })();
+  const initialOrder = (() => {
+    const v = initialParam(["order"]).toLowerCase();
+    return v === "asc" || v === "desc" ? v : "desc";
+  })();
   const [categories, setCategories] = useState<Category[]>([]);
   const [owners, setOwners] = useState<EligibleOwner[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [requestedPriority, setRequestedPriority] = useState("");
-  const [itPriority, setItPriority] = useState("");
-  const [currentStatus, setCurrentStatus] = useState("");
-  const [owner, setOwner] = useState("");
-  const [sort, setSort] = useState<SortField | "">("");
-  const [order, setOrder] = useState("desc");
+  const [itPriority, setItPriority] = useState(initialItPriority);
+  const [currentStatus, setCurrentStatus] = useState(initialStatus);
+  const [stateFilter, setStateFilter] = useState(initialStateFilter);
+  const [owner, setOwner] = useState(initialOwner);
+  const [assignee, setAssignee] = useState(initialAssignee);
+  const [sort, setSort] = useState<SortField | "">(initialSort);
+  const [order, setOrder] = useState(initialOrder);
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -74,7 +125,9 @@ export default function StaffQueue() {
     requestedPriority !== "" ||
     itPriority !== "" ||
     currentStatus !== "" ||
-    owner !== "";
+    owner !== "" ||
+    assignee !== "" ||
+    stateFilter !== "";
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -83,7 +136,7 @@ export default function StaffQueue() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, categoryId, requestedPriority, itPriority, currentStatus, owner, sort, order, pageSize]);
+  }, [debouncedSearch, categoryId, requestedPriority, itPriority, currentStatus, owner, assignee, stateFilter, sort, order, pageSize]);
 
   useEffect(() => {
     void fetchCategories()
@@ -107,8 +160,10 @@ export default function StaffQueue() {
         categoryId: categoryId ? Number(categoryId) : undefined,
         requestedPriority: requestedPriority || undefined,
         itPriority: itPriority || undefined,
-        currentStatus: currentStatus || undefined,
+        currentStatus: stateFilter !== "" ? undefined : currentStatus || undefined,
         owner: owner || undefined,
+        assignee: assignee || undefined,
+        state: stateFilter || undefined,
         sort: sort || undefined,
         order: sort ? order : undefined,
         page,
@@ -138,7 +193,7 @@ export default function StaffQueue() {
     return () => {
       requestSequence.current += 1;
     };
-  }, [debouncedSearch, categoryId, requestedPriority, itPriority, currentStatus, owner, sort, order, page, pageSize]);
+  }, [debouncedSearch, categoryId, requestedPriority, itPriority, currentStatus, owner, assignee, stateFilter, sort, order, page, pageSize]);
 
   const clearFilters = () => {
     setSearch("");
@@ -148,6 +203,8 @@ export default function StaffQueue() {
     setItPriority("");
     setCurrentStatus("");
     setOwner("");
+    setAssignee("");
+    setStateFilter("");
     setSort("");
     setOrder("desc");
     setPage(1);
@@ -251,6 +308,13 @@ export default function StaffQueue() {
                   {o.name}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="staff-queue-assignee" className="form-label lab2-toolbar-label">Assignee</label>
+            <select id="staff-queue-assignee" className="form-select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+              <option value="">All Assignees</option>
+              <option value="me">Assigned to me</option>
             </select>
           </div>
           <div>
